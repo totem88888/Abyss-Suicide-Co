@@ -62,7 +62,10 @@
   </header>
 
   <!-- 내부 페이지 -->
-  <div id="status" class="page">현황 페이지</div>
+  <div id="status" class="page">
+    <p id="today-msg"></p>
+    현황 페이지
+  </div>
   <div id="intro" class="page">소개 페이지</div>
   <div id="map" class="page">맵 페이지</div>
   <div id="dex" class="page">도감 페이지</div>
@@ -145,6 +148,27 @@
     }
   });
 
+</script>
+
+<script>
+  // 날짜별로 바뀌는 메시지 리스트
+  const dailyList = [
+    "이상 징후가 관찰되지 않았",
+    "심연체의 활동에 비이상적인 움직임이 감지되었",
+    "스팟 내 아이템의 획득 확률이 증가하였",
+    "심연 내 알 수 없는 신호가 감지되었"
+  ];
+
+  function updateDailyMessage() {
+    const today = new Date();
+    const index = today.getDate() % dailyList.length;
+    const msg = "오늘은 " + dailyList[index] + "습니다.";
+    const box = document.getElementById("today-msg");
+    if (box) box.textContent = msg;
+  }
+
+  // 페이지 열릴 때 자동 반영
+  updateDailyMessage();
 </script>
 
 </body>
