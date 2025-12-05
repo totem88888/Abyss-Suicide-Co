@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Site</title>
+
   <style>
     body { margin:0; font-family: sans-serif; }
     header {
@@ -17,45 +18,42 @@
     }
     .page { padding-top:60px; display:none; }
     .active { display:block; }
-    #auth { display:flex; flex-direction:column; max-width:300px; margin:100px auto; }
-    #auth input { margin:5px 0; }
-  </style>
-  <!-- Firebase SDK -->
-  <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-app-compat.js">  // switch to signup page
-  const gotoSignup = document.getElementById('goto-signup');
-  if (gotoSignup) {
-    gotoSignup.addEventListener('click', () => {
-      document.getElementById('login-page').style.display = 'none';
-      document.getElementById('signup-page').style.display = 'block';
-    });
-  }
 
-  // signup click handler
-  const signupBtn = document.getElementById('signup-btn');
-  if (signupBtn) {
-    signupBtn.addEventListener('click', async () => {
-      const email = document.getElementById('signup-email')?.value;
-      const password = document.getElementById('signup-password')?.value;
-      if (!email || !password) return;
-      try {
-        await createUserWithEmailAndPassword(auth, email, password);
-      } catch (e) {
-        console.error(e);
-      }
-    });
-  }
-</script>
+    .box {
+      max-width:300px;
+      margin:90px auto;
+      display:flex;
+      flex-direction:column;
+    }
+    .box input { margin:5px 0; }
+  </style>
+
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-auth-compat.js"></script>
+
 </head>
 <body>
-  <div id="auth">
+
+  <!-- 로그인 -->
+  <div id="login-box" class="box">
     <h2>로그인</h2>
-    <input id="email" placeholder="이메일" />
-    <input id="pw" placeholder="비밀번호" type="password" />
-    <button id="loginBtn">로그인</button>
-    <button id="signupBtn">회원가입</button>
+    <input id="login-email" placeholder="이메일" />
+    <input id="login-password" type="password" placeholder="비밀번호" />
+    <button id="login-btn">로그인</button>
+    <button id="goto-signup">회원가입</button>
   </div>
 
+  <!-- 회원가입 -->
+  <div id="signup-box" class="box" style="display:none;">
+    <h2>회원가입</h2>
+    <input id="signup-email" placeholder="이메일" />
+    <input id="signup-password" type="password" placeholder="비밀번호" />
+    <button id="signup-btn">가입 완료</button>
+    <button id="goto-login">로그인으로</button>
+  </div>
+
+  <!-- 헤더 -->
   <header id="header" style="display:none;">
     <span data-page="status">현황</span>
     <span data-page="intro">소개</span>
@@ -63,51 +61,87 @@
     <span data-page="dex">도감</span>
   </header>
 
+  <!-- 내부 페이지 -->
   <div id="status" class="page">현황 페이지</div>
   <div id="intro" class="page">소개 페이지</div>
   <div id="map" class="page">맵 페이지</div>
   <div id="dex" class="page">도감 페이지</div>
 
+
 <script>
-  // Firebase 설정
+  // ===== 1) Firebase 설정 =====
   const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_PROJECT.firebaseapp.com",
-    projectId: "YOUR_PROJECT",
+    apiKey: "AIzaSyDGmwk9FtwnjUKcH4T6alvMWVQqbhVrqfI",
+    authDomain: "abyss-suicide-co.firebaseapp.com",
+    projectId: "abyss-suicide-co",
   };
   firebase.initializeApp(firebaseConfig);
   const auth = firebase.auth();
 
-  const authBox = document.getElementById('auth');
-  const header = document.getElementById('header');
 
-  function showPage(name){
-    document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
-    document.getElementById(name).classList.add('active');
+  // ===== 2) DOM 요소 =====
+  const loginBox = document.getElementById("login-box");
+  const signupBox = document.getElementById("signup-box");
+  const header = document.getElementById("header");
+
+
+  // ===== 3) 페이지 표시 =====
+  function showPage(name) {
+    document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+    document.getElementById(name).classList.add("active");
   }
 
-  header.addEventListener('click', e=>{
-    const p = e.target.getAttribute('data-page');
-    if(p) showPage(p);
+  header.addEventListener("click", e => {
+    const p = e.target.getAttribute("data-page");
+    if (p) showPage(p);
   });
 
-  document.getElementById('loginBtn').onclick = ()=>{
-    auth.signInWithEmailAndPassword(email.value, pw.value);
-  };
-  document.getElementById('signupBtn').onclick = ()=>{
-    auth.createUserWithEmailAndPassword(email.value, pw.value);
+
+  // ===== 4) 로그인 =====
+  document.getElementById("login-btn").onclick = () => {
+    const email = document.getElementById("login-email").value;
+    const pw = document.getElementById("login-password").value;
+    auth.signInWithEmailAndPassword(email, pw).catch(console.error);
   };
 
-  auth.onAuthStateChanged(user=>{
-    if(user){
-      authBox.style.display='none';
-      header.style.display='flex';
-      showPage('status');
+
+  // ===== 5) 회원가입 =====
+  document.getElementById("signup-btn").onclick = () => {
+    const email = document.getElementById("signup-email").value;
+    const pw = document.getElementById("signup-password").value;
+    auth.createUserWithEmailAndPassword(email, pw).catch(console.error);
+  };
+
+
+  // ===== 6) 로그인 ↔ 회원가입 전환 =====
+  document.getElementById("goto-signup").onclick = () => {
+    loginBox.style.display = "none";
+    signupBox.style.display = "flex";
+  };
+
+  document.getElementById("goto-login").onclick = () => {
+    signupBox.style.display = "none";
+    loginBox.style.display = "flex";
+  };
+
+
+  // ===== 7) 로그인 상태 변경 감지 =====
+  auth.onAuthStateChanged(user => {
+    if (user) {
+      // 로그인했을 때
+      loginBox.style.display = "none";
+      signupBox.style.display = "none";
+      header.style.display = "flex";
+      showPage("status");
     } else {
-      authBox.style.display='flex';
-      header.style.display='none';
+      // 로그아웃 또는 미로그인
+      loginBox.style.display = "flex";
+      signupBox.style.display = "none";
+      header.style.display = "none";
     }
   });
+
 </script>
+
 </body>
 </html>
