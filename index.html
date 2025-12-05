@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Site</title>
+  <style>
+    body { margin:0; font-family: sans-serif; }
+    header {
+      position: fixed;
+      top:0; left:0; right:0;
+      background:#222;
+      color:#fff;
+      padding:10px;
+      display:flex;
+      gap:20px;
+    }
+    .page { padding-top:60px; display:none; }
+    .active { display:block; }
+    #auth { display:flex; flex-direction:column; max-width:300px; margin:100px auto; }
+    #auth input { margin:5px 0; }
+  </style>
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-app-compat.js">  // switch to signup page
+  const gotoSignup = document.getElementById('goto-signup');
+  if (gotoSignup) {
+    gotoSignup.addEventListener('click', () => {
+      document.getElementById('login-page').style.display = 'none';
+      document.getElementById('signup-page').style.display = 'block';
+    });
+  }
+
+  // signup click handler
+  const signupBtn = document.getElementById('signup-btn');
+  if (signupBtn) {
+    signupBtn.addEventListener('click', async () => {
+      const email = document.getElementById('signup-email')?.value;
+      const password = document.getElementById('signup-password')?.value;
+      if (!email || !password) return;
+      try {
+        await createUserWithEmailAndPassword(auth, email, password);
+      } catch (e) {
+        console.error(e);
+      }
+    });
+  }
+</script>
+  <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-auth-compat.js"></script>
+</head>
+<body>
+  <div id="auth">
+    <h2>로그인</h2>
+    <input id="email" placeholder="이메일" />
+    <input id="pw" placeholder="비밀번호" type="password" />
+    <button id="loginBtn">로그인</button>
+    <button id="signupBtn">회원가입</button>
+  </div>
+
+  <header id="header" style="display:none;">
+    <span data-page="status">현황</span>
+    <span data-page="intro">소개</span>
+    <span data-page="map">맵</span>
+    <span data-page="dex">도감</span>
+  </header>
+
+  <div id="status" class="page">현황 페이지</div>
+  <div id="intro" class="page">소개 페이지</div>
+  <div id="map" class="page">맵 페이지</div>
+  <div id="dex" class="page">도감 페이지</div>
+
+<script>
+  // Firebase 설정
+  const firebaseConfig = {
+    apiKey: "YOUR_API_KEY",
+    authDomain: "YOUR_PROJECT.firebaseapp.com",
+    projectId: "YOUR_PROJECT",
+  };
+  firebase.initializeApp(firebaseConfig);
+  const auth = firebase.auth();
+
+  const authBox = document.getElementById('auth');
+  const header = document.getElementById('header');
+
+  function showPage(name){
+    document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+    document.getElementById(name).classList.add('active');
+  }
+
+  header.addEventListener('click', e=>{
+    const p = e.target.getAttribute('data-page');
+    if(p) showPage(p);
+  });
+
+  document.getElementById('loginBtn').onclick = ()=>{
+    auth.signInWithEmailAndPassword(email.value, pw.value);
+  };
+  document.getElementById('signupBtn').onclick = ()=>{
+    auth.createUserWithEmailAndPassword(email.value, pw.value);
+  };
+
+  auth.onAuthStateChanged(user=>{
+    if(user){
+      authBox.style.display='none';
+      header.style.display='flex';
+      showPage('status');
+    } else {
+      authBox.style.display='flex';
+      header.style.display='none';
+    }
+  });
+</script>
+</body>
+</html>
