@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>심연 주식회사 내부 페이지</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="loginBox" class="login-box">
+  <h2>로그인</h2>
+
+  <input type="email" id="emailInput" placeholder="이메일">
+  <input type="password" id="pwInput" placeholder="비밀번호">
+
+  <button id="loginBtn">로그인</button>
+  <button id="signupBtn">회원가입</button>
+
+  <div id="loginMsg"></div>
+</div>
+
+
+<header>
+  <h1>심연 주식회사 내부 시스템</h1>
+</header>
+
+<nav>
+  <button data-tab="main">메인</button>
+  <button data-tab="staff">직원</button>
+  <button data-tab="me">내 상태</button>
+  <button data-tab="map">맵</button>
+  <button data-tab="dex">도감</button>
+  <button data-tab="etc">기타</button>
+</nav>
+
+<section id="content">
+  <!-- JS가 여기 내용을 교체한다 -->
+</section>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+  import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDGmwk9FtwnjUKcH4T6alvMWVQqbhVrqfI",
+    authDomain: "abyss-suicide-co.firebaseapp.com",
+    projectId: "abyss-suicide-co",
+    storageBucket: "abyss-suicide-co.firebasestorage.app",
+    messagingSenderId: "711710259422",
+    appId: "1:711710259422:web:3c5ba7c93edb3d6d6baa4f"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  // script.js에서 쓰라고 노출
+  window._firebase = { db };
+</script>
+
+
+<script src="script.js" type="module"></script>
+
