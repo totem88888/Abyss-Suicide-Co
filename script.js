@@ -1,8 +1,21 @@
-import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+import { 
+  getAuth, 
+  onAuthStateChanged, 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword 
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
+import { 
+  doc, 
+  getDoc, 
+  setDoc 
+} from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+const { db } = window._firebase;
+
+// 페이지 로딩 부분 네 코드 그대로 유지
 const content = document.getElementById("content");
 
-// 페이지 기본 텍스트들
 const pages = {
   main: `
     <h2>메인</h2>
@@ -45,14 +58,10 @@ const pages = {
 
 function loadPage(key) {
   content.innerHTML = pages[key] || "오류 발생";
-
-  // 예시: Firebase에서 직원 수를 불러와 메인 페이지에 표시
   if (key === "main") fetchEmployeeCount();
 }
 
-// Firestore에서 직원 수 예시로 가져오기
 async function fetchEmployeeCount() {
-  const { db } = window._firebase;
   const docRef = doc(db, "system", "employeeStatus");
   const snap = await getDoc(docRef);
 
@@ -74,4 +83,70 @@ document.querySelectorAll("nav button").forEach(btn => {
   btn.addEventListener("click", () => loadPage(btn.dataset.tab));
 });
 
-loadPage("main");
+// ------------------------
+// Firebase Auth Login
+// ------------------------
+
+const auth = getAuth();
+
+const loginBox = document.getElementById("loginBox");
+const loginBtn = document.getElementById("loginBtn");
+const signupBtn = document.getElementById("signupBtn");
+const msg = document.getElementById("loginMsg");
+
+// 로그인
+loginBtn.addEventListener("click", async () => {
+  const email = document.getElementById("emailInput").value;
+  const pw = document.getElementById("pwInput").value;
+
+  try {
+    await signInWithEmailAndPassword(auth, email, pw);
+  } catch (e) {
+    msg.textContent = "로그인 실패";
+  }
+});
+
+// 회원가입
+signupBtn.addEventListener("click", async () => {
+  const email = document.getElementById("emailInput").value;
+  const pw = document.getElementById("pwInput").value;
+
+  try {
+    const userCred = await createUserWithEmailAndPassword(auth, email, pw);
+    const uid = userCred.user.uid;
+
+    await setDoc(doc(db, "users", uid), {
+      uid,
+      email,
+      nickname: "",
+      profileColor: "",
+      decorations: []
+    });
+
+    msg.textContent = "회원가입 완료";
+  } catch (e) {
+    msg.textContent = "회원가입 실패";
+  }
+});
+
+// 로그인 상태 감지
+onAuthStateChanged(auth, async user => {
+  if (user) {
+    loginBox.style.display = "none";
+
+    const snap = await getDoc(doc(db, "users", user.uid));
+    if (!snap.exists()) {
+      await setDoc(doc(db, "users", user.uid), {
+        uid: user.uid,
+        email: user.email,
+        nickname: "",
+        profileColor: "",
+        decorations: []
+      });
+    }
+
+    loadPage("main");
+  } else {
+    loginBox.style.display = "block";
+  }
+});
