@@ -1,3 +1,5 @@
+import { doc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
 const content = document.getElementById("content");
 
 // 페이지 기본 텍스트들
