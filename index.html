@@ -10,7 +10,6 @@
       color-scheme: dark;
     }
     html,body{height:100%;margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial;background:linear-gradient(180deg,#030405 0%,#071018 100%);color:#e6eef8}
-    /* header hidden until 로그인 */
     header{display:flex;align-items:center;gap:12px;padding:12px 18px;background:rgba(0,0,0,0.2);border-bottom:1px solid rgba(255,255,255,0.03)}
     .brand{font-weight:700;letter-spacing:1px}
     .nav{display:flex;gap:8px;margin-left:12px}
@@ -22,11 +21,7 @@
     .content{flex:1;background:linear-gradient(180deg,rgba(255,255,255,0.01),transparent);border-radius:12px;padding:18px;overflow:auto}
     .card{background:var(--card);padding:12px;border-radius:10px;margin-bottom:12px;box-shadow:0 4px 18px rgba(0,0,0,0.6)}
     .muted{color:var(--muted);font-size:13px}
-    /* 로그인 화면 */
-    .fullscreen{
-      position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,rgba(0,0,0,0.6), rgba(0,0,0,0.75));
-      z-index:50;
-    }
+    .fullscreen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,rgba(0,0,0,0.6), rgba(0,0,0,0.75));z-index:50;}
     .login-box{width:360px;padding:20px;border-radius:12px;background:linear-gradient(180deg,#071018,#0b1220);box-shadow:0 10px 40px rgba(0,0,0,0.7);border:1px solid rgba(255,255,255,0.02)}
     .login-box h2{margin:0 0 10px 0}
     .form-row{display:flex;flex-direction:column;margin-bottom:10px}
@@ -66,20 +61,15 @@
       </div>
     </aside>
 
-    <section class="content" id="content">
-      <!-- 동적 영역 -->
-    </section>
+    <section class="content" id="content"></section>
   </main>
 
   <footer>내부 포털 — GitHub Pages 샘플</footer>
 
-  <!-- 로그인 전체 화면 -->
   <div id="loginScreen" class="fullscreen" style="display:flex">
     <div class="login-box" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
       <h2 id="loginTitle">로그인</h2>
-
       <div id="authForms">
-        <!-- 로그인 폼 -->
         <div id="loginForm">
           <div class="form-row"><label>이메일</label><input id="loginEmail" type="email" /></div>
           <div class="form-row"><label>비밀번호</label><input id="loginPassword" type="password" /></div>
@@ -90,7 +80,6 @@
           <div id="loginMsg" class="muted" style="margin-top:8px"></div>
         </div>
 
-        <!-- 회원가입 폼 -->
         <div id="signupForm" style="display:none">
           <div class="form-row"><label>이메일</label><input id="signupEmail" type="email" /></div>
           <div class="form-row"><label>비밀번호</label><input id="signupPassword" type="password" /></div>
@@ -102,19 +91,15 @@
           <div id="signupMsg" class="muted" style="margin-top:8px"></div>
         </div>
       </div>
-
       <div style="margin-top:12px" class="muted">※ 첫 로그인 이후 캐릭터 배정에 시간이 걸릴 수 있음.</div>
     </div>
   </div>
 
-  <!-- Firebase SDK (CDN, 모듈 방식) -->
   <script type="module">
-    // CDN 모듈 (v10.x) - 네가 준 config를 그대로 사용
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.6.0/firebase-app.js";
     import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.6.0/firebase-auth.js";
-    import { getFirestore, doc, setDoc, getDoc, collection, getDocs, serverTimestamp, onSnapshot, query } from "https://www.gstatic.com/firebasejs/10.6.0/firebase-firestore.js";
+    import { getFirestore, doc, setDoc, getDoc, collection, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.6.0/firebase-firestore.js";
 
-    // --- 네가 준 Firebase 설정값 ---
     const firebaseConfig = {
       apiKey: "AIzaSyDGmwk9FtwnjUKcH4T6alvMWVQqbhVrqfI",
       authDomain: "abyss-suicide-co.firebaseapp.com",
@@ -128,7 +113,6 @@
     const auth = getAuth(app);
     const db = getFirestore(app);
 
-    // 탭
     const TABS = [
       { id: 'main', title: '메인' },
       { id: 'staff', title: '직원' },
@@ -138,7 +122,6 @@
       { id: 'etc', title: '그 외' }
     ];
 
-    // DOM
     const pageHeader = document.getElementById('pageHeader');
     const mainApp = document.getElementById('mainApp');
     const navEl = document.getElementById('nav');
@@ -165,9 +148,7 @@
     const gotoLogin = document.getElementById('gotoLogin');
 
     let currentUser = null;
-    let systemUnsub = null;
 
-    // 네비 초기화
     function initNav(){
       navEl.innerHTML = '';
       TABS.forEach(tab=>{
@@ -197,7 +178,6 @@
       mainApp.style.display = 'flex';
     }
 
-    // 랜덤 HEX
     function randomHex(){
       const r = Math.floor(Math.random()*256).toString(16).padStart(2,'0');
       const g = Math.floor(Math.random()*256).toString(16).padStart(2,'0');
@@ -205,7 +185,6 @@
       return '#'+r+g+b;
     }
 
-    // 시간 업데이트
     function startClock(){
       function tick(){
         const d = new Date();
@@ -215,7 +194,6 @@
       setInterval(tick, 1000);
     }
 
-    // Auth events
     gotoSignup.addEventListener('click', ()=>{ loginForm.style.display='none'; signupForm.style.display='block'; loginMsg.textContent=''; signupMsg.textContent=''; });
     gotoLogin.addEventListener('click', ()=>{ signupForm.style.display='none'; loginForm.style.display='block'; signupMsg.textContent=''; loginMsg.textContent=''; });
 
@@ -234,6 +212,8 @@
           nickname: nick,
           colorHex: randomHex(),
           decorations: [],
+          gold: 0,
+          inventory: [],
           status: 'alive',
           createdAt: serverTimestamp()
         });
@@ -266,9 +246,7 @@
       authArea.appendChild(btn);
     }
 
-    // 시스템 문서 조회
     async function subscribeSystem(){
-      // 시스템 문서 경로: system/employeeStatus (요구에 맞춰)
       const sysDocRef = doc(db, 'system', 'employeeStatus');
       try{
         const snap = await getDoc(sysDocRef);
@@ -282,31 +260,17 @@
       }
     }
 
-    // 탭 로드 핸들러
-    async function loadTab(tabId, userTriggered){
+    async function loadTab(tabId){
       setActiveNav(tabId);
       contentEl.innerHTML = '<div class="card muted">로딩...</div>';
       switch(tabId){
-        case 'main':
-          await renderMain();
-          break;
-        case 'staff':
-          await renderStaff();
-          break;
-        case 'me':
-          await renderMe();
-          break;
-        case 'map':
-          renderMap();
-          break;
-        case 'dex':
-          renderDex();
-          break;
-        case 'etc':
-          renderEtc();
-          break;
-        default:
-          contentEl.innerHTML = '<div class="card">알 수 없는 탭</div>';
+        case 'main': await renderMain(); break;
+        case 'staff': await renderStaff(); break;
+        case 'me': await renderMe(); break;
+        case 'map': renderMap(); break;
+        case 'dex': renderDex(); break;
+        case 'etc': renderEtc(); break;
+        default: contentEl.innerHTML = '<div class="card">알 수 없는 탭</div>';
       }
     }
 
@@ -316,7 +280,6 @@
       card.innerHTML = '<div class="muted">메인 대시보드</div><h3>직원 현황</h3><div id="staffSummary">불러오는 중...</div>';
       contentEl.appendChild(card);
 
-      // 직원 집계
       try{
         const usersSnap = await getDocs(collection(db,'users'));
         let alive=0, missing=0, dead=0;
@@ -331,7 +294,7 @@
         });
         const sumEl = document.getElementById('staffSummary');
         sumEl.innerHTML = `<div>생존: ${alive} / 실종: ${missing} / 사망: ${dead}</div>`;
-        // 직원 순위(예시: 없으면 닉네임 표시)
+
         const rankCard = document.createElement('div'); rankCard.className='card';
         rankCard.innerHTML = '<div class="muted">직원 목록</div>';
         const staffList = document.createElement('div'); staffList.className='staff-list';
@@ -361,23 +324,11 @@
           const av = document.createElement('div'); av.className='avatar'; av.style.background = d.colorHex || '#555'; av.textContent = (d.nickname||'?').slice(0,1);
           const info = document.createElement('div'); info.innerHTML = `<div>${d.nickname||d.email||u.id}</div><div class="muted">${d.status||'alive'}</div>`;
           it.appendChild(av); it.appendChild(info);
-          it.addEventListener('click', ()=> showProfile(u.id, d));
           staffArea.appendChild(it);
         });
       }catch(e){
         contentEl.innerHTML = '<div class="card muted">직원 목록 로드 실패</div>';
       }
-    }
-
-    function showProfile(uid, data){
-      contentEl.innerHTML = '';
-      const c = document.createElement('div'); c.className='card';
-      c.innerHTML = `<div class="muted">프로필</div><h3>${data.nickname||data.email||uid}</h3>
-        <div>이메일: ${data.email||'없음'}</div>
-        <div>상태: ${data.status||'alive'}</div>
-        <div>장식: ${(data.decorations||[]).join(', ') || '없음'}</div>
-      `;
-      contentEl.appendChild(c);
     }
 
     async function renderMe(){
@@ -399,51 +350,35 @@
           <h3>${d.nickname||d.email}</h3>
           <div>상태: ${d.status||'alive'}</div>
           <div>장식: ${(d.decorations||[]).join(', ') || '없음'}</div>
-          <div>소지 은화: ${d.gold||0}</div>
-          <div class="muted" style="margin-top:8px">생성일: ${d.createdAt ? (d.createdAt.toDate ? d.createdAt.toDate().toLocaleString() : JSON.stringify(d.createdAt)) : '알 수 없음'}</div>
-        `;
+          <div>소지 금화: ${d.gold||0}</div>
+          <div>인벤토리: ${(d.inventory||[]).join(', ') || '없음'}</div>
+          <div class="muted" style="margin-top:8px">생성일: ${d.createdAt ? (d.createdAt.toDate ? d.createdAt.toDate().toLocaleString() : JSON.stringify(d.createdAt)) : '알 수 없음'}</div>`;
         contentEl.appendChild(c);
       }catch(e){
         contentEl.innerHTML = '<div class="card muted">내 정보 로드 실패</div>';
       }
     }
 
-    function renderMap(){
-      contentEl.innerHTML = '<div class="card"><div class="muted">맵</div><div>장소 소개, 탐사 기록, 댓글 등 표시 예정.</div></div>';
-    }
-    function renderDex(){
-      contentEl.innerHTML = '<div class="card"><div class="muted">도감</div><div>심연체 도감, 달성률, 댓글 등 표시 예정.</div></div>';
-    }
-    function renderEtc(){
-      contentEl.innerHTML = '<div class="card"><div class="muted">그 외</div><div>현재 시간, 스티커 등.</div></div>';
-    }
+    function renderMap(){ contentEl.innerHTML = '<div class="card"><div class="muted">맵</div><div>장소 소개, 탐사 기록, 댓글 등 표시 예정.</div></div>'; }
+    function renderDex(){ contentEl.innerHTML = '<div class="card"><div class="muted">도감</div><div>심연체 도감, 달성률, 댓글 등 표시 예정.</div></div>'; }
+    function renderEtc(){ contentEl.innerHTML = '<div class="card"><div class="muted">그 외</div><div>현재 시간, 스티커 등.</div></div>'; }
 
-    // Auth 상태 감지
     onAuthStateChanged(auth, async (user)=>{
       currentUser = user;
       if(user){
-        // 로그인 UI 전환
         showLoggedInUI();
         renderAuthArea(user);
         initNav();
         startClock();
         subscribeSystem();
-        // 기본 탭 로드
-        loadTab('main', false);
-        // mini profile
+        loadTab('main');
         try{
           const snap = await getDoc(doc(db,'users',user.uid));
-          if(snap.exists()){
-            const d = snap.data();
-            miniProfile.textContent = `${d.nickname || user.email}`;
-          } else {
-            miniProfile.textContent = user.email || '사용자';
-          }
+          miniProfile.textContent = snap.exists() ? snap.data().nickname || user.email : user.email || '사용자';
         }catch(e){
           miniProfile.textContent = user.email || '사용자';
         }
       } else {
-        // 로그아웃 UI
         currentUser = null;
         renderAuthArea(null);
         showLoggedOutUI();
@@ -452,10 +387,7 @@
       }
     });
 
-    // 초반: 보여주는 방식
-    // 기본적으로 로그인 화면 표시
     showLoggedOutUI();
-
   </script>
 </body>
 </html>
