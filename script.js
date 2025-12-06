@@ -1,21 +1,40 @@
-import { 
-  getAuth, 
-  onAuthStateChanged, 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword 
+import {
+  getAuth,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-import { 
-  doc, 
-  getDoc, 
-  setDoc 
+import {
+  doc,
+  getDoc,
+  setDoc
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
 const { db } = window._firebase;
 
-// 페이지 로딩 부분 네 코드 그대로 유지
+const auth = getAuth();
+
 const content = document.getElementById("content");
 
+const loginBox = document.getElementById("loginBox");
+const signupBox = document.getElementById("signupBox");
+
+const loginBtn = document.getElementById("loginBtn");
+const goSignupBtn = document.getElementById("signupBtn");
+const signupSubmitBtn = document.getElementById("signupSubmitBtn");
+const goLoginBtn = document.getElementById("goLoginBtn");
+
+const loginMsg = document.getElementById("loginMsg");
+const signupMsg = document.getElementById("signupMsg");
+
+// 랜덤 HEX 색상
+function randomHex() {
+  return "#" + Math.floor(Math.random() * 16777215).toString(16);
+}
+
+// 페이지들
 const pages = {
   main: `
     <h2>메인</h2>
@@ -61,6 +80,7 @@ function loadPage(key) {
   if (key === "main") fetchEmployeeCount();
 }
 
+// 직원 현황
 async function fetchEmployeeCount() {
   const docRef = doc(db, "system", "employeeStatus");
   const snap = await getDoc(docRef);
@@ -79,22 +99,12 @@ async function fetchEmployeeCount() {
   }
 }
 
+// 네비 버튼
 document.querySelectorAll("nav button").forEach(btn => {
   btn.addEventListener("click", () => loadPage(btn.dataset.tab));
 });
 
-// ------------------------
-// Firebase Auth Login
-// ------------------------
-
-const auth = getAuth();
-
-const loginBox = document.getElementById("loginBox");
-const loginBtn = document.getElementById("loginBtn");
-const signupBtn = document.getElementById("signupBtn");
-const msg = document.getElementById("loginMsg");
-
-// 로그인
+// 로그인 버튼
 loginBtn.addEventListener("click", async () => {
   const email = document.getElementById("emailInput").value;
   const pw = document.getElementById("pwInput").value;
@@ -102,14 +112,26 @@ loginBtn.addEventListener("click", async () => {
   try {
     await signInWithEmailAndPassword(auth, email, pw);
   } catch (e) {
-    msg.textContent = "로그인 실패";
+    loginMsg.textContent = "로그인 실패";
   }
 });
 
-// 회원가입
-signupBtn.addEventListener("click", async () => {
-  const email = document.getElementById("emailInput").value;
-  const pw = document.getElementById("pwInput").value;
+// 회원가입 화면으로 이동
+goSignupBtn.addEventListener("click", () => {
+  loginBox.style.display = "none";
+  signupBox.style.display = "block";
+});
+
+// 회원가입 제출
+signupSubmitBtn.addEventListener("click", async () => {
+  const email = document.getElementById("signupEmail").value;
+  const pw = document.getElementById("signupPw").value;
+  const nickname = document.getElementById("signupNick").value;
+
+  if (!nickname) {
+    signupMsg.textContent = "닉네임을 입력하세요";
+    return;
+  }
 
   try {
     const userCred = await createUserWithEmailAndPassword(auth, email, pw);
@@ -118,35 +140,45 @@ signupBtn.addEventListener("click", async () => {
     await setDoc(doc(db, "users", uid), {
       uid,
       email,
-      nickname: "",
-      profileColor: "",
+      nickname,
+      profileColor: randomHex(),
       decorations: []
     });
 
-    msg.textContent = "회원가입 완료";
+    signupMsg.textContent = "회원가입 완료";
   } catch (e) {
-    msg.textContent = "회원가입 실패";
+    signupMsg.textContent = "회원가입 실패";
   }
 });
 
-// 로그인 상태 감지
+// 회원가입 → 로그인으로 돌아가기
+goLoginBtn.addEventListener("click", () => {
+  signupBox.style.display = "none";
+  loginBox.style.display = "block";
+});
+
+// 로그인 상태 변화 감지
 onAuthStateChanged(auth, async user => {
   if (user) {
     loginBox.style.display = "none";
+    signupBox.style.display = "none";
 
+    // DB 정보 없으면 생성
     const snap = await getDoc(doc(db, "users", user.uid));
     if (!snap.exists()) {
       await setDoc(doc(db, "users", user.uid), {
         uid: user.uid,
         email: user.email,
         nickname: "",
-        profileColor: "",
+        profileColor: randomHex(),
         decorations: []
       });
     }
 
     loadPage("main");
   } else {
+    // 로그아웃 상태
     loginBox.style.display = "block";
+    signupBox.style.display = "none";
   }
 });

@@ -10,14 +10,27 @@
 
 <div id="loginBox" class="login-box">
   <h2>로그인</h2>
-
+  
   <input type="email" id="emailInput" placeholder="이메일">
   <input type="password" id="pwInput" placeholder="비밀번호">
 
   <button id="loginBtn">로그인</button>
-  <button id="signupBtn">회원가입</button>
+  <button id="showSignupBtn">회원가입</button>
 
   <div id="loginMsg"></div>
+</div>
+
+<div id="signupBox" class="login-box" style="display:none;">
+  <h2>회원가입</h2>
+
+  <input type="email" id="signupEmail" placeholder="이메일">
+  <input type="password" id="signupPw" placeholder="비밀번호">
+  <input type="text" id="signupNick" placeholder="닉네임">
+
+  <button id="signupSubmitBtn">가입하기</button>
+  <button id="goLoginBtn">로그인으로</button>
+
+  <div id="signupMsg"></div>
 </div>
 
 
