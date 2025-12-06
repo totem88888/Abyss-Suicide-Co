@@ -1,0 +1,38 @@
+body {
+  margin: 0;
+  background: #111;
+  color: #eee;
+  font-family: sans-serif;
+}
+
+header {
+  padding: 20px;
+  background: #222;
+  font-size: 20px;
+  text-align: center;
+  border-bottom: 1px solid #333;
+}
+
+nav {
+  display: flex;
+  background: #181818;
+  border-bottom: 1px solid #333;
+}
+
+nav button {
+  flex: 1;
+  padding: 15px;
+  background: #181818;
+  border: none;
+  color: #ccc;
+  cursor: pointer;
+}
+
+nav button:hover {
+  background: #242424;
+}
+
+#content {
+  padding: 20px;
+  line-height: 1.6;
+}
