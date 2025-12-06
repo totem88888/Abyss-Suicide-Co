@@ -196,7 +196,7 @@
     <section class="content" id="content"></section>
   </main>
 
-  <footer>내부 포털 — GitHub Pages 샘플</footer>
+  <footer>본 페이지의 저작권은 심연 주식회사에 있습니다.</footer>
 
   <div id="loginScreen" class="fullscreen" style="display:flex">
     <div class="login-box" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
@@ -207,7 +207,7 @@
           <div class="form-row"><label>비밀번호</label><input id="loginPassword" type="password" /></div>
           <div style="display:flex;gap:8px;align-items:center">
             <button id="loginBtn" class="btn">로그인</button>
-            <button id="gotoSignup" class="link">회원가입으로 전환</button>
+            <button id="gotoSignup" class="link">회원가입으로</button>
           </div>
           <div id="loginMsg" class="muted" style="margin-top:8px"></div>
         </div>
@@ -317,17 +317,32 @@
       return '#'+r+g+b;
     }
 
-    function startClock(){
-      function tick(){
+    function startClock() {
+      function tick() {
         const d = new Date();
-        nowTimeEl.textContent = d.toLocaleString();
+        // 시간 표시에서 초 제외
+        const options = { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' };
+        nowTimeEl.textContent = d.toLocaleString(undefined, options);
       }
       tick();
       setInterval(tick, 1000);
     }
 
-    gotoSignup.addEventListener('click', ()=>{ loginForm.style.display='none'; signupForm.style.display='block'; loginMsg.textContent=''; signupMsg.textContent=''; });
-    gotoLogin.addEventListener('click', ()=>{ signupForm.style.display='none'; loginForm.style.display='block'; signupMsg.textContent=''; loginMsg.textContent=''; });
+    gotoSignup.addEventListener('click', () => {
+      loginForm.style.display = 'none';
+      signupForm.style.display = 'block';
+      loginMsg.textContent = '';
+      signupMsg.textContent = '';
+      document.getElementById('loginTitle').textContent = '회원가입';
+    });
+
+    gotoLogin.addEventListener('click', () => {
+      signupForm.style.display = 'none';
+      loginForm.style.display = 'block';
+      signupMsg.textContent = '';
+      loginMsg.textContent = '';
+      document.getElementById('loginTitle').textContent = '로그인';
+    });
 
     signupBtn.addEventListener('click', async ()=>{
       signupMsg.textContent = '';
@@ -344,9 +359,9 @@
           nickname: nick,
           colorHex: randomHex(),
           decorations: [],
-          gold: 0,
+          silver: 0,
           inventory: [],
-          status: 'alive',
+          status: '생존',
           createdAt: serverTimestamp()
         });
         signupMsg.textContent = '가입 성공. 로그인 처리 중.';
