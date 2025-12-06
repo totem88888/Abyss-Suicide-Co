@@ -21,15 +21,14 @@
   <button data-tab="etc">기타</button>
 </nav>
 
-<section id="content"></section>
+<section id="content">
+  <!-- JS가 여기 내용을 교체한다 -->
+</section>
 
-<!-- Firebase SDK -->
 <script type="module">
-
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
   import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
-  // 네 설정
   const firebaseConfig = {
     apiKey: "AIzaSyDGmwk9FtwnjUKcH4T6alvMWVQqbhVrqfI",
     authDomain: "abyss-suicide-co.firebaseapp.com",
@@ -39,13 +38,13 @@
     appId: "1:711710259422:web:3c5ba7c93edb3d6d6baa4f"
   };
 
-  // Firebase 시작
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
 
-  window._firebase = { app, db };
+  // script.js에서 쓰라고 노출
+  window._firebase = { db };
 </script>
 
+
 <script src="script.js" type="module"></script>
-</body>
-</html>
+
