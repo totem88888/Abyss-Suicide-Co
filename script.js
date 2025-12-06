@@ -22,7 +22,7 @@ const loginBox = document.getElementById("loginBox");
 const signupBox = document.getElementById("signupBox");
 
 const loginBtn = document.getElementById("loginBtn");
-const goSignupBtn = document.getElementById("signupBtn");
+const goSignupBtn = document.getElementById("showSignupBtn");
 const signupSubmitBtn = document.getElementById("signupSubmitBtn");
 const goLoginBtn = document.getElementById("goLoginBtn");
 
