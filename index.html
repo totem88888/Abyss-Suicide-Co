@@ -41,13 +41,16 @@
   <button data-tab="main">메인</button>
   <button data-tab="staff">직원</button>
   <button data-tab="me">내 상태</button>
-  
+
   <button data-tab="map">맵</button>
   <button data-tab="dex">도감</button>
   <button data-tab="etc">기타</button>
 </nav>
 
 <section id="content"></section>
+<!-- script.js는 반드시 이 아래에 있어야 한다 -->
+
+</body>
 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
@@ -68,8 +71,5 @@
   window._firebase = { db };
 </script>
 
-<!-- script.js는 반드시 이 아래에 있어야 한다 -->
 <script src="script.js" type="module"></script>
-
-</body>
 </html>
