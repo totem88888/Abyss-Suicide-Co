@@ -36,3 +36,27 @@ nav button:hover {
   padding: 20px;
   line-height: 1.6;
 }
+
+.login-box {
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    background: #222;
+    color: #fff;
+    padding: 20px;
+    border-radius: 6px;
+    width: 260px;
+    display: none;
+}
+
+.login-box input {
+    width: 100%;
+    margin-top: 8px;
+    padding: 8px;
+}
+
+.login-box button {
+    width: 100%;
+    margin-top: 10px;
+    padding: 8px;
+}
