@@ -1,0 +1,138 @@
+@import url('https://fonts.googleapis.com/css2?family=Chiron+Hei+HK:ital,wght@0,200..900;1,200..900&family=Noto+Serif+KR:wght@200..900&display=swap');
+
+:root {
+    --bg: #00011a;
+    --card: #0f1316;
+    --accent: #78e3d0;
+    --muted: #bdddde;
+    --glass: rgba(255,255,255,0.03);
+    color-scheme: dark;
+}
+
+html, body {
+    height: 100%;
+    margin: 0;
+    font-family: "Chiron Hei HK", sans-serif;
+    color: var(--muted);
+    background: var(--bg);
+    letter-spacing: -1px;
+}
+
+header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 18px;
+    background: var(--glass);
+}
+
+footer {
+    padding: 12px;
+    text-align: center;
+    color: var(--card);
+    font-size: 13px;
+}
+
+.nav { display: flex; gap: 8px; margin-left: 12px; }
+
+.nav button { 
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.04);
+    padding: 8px 12px;
+    border-radius: 8px;
+    color: inherit;
+    cursor: pointer;
+}
+
+.nav button.active {
+    background: var(--accent);
+    color: var(--bg);
+}
+
+.spacer { flex: 1; }
+
+main {
+    padding: 18px;
+    display: flex;
+    height: calc(100vh - 64px);
+    gap: 18px;
+}
+
+.sidebar {
+    width: 260px;
+    background: linear-gradient(180deg,rgba(255,255,255,0.02),transparent);
+    border-radius: 12px;
+    padding: 12px;
+}
+
+.content {
+    flex: 1;
+    background: linear-gradient(180deg,rgba(255,255,255,0.01),transparent);
+    border-radius: 12px;
+    padding: 18px;
+    overflow: auto;
+}
+
+.card {
+    background: var(--card);
+    padding: 12px;
+    border-radius: 10px;
+    margin-bottom: 12px;
+    box-shadow: 0 4px 18px rgba(0,0,0,0.6);
+}
+
+.fullscreen {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(180deg,rgba(0,0,0,0.6), rgba(0,0,0,0.75));
+    z-index: 50;
+}
+
+.login-box {
+    width: 360px;
+    padding: 20px;
+    border-radius: 12px;
+    background: linear-gradient(180deg,#00011a,#0b1220);
+    box-shadow: 0 10px 40px rgba(0,0,0,0.7);
+    border: 1px solid rgba(255,255,255,0.02);
+}
+
+.login-box h2 { margin: 0 0 10px 0; color: var(--accent); }
+
+.form-row {
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 10px;
+}
+
+input[type=text], input[type=email], input[type=password] {
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.04);
+    background: transparent;
+    color: var(--muted);
+}
+
+.brand { font-weight: 700; }
+
+.muted { color: var(--muted); font-size: 13px; }
+
+.btn {
+    display: inline-block;
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 0;
+    background: var(--accent);
+    color: var(--bg);
+    cursor: pointer;
+}
+
+.link {
+    background: transparent;
+    border: 0;
+    color: var(--accent);
+    cursor: pointer;
+}

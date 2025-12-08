@@ -1,540 +1,91 @@
 <!doctype html>
 <html lang="ko">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>심연 주식회사 — 내부 포털</title>
-  <style>
-  :root{
-    --bg:#00011a;
-    --card:#0f1316;
-    --accent:#78e3d0;
-    --muted:#bdddde;
-    --glass: rgba(255,255,255,0.03);
-    color-scheme: dark;
-  }
-
-  html,body{
-    height:100%;
-    margin:0;
-    font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial;
-    background:var(--bg);
-    color:var(--muted);
-  }
-
-  header{
-    display:flex;
-    align-items:center;
-    gap:12px;
-    padding:12px 18px;
-    background:rgba(0,0,0,0.2);
-    border-bottom:1px solid rgba(255,255,255,0.03);
-  }
-
-  .brand{ font-weight:700; letter-spacing:1px; }
-  .nav{ display:flex; gap:8px; margin-left:12px; }
-  .nav button{
-    background:transparent;
-    border:1px solid rgba(255,255,255,0.04);
-    padding:8px 12px;
-    border-radius:8px;
-    color:inherit;
-    cursor:pointer;
-  }
-  .nav button.active{
-    background:var(--accent);
-    color:var(--bg);
-  }
-
-  .spacer{ flex:1; }
-  main{
-    padding:18px;
-    display:flex;
-    height:calc(100vh - 64px);
-    gap:18px;
-  }
-
-  .sidebar{
-    width:260px;
-    background:linear-gradient(180deg,rgba(255,255,255,0.02),transparent);
-    border-radius:12px;
-    padding:12px;
-  }
-
-  .content{
-    flex:1;
-    background:linear-gradient(180deg,rgba(255,255,255,0.01),transparent);
-    border-radius:12px;
-    padding:18px;
-    overflow:auto;
-  }
-
-  .card{
-    background:var(--card);
-    padding:12px;
-    border-radius:10px;
-    margin-bottom:12px;
-    box-shadow:0 4px 18px rgba(0,0,0,0.6);
-  }
-
-  .muted{
-    color:var(--muted);
-    font-size:13px;
-  }
-
-  .fullscreen{
-    position:fixed;
-    inset:0;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    background:linear-gradient(180deg,rgba(0,0,0,0.6), rgba(0,0,0,0.75));
-    z-index:50;
-  }
-
-  .login-box{
-    width:360px;
-    padding:20px;
-    border-radius:12px;
-    background:linear-gradient(180deg,#00011a,#0b1220);
-    box-shadow:0 10px 40px rgba(0,0,0,0.7);
-    border:1px solid rgba(255,255,255,0.02);
-  }
-
-  .login-box h2{ margin:0 0 10px 0; color:var(--accent); }
-
-  .form-row{
-    display:flex;
-    flex-direction:column;
-    margin-bottom:10px;
-  }
-
-  input[type=text], input[type=email], input[type=password]{
-    padding:10px;
-    border-radius:8px;
-    border:1px solid rgba(255,255,255,0.04);
-    background:transparent;
-    color:var(--muted);
-  }
-
-  .btn{
-    display:inline-block;
-    padding:8px 12px;
-    border-radius:8px;
-    border:0;
-    background:var(--accent);
-    color:var(--bg);
-    cursor:pointer;
-  }
-
-  .link{
-    background:transparent;
-    border:0;
-    color:var(--accent);
-    cursor:pointer;
-  }
-
-  .staff-list{ display:flex; flex-direction:column; gap:8px; }
-  .staff-item{
-    display:flex;
-    align-items:center;
-    gap:10px;
-    padding:8px;
-    border-radius:8px;
-    background:linear-gradient(90deg,rgba(255,255,255,0.01),transparent);
-  }
-
-  .avatar{
-    width:40px;
-    height:40px;
-    border-radius:8px;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    font-weight:700;
-  }
-
-  footer{
-    padding:12px;
-    text-align:center;
-    color:var(--muted);
-    font-size:13px;
-  }
-
-  @media(max-width:900px){
-    .sidebar{display:none;}
-    .nav{overflow:auto;}
-  }
-</style>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>심연 주식회사</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="script.js"></script>
 </head>
 <body>
-  <header id="pageHeader" style="display:none">
-    <div class="brand">심연 주식회사</div>
-    <nav class="nav" id="nav"></nav>
-    <div class="spacer"></div>
-    <div id="auth-area"></div>
-  </header>
+    <header id="header">
+        <div class="brand">심연 주식회사</div>
+        <nav class="nav" id="nav"></nav>
+        <div class="spacer"></div>
+        <div id="log-out"></div>
+    </header>
 
-  <main id="mainApp" style="display:none">
-    <aside class="sidebar card">
-      <div class="card">
-        <div class="muted">현재 시간</div>
-        <div id="nowTime">--</div>
-      </div>
+    <main id="mainApp" >
+        <aside class="sidebar card">
+            <div class="card">
+                <div class="muted">현재 시간</div>
+                <div id="nowTime">--</div>
+            </div>
 
-      <div class="card">
-        <div class="muted">내 정보</div>
-        <div id="miniProfile">로그인 필요</div>
-      </div>
+            <div class="card">
+                <div class="muted">내 정보</div>
+                <div id="miniProfile">로그인 필요</div>
+            </div>
 
-      <div class="card">
-        <div class="muted">시스템</div>
-        <div id="systemInfo">불러오는 중...</div>
-      </div>
-    </aside>
+            <div class="card">
+                <div class="muted">시스템</div>
+                <div id="systemInfo">불러오는 중...</div>
+            </div>
+        </aside>
 
-    <section class="content" id="content"></section>
-  </main>
+        <section class="content" id="content"></section>
+    </main>
 
-  <footer>본 페이지의 저작권은 심연 주식회사에 있습니다.</footer>
+    <div id="login" class="fullscreen">
+        <div class="login-box" aria-modal="true" aria-labelledby="loginTitle">
+            <h2 id="loginTitle">로그인</h2>
+            <div id="login-auth-forms">
+                <div id="login-form">
+                    <div class="form-row">
+                        <label for="login-id">아이디</label>
+                        <input id="login-id" type="text">
+                    </div>
+                    <div class="form-row">
+                        <label for="login-password">비밀번호</label>
+                        <input id="login-password" type="password">
+                    </div>
+                    <div>
+                        <button class="btn" id="login-bth">로그인</button>
+                        <button class="link" id="goto-signup-bth">회원가입으로</button>
+                    </div>
+                    <div class="muted" id="login-box-msg"></div>
+                </div>
 
-  <div id="loginScreen" class="fullscreen" style="display:flex">
-    <div class="login-box" role="dialog" aria-modal="true" aria-labelledby="loginTitle">
-      <h2 id="loginTitle">로그인</h2>
-      <div id="authForms">
-        <div id="loginForm">
-          <div class="form-row"><label>이메일</label><input id="loginEmail" type="email" /></div>
-          <div class="form-row"><label>비밀번호</label><input id="loginPassword" type="password" /></div>
-          <div style="display:flex;gap:8px;align-items:center">
-            <button id="loginBtn" class="btn">로그인</button>
-            <button id="gotoSignup" class="link">회원가입으로</button>
-          </div>
-          <div id="loginMsg" class="muted" style="margin-top:8px"></div>
+                <div id="signup-form">
+                    <div class="form-row">
+                        <label for="signup-id">아이디</label>
+                        <input id="signup-id" type="text">
+                    </div>
+                    <div class="form-row">
+                        <label for="signup-password">비밀번호</label>
+                        <input id="signup-password" type="password">
+                    </div>
+                    <div class="form-row">
+                        <label for="signup-email">이메일</label>
+                        <input id="signup-email" type="email">
+                    </div>
+                    <div class="form-row">
+                        <label for="signup-nickname">닉네임</label>
+                        <input id="signup-nickname" type="text">
+                    </div>
+                    <div>
+                        <button class="btn" id="signup-bth">회원가입</button>
+                        <button class="link" id="goto-login-bth">로그인으로</button>
+                    </div>
+                    <div class="muted" id="signup-box-msg"></div>
+                </div>
+            </div>
+            <div class="muted">※ 첫 로그인 이후 캐릭터 배정에 시간이 걸릴 수 있습니다.</div>
         </div>
-
-        <div id="signupForm" style="display:none">
-          <div class="form-row"><label>이메일</label><input id="signupEmail" type="email" /></div>
-          <div class="form-row"><label>비밀번호</label><input id="signupPassword" type="password" /></div>
-          <div class="form-row"><label>닉네임</label><input id="signupNick" type="text" /></div>
-          <div style="display:flex;gap:8px;align-items:center">
-            <button id="signupBtn" class="btn">가입</button>
-            <button id="gotoLogin" class="link">로그인으로</button>
-          </div>
-          <div id="signupMsg" class="muted" style="margin-top:8px"></div>
-        </div>
-      </div>
-      <div style="margin-top:12px" class="muted">※ 첫 로그인 이후 캐릭터 배정에 시간이 걸릴 수 있음.</div>
     </div>
-  </div>
 
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.6.0/firebase-app.js";
-    import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.6.0/firebase-auth.js";
-    import { getFirestore, doc, setDoc, getDoc, collection, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.6.0/firebase-firestore.js";
 
-    const firebaseConfig = {
-      apiKey: "AIzaSyDGmwk9FtwnjUKcH4T6alvMWVQqbhVrqfI",
-      authDomain: "abyss-suicide-co.firebaseapp.com",
-      projectId: "abyss-suicide-co",
-      storageBucket: "abyss-suicide-co.firebasestorage.app",
-      messagingSenderId: "711710259422",
-      appId: "1:711710259422:web:3c5ba7c93edb3d6d6baa4f"
-    };
 
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const db = getFirestore(app);
 
-    const TABS = [
-      { id: 'main', title: '메인' },
-      { id: 'staff', title: '직원' },
-      { id: 'me', title: '내 상태' },
-      { id: 'map', title: '맵' },
-      { id: 'dex', title: '도감' },
-      { id: 'etc', title: '그 외' }
-    ];
-
-    const pageHeader = document.getElementById('pageHeader');
-    const mainApp = document.getElementById('mainApp');
-    const navEl = document.getElementById('nav');
-    const contentEl = document.getElementById('content');
-    const authArea = document.getElementById('auth-area');
-    const nowTimeEl = document.getElementById('nowTime');
-    const miniProfile = document.getElementById('miniProfile');
-    const systemInfo = document.getElementById('systemInfo');
-
-    const loginScreen = document.getElementById('loginScreen');
-    const loginForm = document.getElementById('loginForm');
-    const signupForm = document.getElementById('signupForm');
-    const loginEmail = document.getElementById('loginEmail');
-    const loginPassword = document.getElementById('loginPassword');
-    const loginBtn = document.getElementById('loginBtn');
-    const loginMsg = document.getElementById('loginMsg');
-    const gotoSignup = document.getElementById('gotoSignup');
-
-    const signupEmail = document.getElementById('signupEmail');
-    const signupPassword = document.getElementById('signupPassword');
-    const signupNick = document.getElementById('signupNick');
-    const signupBtn = document.getElementById('signupBtn');
-    const signupMsg = document.getElementById('signupMsg');
-    const gotoLogin = document.getElementById('gotoLogin');
-
-    let currentUser = null;
-
-    function initNav(){
-      navEl.innerHTML = '';
-      TABS.forEach(tab=>{
-        const b = document.createElement('button');
-        b.textContent = tab.title;
-        b.dataset.tab = tab.id;
-        b.addEventListener('click', ()=> loadTab(tab.id, true));
-        navEl.appendChild(b);
-      });
-    }
-
-    function setActiveNav(tabId){
-      navEl.querySelectorAll('button').forEach(b=> b.classList.toggle('active', b.dataset.tab===tabId));
-    }
-
-    function showLoggedOutUI(){
-      pageHeader.style.display = 'none';
-      mainApp.style.display = 'none';
-      loginScreen.style.display = 'flex';
-      loginForm.style.display = 'block';
-      signupForm.style.display = 'none';
-    }
-
-    function showLoggedInUI(){
-      loginScreen.style.display = 'none';
-      pageHeader.style.display = 'flex';
-      mainApp.style.display = 'flex';
-    }
-
-    function randomHex(){
-      const r = Math.floor(Math.random()*256).toString(16).padStart(2,'0');
-      const g = Math.floor(Math.random()*256).toString(16).padStart(2,'0');
-      const b = Math.floor(Math.random()*256).toString(16).padStart(2,'0');
-      return '#'+r+g+b;
-    }
-
-    function startClock() {
-      function tick() {
-        const d = new Date();
-        // 시간 표시에서 초 제외
-        const options = { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' };
-        nowTimeEl.textContent = d.toLocaleString(undefined, options);
-      }
-      tick();
-      setInterval(tick, 1000);
-    }
-
-    gotoSignup.addEventListener('click', () => {
-      loginForm.style.display = 'none';
-      signupForm.style.display = 'block';
-      loginMsg.textContent = '';
-      signupMsg.textContent = '';
-      document.getElementById('loginTitle').textContent = '회원가입';
-    });
-
-    gotoLogin.addEventListener('click', () => {
-      signupForm.style.display = 'none';
-      loginForm.style.display = 'block';
-      signupMsg.textContent = '';
-      loginMsg.textContent = '';
-      document.getElementById('loginTitle').textContent = '로그인';
-    });
-
-    signupBtn.addEventListener('click', async ()=>{
-      signupMsg.textContent = '';
-      const email = signupEmail.value.trim();
-      const pw = signupPassword.value;
-      const nick = signupNick.value.trim();
-      if(!nick){ signupMsg.textContent = '닉네임을 입력해'; return; }
-      if(!email || !pw){ signupMsg.textContent = '이메일과 비밀번호를 입력해'; return; }
-      try{
-        const cred = await createUserWithEmailAndPassword(auth, email, pw);
-        const uid = cred.user.uid;
-        await setDoc(doc(db,'users',uid), {
-          email,
-          nickname: nick,
-          colorHex: randomHex(),
-          decorations: [],
-          silver: 0,
-          inventory: [],
-          status: '생존',
-          createdAt: serverTimestamp()
-        });
-        signupMsg.textContent = '가입 성공. 로그인 처리 중.';
-      }catch(e){
-        signupMsg.textContent = '가입 실패: ' + (e.message || e.code);
-      }
-    });
-
-    loginBtn.addEventListener('click', async ()=>{
-      loginMsg.textContent = '';
-      const email = loginEmail.value.trim();
-      const pw = loginPassword.value;
-      if(!email || !pw){ loginMsg.textContent = '이메일과 비밀번호를 입력해'; return; }
-      try{
-        await signInWithEmailAndPassword(auth, email, pw);
-        loginMsg.textContent = '로그인 성공.';
-      }catch(e){
-        loginMsg.textContent = '로그인 실패: ' + (e.message || e.code);
-      }
-    });
-
-    function renderAuthArea(user){
-      authArea.innerHTML = '';
-      if(!user) return;
-      const btn = document.createElement('button');
-      btn.className = 'btn';
-      btn.textContent = '로그아웃';
-      btn.addEventListener('click', ()=> signOut(auth));
-      authArea.appendChild(btn);
-    }
-
-    async function subscribeSystem(){
-      const sysDocRef = doc(db, 'system', 'employeeStatus');
-      try{
-        const snap = await getDoc(sysDocRef);
-        if(snap.exists()){
-          systemInfo.textContent = JSON.stringify(snap.data());
-        } else {
-          systemInfo.textContent = '시스템 정보 없음';
-        }
-      }catch(e){
-        systemInfo.textContent = '시스템 로드 실패';
-      }
-    }
-
-    async function loadTab(tabId){
-      setActiveNav(tabId);
-      contentEl.innerHTML = '<div class="card muted">로딩...</div>';
-      switch(tabId){
-        case 'main': await renderMain(); break;
-        case 'staff': await renderStaff(); break;
-        case 'me': await renderMe(); break;
-        case 'map': renderMap(); break;
-        case 'dex': renderDex(); break;
-        case 'etc': renderEtc(); break;
-        default: contentEl.innerHTML = '<div class="card">알 수 없는 탭</div>';
-      }
-    }
-
-    async function renderMain(){
-      contentEl.innerHTML = '';
-      const card = document.createElement('div'); card.className='card';
-      card.innerHTML = '<div class="muted">메인 대시보드</div><h3>직원 현황</h3><div id="staffSummary">불러오는 중...</div>';
-      contentEl.appendChild(card);
-
-      try{
-        const usersSnap = await getDocs(collection(db,'users'));
-        let alive=0, missing=0, dead=0;
-        const list = [];
-        usersSnap.forEach(u=>{
-          const d = u.data();
-          const s = d.status || 'alive';
-          if(s==='alive') alive++;
-          else if(s==='missing') missing++;
-          else if(s==='dead') dead++;
-          list.push({id:u.id, ...d});
-        });
-        const sumEl = document.getElementById('staffSummary');
-        sumEl.innerHTML = `<div>생존: ${alive} / 실종: ${missing} / 사망: ${dead}</div>`;
-
-        const rankCard = document.createElement('div'); rankCard.className='card';
-        rankCard.innerHTML = '<div class="muted">직원 목록</div>';
-        const staffList = document.createElement('div'); staffList.className='staff-list';
-        list.forEach(p=>{
-          const it = document.createElement('div'); it.className='staff-item';
-          const av = document.createElement('div'); av.className='avatar'; av.style.background = p.colorHex || '#444'; av.textContent = (p.nickname||'??').slice(0,1);
-          const info = document.createElement('div'); info.innerHTML = `<div>${p.nickname||p.email||p.id}</div><div class="muted">${p.status||'alive'}</div>`;
-          it.appendChild(av); it.appendChild(info);
-          staffList.appendChild(it);
-        });
-        rankCard.appendChild(staffList);
-        contentEl.appendChild(rankCard);
-      }catch(e){
-        contentEl.innerHTML += '<div class="card muted">직원 로드 실패</div>';
-      }
-    }
-
-    async function renderStaff(){
-      contentEl.innerHTML = '<div class="card"><div class="muted">직원 목록</div><div id="staffArea">불러오는 중...</div></div>';
-      try{
-        const usersSnap = await getDocs(collection(db,'users'));
-        const staffArea = document.getElementById('staffArea');
-        staffArea.innerHTML = '';
-        usersSnap.forEach(u=>{
-          const d = u.data();
-          const it = document.createElement('div'); it.className='staff-item';
-          const av = document.createElement('div'); av.className='avatar'; av.style.background = d.colorHex || '#555'; av.textContent = (d.nickname||'?').slice(0,1);
-          const info = document.createElement('div'); info.innerHTML = `<div>${d.nickname||d.email||u.id}</div><div class="muted">${d.status||'alive'}</div>`;
-          it.appendChild(av); it.appendChild(info);
-          staffArea.appendChild(it);
-        });
-      }catch(e){
-        contentEl.innerHTML = '<div class="card muted">직원 목록 로드 실패</div>';
-      }
-    }
-
-    async function renderMe(){
-      if(!currentUser){
-        contentEl.innerHTML = '<div class="card muted">로그인 필요</div>';
-        return;
-      }
-      contentEl.innerHTML = '<div class="card">내 정보 불러오는 중...</div>';
-      try{
-        const snap = await getDoc(doc(db,'users',currentUser.uid));
-        if(!snap.exists()){
-          contentEl.innerHTML = '<div class="card muted">내 정보가 없습니다.</div>';
-          return;
-        }
-        const d = snap.data();
-        contentEl.innerHTML = '';
-        const c = document.createElement('div'); c.className='card';
-        c.innerHTML = `<div class="muted">내 상태</div>
-          <h3>${d.nickname||d.email}</h3>
-          <div>상태: ${d.status||'alive'}</div>
-          <div>장식: ${(d.decorations||[]).join(', ') || '없음'}</div>
-          <div>소지 금화: ${d.gold||0}</div>
-          <div>인벤토리: ${(d.inventory||[]).join(', ') || '없음'}</div>
-          <div class="muted" style="margin-top:8px">생성일: ${d.createdAt ? (d.createdAt.toDate ? d.createdAt.toDate().toLocaleString() : JSON.stringify(d.createdAt)) : '알 수 없음'}</div>`;
-        contentEl.appendChild(c);
-      }catch(e){
-        contentEl.innerHTML = '<div class="card muted">내 정보 로드 실패</div>';
-      }
-    }
-
-    function renderMap(){ contentEl.innerHTML = '<div class="card"><div class="muted">맵</div><div>장소 소개, 탐사 기록, 댓글 등 표시 예정.</div></div>'; }
-    function renderDex(){ contentEl.innerHTML = '<div class="card"><div class="muted">도감</div><div>심연체 도감, 달성률, 댓글 등 표시 예정.</div></div>'; }
-    function renderEtc(){ contentEl.innerHTML = '<div class="card"><div class="muted">그 외</div><div>현재 시간, 스티커 등.</div></div>'; }
-
-    onAuthStateChanged(auth, async (user)=>{
-      currentUser = user;
-      if(user){
-        showLoggedInUI();
-        renderAuthArea(user);
-        initNav();
-        startClock();
-        subscribeSystem();
-        loadTab('main');
-        try{
-          const snap = await getDoc(doc(db,'users',user.uid));
-          miniProfile.textContent = snap.exists() ? snap.data().nickname || user.email : user.email || '사용자';
-        }catch(e){
-          miniProfile.textContent = user.email || '사용자';
-        }
-      } else {
-        currentUser = null;
-        renderAuthArea(null);
-        showLoggedOutUI();
-        miniProfile.textContent = '로그인 필요';
-        systemInfo.textContent = '불러오는 중...';
-      }
-    });
-
-    showLoggedOutUI();
-  </script>
 </body>
 </html>
