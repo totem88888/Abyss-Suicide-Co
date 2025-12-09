@@ -44,6 +44,11 @@ footer {
     cursor: pointer;
 }
 
+.nav button:hover { 
+    background: var(--accent);
+    color: var(--bg);
+}
+
 .nav button.active {
     background: var(--accent);
     color: var(--bg);

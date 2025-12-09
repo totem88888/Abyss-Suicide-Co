@@ -324,7 +324,7 @@ async function renderMain(){
         if (flowText && savedDate === todayKey) {
             // 이미 오늘 값이 있으면 그대로 사용
             document.getElementById('abyssFlow').textContent =
-                '오늘 심연은 ' + flowText + ' 습니다.';
+                '오늘 심연은 ' + flowText + '습니다.';
         } else if (cfgSnap.exists()) {
             const flows = cfgSnap.data().flows || [];
 
