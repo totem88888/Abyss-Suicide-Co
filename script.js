@@ -56,6 +56,8 @@ const signupBth = document.getElementById('signup-bth');
 const gotoLoginBth = document.getElementById('goto-login-bth');
 const signupBoxMsg = document.getElementById('signup-box-msg');
 
+let currentUser = null;
+
 function initNav() {
     navEl.innerHTML = '';
     TABS.forEach( tab => {
@@ -443,6 +445,11 @@ async function renderMain(){
 //     }
 // }
 
+async function renderStaff(){ contentEl.innerHTML = '<div class="card">직원 탭</div>'; }
+async function renderMe(){ contentEl.innerHTML = '<div class="card">내 상태 탭</div>'; }
+function renderMap(){ contentEl.innerHTML = '<div class="card">맵 탭</div>'; }
+function renderDex(){ contentEl.innerHTML = '<div class="card">도감 탭</div>'; }
+
 onAuthStateChanged(auth, async (user)=>{
     currentUser = user;
     if(user){
@@ -461,10 +468,10 @@ onAuthStateChanged(auth, async (user)=>{
     } else {
     currentUser = null;
     renderAuthArea(null);
-    showLoggedOutUI();
+    showLogOutUI();;
     miniProfile.textContent = '로그인 필요';
     systemInfo.textContent = '불러오는 중...';
     }
 });
 
-showLoggedOutUI();
+showLogOutUI();
