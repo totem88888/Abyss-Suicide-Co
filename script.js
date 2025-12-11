@@ -447,47 +447,135 @@ async function renderMain(){
 }
 
 async function renderStaff() {
-    const content = document.getElementById("content");
-    if (!content) return; // 요소 없으면 함수 종료
-
-    contentEl.innerHTML = `
+  contentEl.innerHTML = `
     <div class="card">
       <div class="muted">직원 목록</div>
-      <div id="staffArea">불러오는 중...</div>
+      <div id="staffList" class="staff-grid"></div>
     </div>
   `;
 
-  const staffArea = document.getElementById("staffArea");
+  const listEl = document.getElementById("staffList");
+  const snap = await getDocs(collection(db, "staff"));
+  listEl.innerHTML = "";
 
-  try {
-    const q = await getDocs(collection(db, "staff"));
-    staffArea.innerHTML = "";
+  snap.forEach(docSnap => {
+    const f = docSnap.data();
 
-    q.forEach(docSnap => {
-      const f = docSnap.data();
+    const item = document.createElement("div");
+    item.className = "staff-thumb";
+    item.onclick = () => renderStaffDetail(docSnap.id, f);
 
-      const box = document.createElement("div");
-      box.className = "staff-item";
+    // 3:4 비율 유지된 썸네일
+    item.innerHTML = `
+      <div class="thumb-img"
+        style="
+          background-image:url('${f.image || ''}');
+          aspect-ratio: 3 / 4;
+          background-size: cover;
+          background-position: center;
+        ">
+      </div>
+      <div class="thumb-name">${f.name}</div>
+    `;
 
-      const avatar = document.createElement("div");
-      avatar.className = "avatar";
-      avatar.style.backgroundImage = f.image ? `url(${f.image})` : "";
-      avatar.style.backgroundColor = f.image ? "transparent" : "#444";
+    listEl.appendChild(item);
+  });
+}
 
-      const name = document.createElement("div");
-      name.style.marginTop = "8px";
-      name.textContent = f.name || "이름 없음";
+function renderStaffDetail(docId, data) {
+  contentEl.innerHTML = `
+    <div class="card staff-detail">
 
-      box.onclick = () => openProfileModal(docSnap.id, f);
+      <div class="staff-img-wrap">
+        <img id="detailImg" src="${data.image || ''}" class="staff-big-img">
+      </div>
 
-      box.appendChild(avatar);
-      box.appendChild(name);
-      staffArea.appendChild(box);
-    });
+      <div class="staff-info">
+        <label>이름</label>
+        <input id="editName" value="${data.name || ''}">
 
-  } catch (e) {
-    staffArea.innerHTML = '<div class="muted">직원 불러오기 실패</div>';
-  }
+        <label>상태</label>
+        <input id="editStatus" value="${data.status || ''}">
+
+        <label>이미지 URL</label>
+        <input id="editImage" value="${data.image || ''}">
+
+        <label>설명</label>
+        <textarea id="editDesc">${data.desc || ''}</textarea>
+
+        <button id="saveStaff" class="btn">저장</button>
+      </div>
+
+    </div>
+
+    <div class="card">
+      <div class="muted">스탯 / 방사형 그래프</div>
+      <canvas id="statRadar" width="400" height="300"></canvas>
+    </div>
+  `;
+
+  // 이미지 실시간 미리보기
+  document.getElementById("editImage").addEventListener("input", e => {
+    document.getElementById("detailImg").src = e.target.value;
+  });
+
+  // 저장 버튼
+  document.getElementById("saveStaff").onclick = () =>
+    updateStaff(docId, data);
+
+  // 그래프 렌더링
+  drawRadarChart(data.stats || {
+    combat: 40, mental: 30, dex: 50, social: 20, research: 60
+  });
+}
+
+async function updateStaff(docId, prevData) {
+  const send = {
+    name: document.getElementById("editName").value,
+    status: document.getElementById("editStatus").value,
+    image: document.getElementById("editImage").value,
+    desc: document.getElementById("editDesc").value,
+    updatedAt: serverTimestamp()
+  };
+
+  await updateDoc(doc(db, "staff", docId), send);
+
+  // 갱신된 데이터로 다시 로드
+  renderStaffDetail(docId, { ...prevData, ...send });
+  renderStaff();  // 목록 새로고침
+}
+
+let radarObj = null;
+
+function drawRadarChart(stats) {
+  const ctx = document.getElementById("statRadar").getContext("2d");
+
+  if (radarObj) radarObj.destroy();
+
+  radarObj = new Chart(ctx, {
+    type: 'radar',
+    data: {
+      labels: ['전투', '정신', '민첩', '사회성', '연구'],
+      datasets: [{
+        data: [
+          stats.combat,
+          stats.mental,
+          stats.dex,
+          stats.social,
+          stats.research
+        ]
+      }]
+    },
+    options: {
+      scales: {
+        r: {
+          min: 0,
+          max: 100,
+          ticks: { stepSize: 20 }
+        }
+      }
+    }
+  });
 }
 
 function openProfileModal(docId, data) {
@@ -511,25 +599,16 @@ function openProfileModal(docId, data) {
   `;
 
   profileModal.showModal();
-
   document.getElementById("closeProfile").onclick = () => profileModal.close();
 
+  // 여기서만 editBtn 만들기
   const editArea = document.getElementById("editArea");
-
   const editBtn = document.createElement("button");
   editBtn.textContent = "편집";
   editBtn.onclick = () => openEditModal(docId, data);
 
   editArea.appendChild(editBtn);
 }
-
-const editBtn = document.createElement("button");
-editBtn.textContent = "수정";
-editBtn.className = "edit-btn";
-editBtn.onclick = () => {
-  profileModal.close();
-  openEditModal(docId, data);
-};
 
 function openEditModal(docId, data) {
   editModal.innerHTML = `
@@ -569,7 +648,7 @@ function openEditModal(docId, data) {
       desc: document.getElementById("editDesc").value
     });
 
-    renderStaff(); // 목록 갱신
+    renderStaff();
   };
 }
 

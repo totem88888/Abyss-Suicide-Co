@@ -193,6 +193,49 @@ input[type=text], input[type=email], input[type=password] {
     cursor: pointer;
     margin-bottom: 10px;
 }
+
 .back-btn:hover {
     color: #fff;
+}
+
+.staff-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 12px;
+}
+
+.staff-thumb {
+    cursor: pointer;
+    text-align: center;
+}
+
+.thumb-img {
+    width: 100%;
+    border-radius: 6px;
+    background-color: #333;
+}
+
+.staff-detail {
+    display: flex;
+    gap: 20px;
+}
+
+.staff-img-wrap {
+    width: 600px;
+    height: 800px;
+    overflow: hidden;
+    flex-shrink: 0;
+}
+
+.staff-big-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.staff-info {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
 }
