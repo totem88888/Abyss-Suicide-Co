@@ -489,7 +489,7 @@ async function renderStaff() {
 }
 
 function openProfileModal(docId, data) {
-  profileModal.innerHTML = `
+  openProfileModal.innerHTML = `
     <div class="modal-content">
 
       <button id="closeProfile" class="back-btn">← 돌아가기</button>
@@ -508,9 +508,17 @@ function openProfileModal(docId, data) {
     </div>
   `;
 
-  profileModal.showModal();
+  openProfileModal.showModal();
 
-  document.getElementById("closeProfile").onclick = () => profileModal.close();
+  document.getElementById("closeProfile").onclick = () => openProfileModal.close();
+
+  const editArea = document.getElementById("editArea");
+
+  const editBtn = document.createElement("button");
+  editBtn.textContent = "편집";
+  editBtn.onclick = () => openEditModal(docId, data);
+
+  editArea.appendChild(editBtn);
 }
 
 const editBtn = document.createElement("button");
@@ -520,8 +528,6 @@ editBtn.onclick = () => {
   openProfileModal.close();
   openEditModal(docId, data);
 };
-document.getElementById("editArea").appendChild(editBtn);
-
 
 function openEditModal(docId, data) {
   editModal.innerHTML = `
