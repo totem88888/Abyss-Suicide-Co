@@ -491,53 +491,6 @@ async function renderStaff() {
   });
 }
 
-function renderStaffDetail(docId, data) {
-  contentEl.innerHTML = `
-    <div class="card staff-detail">
-
-      <div class="staff-img-wrap">
-        <img id="detailImg" src="${data.image || ''}" class="staff-big-img">
-      </div>
-
-      <div class="staff-info">
-        <label>이름</label>
-        <input id="editName" value="${data.name || ''}">
-
-        <label>상태</label>
-        <input id="editStatus" value="${data.status || ''}">
-
-        <label>이미지 URL</label>
-        <input id="editImage" value="${data.image || ''}">
-
-        <label>설명</label>
-        <textarea id="editDesc">${data.desc || ''}</textarea>
-
-        <button id="saveStaff" class="btn">저장</button>
-      </div>
-
-    </div>
-
-    <div class="card">
-      <div class="muted">스탯 / 방사형 그래프</div>
-      <canvas id="statRadar" width="400" height="300"></canvas>
-    </div>
-  `;
-
-  // 이미지 실시간 미리보기
-  document.getElementById("editImage").addEventListener("input", e => {
-    document.getElementById("detailImg").src = e.target.value;
-  });
-
-  // 저장 버튼
-  document.getElementById("saveStaff").onclick = () =>
-    updateStaff(docId, data);
-
-  // 그래프 렌더링
-  drawRadarChart(data.stats || {
-    combat: 40, mental: 30, dex: 50, social: 20, research: 60
-  });
-}
-
 async function updateStaff(docId, prevData) {
   const send = {
     name: document.getElementById("editName").value,
@@ -556,18 +509,36 @@ async function updateStaff(docId, prevData) {
 
 let radarObj = null;
 
-function drawStatChart(data) {
-  const ctx = document.getElementById("statChart");
+function drawStatChart(stats = { str:1, vit:1, agi:1, wil:1 }) {
+  const ctx = document.getElementById("statRadar");
+  if (!ctx) return;
+
+  // 1 ~ 5 사이로 고정
+  const clamp = v => Math.max(1, Math.min(5, Number(v)));
 
   new Chart(ctx, {
     type: 'radar',
     data: {
       labels: ["근력", "건강", "민첩", "정신력"],
       datasets: [{
-        data: [data.str || 0, data.vit || 0, data.agi || 0, data.wil || 0]
+        data: [
+          clamp(stats.str),
+          clamp(stats.vit),
+          clamp(stats.agi),
+          clamp(stats.wil)
+        ]
       }]
     },
-    options: { responsive: false }
+    options: {
+      responsive: false,
+      scales: {
+        r: {
+          min: 1,
+          max: 5,
+          ticks: { stepSize: 1 }
+        }
+      }
+    }
   });
 }
 
@@ -677,15 +648,14 @@ function openEditModal(docId, data) {
 
   document.getElementById("saveStaff").onclick = async () => {
 
-    // 파일 업로드 존재하면 변환
     let finalImg = document.getElementById("editImage").value;
     const file = document.getElementById("editImageFile").files[0];
 
     if (file) {
-      finalImg = await uploadStaffImage(file, docId);  // 아래에 함수 추가해줌
+      finalImg = await uploadStaffImage(file, docId);
     }
 
-    await updateDoc(doc(db, "staff", docId), {
+    const newData = {
       name: document.getElementById("editName").value,
       gender: document.getElementById("editGender").value,
       age: document.getElementById("editAge").value,
@@ -700,29 +670,23 @@ function openEditModal(docId, data) {
       wil: Number(document.getElementById("editWil").value),
 
       updatedAt: serverTimestamp()
-    });
+    };
+
+    await updateDoc(doc(db, "staff", docId), newData);
 
     editModal.close();
 
-    openProfileModal(docId, {
-      ...data,
-      name: document.getElementById("editName").value,
-      gender: document.getElementById("editGender").value,
-      age: document.getElementById("editAge").value,
-      body: document.getElementById("editBody").value,
-      nation: document.getElementById("editNation").value,
-      note: document.getElementById("editNote").value,
-      image: finalImg,
+    const merged = { ...data, ...newData };
 
-      str: Number(document.getElementById("editStr").value),
-      vit: Number(document.getElementById("editVit").value),
-      agi: Number(document.getElementById("editAgi").value),
-      wil: Number(document.getElementById("editWil").value)
-    });
+    openProfileModal(docId, merged);
 
-    renderStaff();
+    setTimeout(() => renderStaff(), 20);
   };
 }
+
+card.addEventListener('click', () => {
+    openProfileModal(doc.data(), doc.id);
+});
 
 async function renderMe(){ contentEl.innerHTML = '<div class="card">내 상태 탭</div>'; }
 function renderMap(){ contentEl.innerHTML = '<div class="card">맵 탭</div>'; }
