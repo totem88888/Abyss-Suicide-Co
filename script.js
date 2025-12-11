@@ -527,10 +527,11 @@ function drawStatChart(stats = { str:1, vit:1, agi:1, wil:1 }) {
   const ctx = document.getElementById("statRadar");
   if (!ctx) return;
 
-  // 1 ~ 5 사이로 고정
+  if (radarObj) radarObj.destroy();
+
   const clamp = v => Math.max(1, Math.min(5, Number(v)));
 
-  new Chart(ctx, {
+  radarObj = new Chart(ctx, {
     type: 'radar',
     data: {
       labels: ["근력", "건강", "민첩", "정신력"],
@@ -540,11 +541,12 @@ function drawStatChart(stats = { str:1, vit:1, agi:1, wil:1 }) {
           clamp(stats.vit),
           clamp(stats.agi),
           clamp(stats.wil)
-        ]
+        ],
+        backgroundColor: "rgba(0, 0, 0, 0.1)",
+        borderColor: "#000"
       }]
     },
     options: {
-      responsive: false,
       scales: {
         r: {
           min: 1,
@@ -556,40 +558,41 @@ function drawStatChart(stats = { str:1, vit:1, agi:1, wil:1 }) {
   });
 }
 
+
 function openProfileModal(docId, data) {
   profileModal.innerHTML = `
-    <div class="modal-content">
+    <div class="modal-content profile-wide">
 
       <button id="closeProfile" class="back-btn">← 돌아가기</button>
 
-      <h2>${data.name}</h2>
+      <div class="profile-top">
 
-      <div class="avatar big"
-           style="width:180px; height:180px; margin:10px auto;
-                  background-image:url('${data.image || ""}')">
+        <div class="profile-img-wrap">
+          <img class="profile-img" src="${data.image || ""}" alt="">
+        </div>
+
+        <div class="profile-info">
+          <p><span class="label">이름</span> ${data.name || ""}</p>
+          <p><span class="label">성별</span> ${data.gender || ""}</p>
+          <p><span class="label">나이</span> ${data.age || ""}</p>
+          <p><span class="label">키·체중</span> ${data.body || ""}</p>
+          <p><span class="label">국적</span> ${data.nation || ""}</p>
+          <hr>
+          <p><span class="label">비고</span></p>
+          <p style="white-space:pre-line">${data.note || ""}</p>
+        </div>
+
       </div>
 
-      <div class="profile-block">
-        <p><span class="label">이름</span> ${data.name || ""}</p>
-        <p><span class="label">성별</span> ${data.gender || ""}</p>
-        <p><span class="label">나이</span> ${data.age || ""}</p>
-        <p><span class="label">키·체중</span> ${data.body || ""}</p>
-        <p><span class="label">국적</span> ${data.nation || ""}</p>
-
-        <hr>
-
-        <p><span class="label">비고</span></p>
-        <p style="white-space:pre-line">${data.note || ""}</p>
-      </div>
-
-      <div class="stat-area">
+      <div class="stat-area-fixed">
         <div class="stat-left">
           <p>근력: ${data.str || 1}</p>
           <p>건강: ${data.vit || 1}</p>
           <p>민첩: ${data.agi || 1}</p>
           <p>정신력: ${data.wil || 1}</p>
         </div>
-        <canvas id="statChart" class="stat-right" width="250" height="250"></canvas>
+
+        <canvas id="statRadar" width="260" height="260"></canvas>
       </div>
 
       <div id="editArea"></div>
@@ -601,16 +604,14 @@ function openProfileModal(docId, data) {
 
   document.getElementById("closeProfile").onclick = () => profileModal.close();
 
-  const editArea = document.getElementById("editArea");
   const editBtn = document.createElement("button");
-
   editBtn.textContent = "편집";
   editBtn.onclick = () => openEditModal(docId, data);
-
-  editArea.appendChild(editBtn);
+  document.getElementById("editArea").appendChild(editBtn);
 
   drawStatChart(data);
 }
+
 
 function openEditModal(docId, data) {
   editModal.innerHTML = `

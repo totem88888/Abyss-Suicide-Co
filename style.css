@@ -277,3 +277,40 @@ input[type=text], input[type=email], input[type=password] {
 .thumb-img:hover img.thumb-photo {
   transform: scale(1.15);
 }
+
+/* 모달 가로폭 넓게 */
+.profile-wide {
+  max-width: 900px;
+}
+
+/* 상단 사진 + 정보 가로 배치 */
+.profile-top {
+  display: flex;
+  gap: 20px;
+}
+
+/* 이미지 3:4 유지 */
+.profile-img-wrap {
+  width: 240px;
+  aspect-ratio: 3 / 4;
+  overflow: hidden;
+  border-radius: 10px;
+}
+.profile-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* 정보 영역 */
+.profile-info {
+  flex: 1;
+}
+
+/* 스탯 + 그래프 아래쪽 배치 */
+.stat-area-fixed {
+  margin-top: 25px;
+  display: flex;
+  gap: 30px;
+  align-items: center;
+}
