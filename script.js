@@ -486,7 +486,7 @@ async function renderStaff() {
 
     const item = document.createElement("div");
     item.className = "staff-thumb";
-    item.onclick = () => renderStaffDetail(docSnap.id, f);
+    item.onclick = () => openProfileModal(docSnap.id, f);
 
     // 3:4 비율 유지된 썸네일
     item.innerHTML = `
