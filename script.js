@@ -17,13 +17,6 @@ import {
 
 import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.6.0/firebase-storage.js";
 
-const storage = getStorage();
-
-async function uploadStaffImage(file, uid) {
-    const storageRef = ref(storage, `staff/${uid}_${Date.now()}.png`);
-    await uploadBytes(storageRef, file);
-    return await getDownloadURL(storageRef);
-}
 const firebaseConfig = {
     apiKey: "AIzaSyDGmwk9FtwnjUKcH4T6alvMWVQqbhVrqfI",
     authDomain: "abyss-suicide-co.firebaseapp.com",
@@ -44,6 +37,13 @@ const TABS = [
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+const storage = getStorage(app);
+
+async function uploadStaffImage(file, uid) {
+    const storageRef = ref(storage, `staff/${uid}_${Date.now()}.png`);
+    await uploadBytes(storageRef, file);
+    return await getDownloadURL(storageRef);
+}
 
 const header = document.getElementById('header');
 const mainApp = document.getElementById('mainApp');
