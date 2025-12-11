@@ -445,7 +445,10 @@ async function renderMain(){
 }
 
 async function renderStaff() {
-  contentEl.innerHTML = `
+    const content = document.getElementById("content");
+    if (!content) return; // 요소 없으면 함수 종료
+
+    contentEl.innerHTML = `
     <div class="card">
       <div class="muted">직원 목록</div>
       <div id="staffArea">불러오는 중...</div>
