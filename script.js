@@ -22,7 +22,7 @@ const firebaseConfig = {
     authDomain: "abyss-suicide-co.firebaseapp.com",
     projectId: "abyss-suicide-co",
     storageBucket: "abyss-suicide-co.appspot.com",
-     messagingSenderId: "711710259422",
+    messagingSenderId: "711710259422",
     appId: "1:711710259422:web:3c5ba7c93edb3d6d6baa4f"
 };
 
@@ -38,6 +38,14 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
+
+async function isAdminUser() {
+    const user = auth.currentUser;
+    if (!user) return false;
+
+    // 네 관리 UID로 교체해
+    return user.uid === "관리자_UID";
+}
 
 async function uploadStaffImage(file, uid) {
     const storageRef = ref(storage, `staff/${uid}_${Date.now()}.png`);
@@ -517,7 +525,7 @@ async function updateStaff(docId, prevData) {
   await updateDoc(doc(db, "staff", docId), send);
 
   // 갱신된 데이터로 다시 로드
-  renderStaffDetail(docId, { ...prevData, ...send });
+  openProfileModal(docId, { ...prevData, ...send });
   renderStaff();  // 목록 새로고침
 }
 
@@ -529,7 +537,7 @@ function drawStatChart(stats = { str:1, vit:1, agi:1, wil:1 }) {
 
   if (radarObj) radarObj.destroy();
 
-  const clamp = v => Math.max(1, Math.min(5, Number(v)));
+  const clamp = v => Math.max(1, Math.min(5, Number(v))); // 최소 1
 
   radarObj = new Chart(ctx, {
     type: 'radar',
@@ -549,15 +557,17 @@ function drawStatChart(stats = { str:1, vit:1, agi:1, wil:1 }) {
     options: {
       scales: {
         r: {
-          min: 1,
-          max: 5,
-          ticks: { stepSize: 1 }
+          min: 1,  // 레이더 최소값
+          max: 5,  // 레이더 최대값
+          ticks: {
+            stepSize: 1,
+            callback: v => v // 보조선에 숫자 표시
+          }
         }
       }
     }
   });
 }
-
 
 function openProfileModal(docId, data) {
   profileModal.innerHTML = `
@@ -699,8 +709,473 @@ function openEditModal(docId, data) {
   };
 }
 
-async function renderMe(){ contentEl.innerHTML = '<div class="card">내 상태 탭</div>'; }
-function renderMap(){ contentEl.innerHTML = '<div class="card">맵 탭</div>'; }
+// ---------- MAP 기능 (추가) ----------
+
+// helper: check if current user is admin by reading users/{uid}.role
+async function isAdminUser() {
+  if (!currentUser) return false;
+  try {
+    const uDoc = await getDoc(doc(db, 'users', currentUser.uid));
+    return uDoc.exists() && (uDoc.data().role === 'admin');
+  } catch(e) {
+    console.error('isAdminUser err', e);
+    return false;
+  }
+}
+
+// upload map image to storage
+async function uploadMapImage(file, mapId) {
+  const storageRef = ref(storage, `maps/${mapId || 'tmp'}_${Date.now()}.png`);
+  await uploadBytes(storageRef, file);
+  return await getDownloadURL(storageRef);
+}
+
+// format timestamp to readable string
+function fmtTime(ts) {
+  if (!ts) return '';
+  try {
+    // Firestore Timestamp -> toDate
+    const d = ts.toDate ? ts.toDate() : new Date(ts);
+    return d.toLocaleString();
+  } catch(e) {
+    return String(ts);
+  }
+}
+
+// render single map card
+function renderMapCard(mapDoc) {
+  const mapId = mapDoc.id;
+  const data = mapDoc.data ? mapDoc.data() : mapDoc; // accept either DocumentSnapshot or raw object
+  const img = data.image || '';
+  const name = data.name || '이름 없음';
+  const desc = data.description || '';
+  const danger = data.danger || 1; // 1..5
+  const types = Array.isArray(data.types) ? data.types.join(', ') : (data.types || '');
+
+  // card HTML
+  const el = document.createElement('div');
+  el.className = 'map-card card';
+
+  el.innerHTML = `
+    <div class="map-card-inner" data-id="${mapId}">
+      <div class="map-media">
+        <img class="map-img" src="${img}" alt="${name}">
+      </div>
+
+      <div class="map-main">
+        <div class="map-head">
+          <h3 class="map-name">${name}</h3>
+          <div class="map-meta">
+            <div class="map-danger">
+            ${'★'.repeat(danger)}${'☆'.repeat(5 - danger)}
+            </div>
+            <div class="map-types">출현: ${types}</div>
+          </div>
+        </div>
+
+        <div class="map-desc">${desc}</div>
+
+        <div class="map-actions">
+          <button class="btn map-open-comments">댓글 보기</button>
+          <button class="btn map-add-comment">댓글 작성</button>
+          <button class="btn link map-edit-btn" style="display:none">편집</button>
+        </div>
+
+        <div class="map-comments-preview">
+          <div class="comments-count muted">댓글 0개</div>
+          <div class="comments-list"></div>
+          <div class="comments-more" style="display:none"><button class="link map-more-comments">더보기</button></div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // attach events
+  el.querySelector('.map-open-comments').addEventListener('click', () => openCommentsPopup(mapId));
+  el.querySelector('.map-add-comment').addEventListener('click', () => focusCommentInput(mapId));
+  el.querySelector('.map-more-comments').addEventListener('click', () => openCommentsPopup(mapId));
+  el.querySelector('.map-edit-btn').addEventListener('click', async () => openMapEditModal(mapId));
+
+  // show edit if admin
+  (async () => {
+    const admin = await isAdminUser();
+    if (admin) {
+      const btn = el.querySelector('.map-edit-btn');
+      if (btn) btn.style.display = 'inline-block';
+    }
+  })();
+
+  // load preview comments (up to 3)
+  (async () => {
+    try {
+      const cSnap = await getDocs(collection(db, 'maps', mapId, 'comments'));
+      const arr = [];
+      cSnap.forEach(d => arr.push({ id: d.id, ...d.data() }));
+      // sort desc by createdAt
+      arr.sort((a,b) => {
+        const at = a.createdAt && a.createdAt.seconds ? a.createdAt.seconds : 0;
+        const bt = b.createdAt && b.createdAt.seconds ? b.createdAt.seconds : 0;
+        return bt - at;
+      });
+
+      const preview = arr.slice(0, 3);
+      const commentsList = el.querySelector('.comments-list');
+      const commentsCount = el.querySelector('.comments-count');
+      commentsCount.textContent = `댓글 ${arr.length}개`;
+
+      if (preview.length === 0) {
+        commentsList.innerHTML = `<div class="muted">댓글이 없습니다.</div>`;
+      } else {
+        commentsList.innerHTML = '';
+        preview.forEach(c => {
+          const item = document.createElement('div');
+          item.className = 'comment-item';
+          item.innerHTML = `
+            <div class="cm-left"><img class="cm-avatar" src="${c.photo||''}" alt=""></div>
+            <div class="cm-right">
+                <div class="cm-head">
+                <strong class="cm-name">${c.name||'익명'}</strong> 
+                <span class="muted cm-time">${fmtTime(c.createdAt)}</span>
+                </div>
+                <div class="cm-body">${c.text || ''}</div>
+                <div class="cm-admin" style="margin-top:6px; display:none; gap:8px;">
+                <button class="link cm-edit">수정</button>
+                <button class="link cm-del">삭제</button>
+                </div>
+            </div>
+            `;
+
+        (async () => {
+            const admin = await isAdminUser();
+            if (admin) {
+                const btnWrap = item.querySelector('.cm-admin');
+                btnWrap.style.display = 'flex';
+
+                // 수정
+                btnWrap.querySelector('.cm-edit').onclick = async () => {
+                const newText = prompt('댓글 내용을 수정하시오.', c.text || '');
+                if (!newText) return;
+                await updateDoc(doc(db, 'maps', mapId, 'comments', c.id), {
+                    text: newText,
+                    editedAt: serverTimestamp()
+                });
+                renderMap();
+                };
+
+                // 삭제
+                btnWrap.querySelector('.cm-del').onclick = async () => {
+                const ok = confirm('정말 삭제하겠나.');
+                if (!ok) return;
+                await deleteDoc(doc(db, 'maps', mapId, 'comments', c.id));
+                renderMap();
+                };
+            }
+        })();
+        commentsList.appendChild(item);
+        });
+      }
+
+    const moreWrap = el.querySelector('.comments-more');
+    if (arr.length > 3 && moreWrap) moreWrap.style.display = 'block';
+    } catch(e) {
+    console.error('load comments preview err', e);
+    }
+  })();
+
+  return el;
+}
+
+// focus an inline quick comment input (will open a small prompt)
+function focusCommentInput(mapId) {
+  // simple prompt for now (you can replace with inline input UI)
+  if (!currentUser) {
+    alert('로그인이 필요합니다.');
+    return;
+  }
+  const text = prompt('댓글을 작성하시오 (최대 500자):');
+  if (!text || !text.trim()) return;
+  postMapComment(mapId, text.trim());
+}
+
+// post comment
+async function postMapComment(mapId, text) {
+  try {
+    const userSnap = await getDoc(doc(db, 'users', currentUser.uid));
+    const me = userSnap.exists() ? userSnap.data() : {};
+    const newRef = doc(collection(db, 'maps', mapId, 'comments'));
+    await setDoc(newRef, {
+      uid: currentUser.uid,
+      name: me.nickname || me.id || '사용자',
+      photo: me.colorHex ? '' : (me.photo || ''), // photo optional
+      text,
+      createdAt: serverTimestamp()
+    });
+    // refresh map area
+    renderMap();
+  } catch(e) {
+    console.error('postMapComment err', e);
+    alert('댓글 등록 실패');
+  }
+}
+
+// open full comments popup (scrollable)
+function openCommentsPopup(mapId) {
+  // create popup
+  const popup = document.createElement('div');
+  popup.className = 'fullscreen comments-popup';
+  popup.innerHTML = `
+    <div class="card" style="max-width:800px; width:90%; max-height:80vh; overflow:hidden; display:flex; flex-direction:column;">
+      <div style="padding:12px; display:flex; justify-content:space-between; align-items:center;">
+        <div class="muted">댓글</div>
+        <button class="btn close-comments">닫기</button>
+      </div>
+      <div class="comments-scroll" style="overflow:auto; padding:12px; flex:1; border-top:1px solid rgba(255,255,255,0.02);">
+        <div class="comments-full-list"></div>
+      </div>
+      <div style="padding:12px; border-top:1px solid rgba(255,255,255,0.02); display:flex; gap:8px;">
+        <input id="commentsInput" placeholder="댓글을 입력하세요" style="flex:1; padding:8px; border-radius:6px; background:transparent; border:1px solid rgba(255,255,255,0.04); color:inherit;">
+        <button class="btn post-comment">등록</button>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(popup);
+
+  const closeBtn = popup.querySelector('.close-comments');
+  const listEl = popup.querySelector('.comments-full-list');
+  const postBtn = popup.querySelector('.post-comment');
+  const inputEl = popup.querySelector('#commentsInput');
+
+  closeBtn.onclick = () => popup.remove();
+  postBtn.onclick = async () => {
+    if (!currentUser) { alert('로그인이 필요합니다.'); return; }
+    const v = inputEl.value.trim();
+    if (!v) return;
+    await postMapComment(mapId, v);
+    popup.remove();
+    openCommentsPopup(mapId); // reopen to refresh (simple)
+  };
+
+  // load all comments then render
+  (async () => {
+    try {
+      const cSnap = await getDocs(collection(db, 'maps', mapId, 'comments'));
+      const arr = [];
+      cSnap.forEach(d => arr.push({ id: d.id, ...d.data() }));
+      arr.sort((a,b) => {
+        const at = a.createdAt && a.createdAt.seconds ? a.createdAt.seconds : 0;
+        const bt = b.createdAt && b.createdAt.seconds ? b.createdAt.seconds : 0;
+        return bt - at;
+      });
+
+      if (arr.length === 0) {
+        listEl.innerHTML = `<div class="muted">댓글이 없습니다.</div>`;
+      } else {
+        listEl.innerHTML = '';
+        arr.forEach(c => {
+          const item = document.createElement('div');
+          item.className = 'comment-item';
+          item.style.marginBottom = '12px';
+          item.innerHTML = `
+            <div style="display:flex; gap:10px;">
+                <div style="width:44px; height:44px; border-radius:50%; overflow:hidden; background:#333;">
+                <img src="${c.photo||''}" style="width:100%; height:100%; object-fit:cover;">
+                </div>
+                <div style="flex:1;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <strong>${c.name||'익명'}</strong>
+                    <span class="muted">${fmtTime(c.createdAt)}</span>
+                </div>
+                <div class="cm-body" style="margin-top:6px;">${c.text||''}</div>
+
+                <div class="cm-admin" style="margin-top:6px; display:none; gap:10px;">
+                    <button class="link cm-edit">수정</button>
+                    <button class="link cm-del">삭제</button>
+                </div>
+                </div>
+            </div>
+            `;
+
+        (async () => {
+            const admin = await isAdminUser();
+            if (admin) {
+                const wrap = item.querySelector('.cm-admin');
+                wrap.style.display = 'flex';
+
+                wrap.querySelector('.cm-edit').onclick = async () => {
+                const newText = prompt('댓글 내용을 수정하시오.', c.text||'');
+                if (!newText) return;
+                await updateDoc(doc(db, 'maps', mapId, 'comments', c.id), {
+                    text: newText,
+                    editedAt: serverTimestamp()
+                });
+                popup.remove();
+                openCommentsPopup(mapId);
+                };
+
+                wrap.querySelector('.cm-del').onclick = async () => {
+                if (!confirm('삭제하겠나.')) return;
+                await deleteDoc(doc(db, 'maps', mapId, 'comments', c.id));
+                popup.remove();
+                openCommentsPopup(mapId);
+                };
+            }
+        })();
+
+        listEl.appendChild(item);
+        });
+      }
+    } catch(e) {
+      console.error('load all comments err', e);
+      listEl.innerHTML = `<div class="muted">댓글 로드 실패</div>`;
+    }
+  })();
+}
+
+// open map edit modal (admin)
+function openMapEditModal(mapId) {
+  (async () => {
+    const isAdmin = await isAdminUser();
+    if (!isAdmin) { alert('관리자 권한이 필요합니다.'); return; }
+
+    let data = {};
+    if (mapId) {
+      const snap = await getDoc(doc(db, 'maps', mapId));
+      if (snap.exists()) data = snap.data();
+    }
+
+    // build modal
+    const modal = document.createElement('div');
+    modal.className = 'fullscreen map-edit-popup';
+    modal.innerHTML = `
+      <div class="card" style="max-width:900px; width:95%; max-height:90vh; overflow:auto;">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div class="muted">${mapId ? '맵 수정' : '맵 추가'}</div>
+          <button class="btn close-edit">닫기</button>
+        </div>
+        <div style="padding:12px; display:grid; gap:10px;">
+          <label>이름</label>
+          <input id="mapName" value="${data.name||''}">
+          <label>설명</label>
+          <textarea id="mapDesc" rows="4">${data.description||''}</textarea>
+          <label>위험도 (1-5)</label>
+          <input id="mapDanger" type="number" min="1" max="5" value="${data.danger||1}">
+          <label>출현 유형 (쉼표로 구분)</label>
+          <input id="mapTypes" value="${(data.types||[]).join ? (data.types||[]).join(', ') : (data.types||'')}">
+          <label>이미지 업로드</label>
+          <input id="mapImageFile" type="file" accept="image/*">
+          <label>이미지 URL</label>
+          <input id="mapImageUrl" value="${data.image||''}">
+          <div style="display:flex; gap:8px;">
+            <button class="btn save-map">${mapId ? '저장' : '생성'}</button>
+            <button class="link cancel-map">취소</button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    modal.querySelector('.close-edit').onclick = () => modal.remove();
+    modal.querySelector('.cancel-map').onclick = () => modal.remove();
+
+    modal.querySelector('.save-map').onclick = async () => {
+      try {
+        const name = modal.querySelector('#mapName').value.trim();
+        const desc = modal.querySelector('#mapDesc').value.trim();
+        const danger = Number(modal.querySelector('#mapDanger').value) || 1;
+        const types = modal.querySelector('#mapTypes').value.split(',').map(s=>s.trim()).filter(Boolean);
+        let imageUrl = modal.querySelector('#mapImageUrl').value.trim();
+
+        const file = modal.querySelector('#mapImageFile').files[0];
+        let targetId = mapId;
+
+        if (!name) { alert('이름을 입력하세요'); return; }
+
+        if (!targetId) {
+          // new map: create doc id first
+          const newRef = doc(collection(db, 'maps'));
+          targetId = newRef.id;
+        }
+
+        if (file) {
+          imageUrl = await uploadMapImage(file, targetId);
+        }
+
+        const payload = {
+          name,
+          description: desc,
+          danger,
+          types,
+          image: imageUrl,
+          updatedAt: serverTimestamp()
+        };
+
+        await setDoc(doc(db, 'maps', targetId), { ...( (await getDoc(doc(db,'maps',targetId))).exists() ? (await getDoc(doc(db,'maps',targetId))).data() : {} ), ...payload }, { merge: true });
+
+        modal.remove();
+        renderMap();
+      } catch(e) {
+        console.error('save map err', e);
+        alert('저장 실패');
+      }
+    };
+  })();
+}
+
+// main renderMap: load maps from db and render cards
+async function renderMap() {
+  contentEl.innerHTML = `
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <div class="muted">맵 목록</div>
+        <div id="mapControls"></div>
+      </div>
+    </div>
+    <div id="mapsGrid" class="maps-grid"></div>
+  `;
+
+  // admin '새 맵 추가' 버튼
+  (async () => {
+    const controls = document.getElementById('mapControls');
+    const admin = await isAdminUser();
+    if (admin) {
+      const b = document.createElement('button');
+      b.className = 'btn';
+      b.textContent = '새 맵 추가';
+      b.onclick = () => openMapEditModal(null);
+      controls.appendChild(b);
+    }
+  })();
+
+  const grid = document.getElementById('mapsGrid');
+  grid.innerHTML = '';
+
+  try {
+    const snap = await getDocs(collection(db, 'maps'));
+    const arr = [];
+    snap.forEach(d => arr.push({ id: d.id, ...d.data() }));
+    // sort by createdAt if exists
+    arr.sort((a,b) => {
+      const at = a.createdAt && a.createdAt.seconds ? a.createdAt.seconds : 0;
+      const bt = b.createdAt && b.createdAt.seconds ? b.createdAt.seconds : 0;
+      return bt - at;
+    });
+
+    if (arr.length === 0) {
+      grid.innerHTML = `<div class="card muted">맵 데이터가 없습니다.</div>`;
+      return;
+    }
+
+    arr.forEach(m => {
+      const cardEl = renderMapCard({ id: m.id, data: () => m });
+      grid.appendChild(cardEl);
+    });
+  } catch(e) {
+    console.error('renderMap err', e);
+    contentEl.innerHTML += `<div class="card muted">데이터 로드 실패</div>`;
+  }
+}
+
 function renderDex(){ contentEl.innerHTML = '<div class="card">도감 탭</div>'; }
 
 onAuthStateChanged(auth, async (user)=>{

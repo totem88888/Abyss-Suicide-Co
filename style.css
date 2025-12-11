@@ -209,12 +209,6 @@ input[type=text], input[type=email], input[type=password] {
     text-align: center;
 }
 
-.thumb-img {
-    width: 100%;
-    border-radius: 6px;
-    background-color: #333;
-}
-
 .staff-detail {
     display: flex;
     gap: 20px;
@@ -264,6 +258,7 @@ input[type=text], input[type=email], input[type=password] {
   aspect-ratio: 3 / 4;
   overflow: hidden;
   border-radius: 6px;
+  background-color: #333;
   position: relative;
 }
 
@@ -314,3 +309,56 @@ input[type=text], input[type=email], input[type=password] {
   gap: 30px;
   align-items: center;
 }
+
+/* maps */
+.maps-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(560px, 1fr));
+  gap: 18px;
+  padding: 12px 0;
+}
+
+.map-card-inner {
+  display: flex;
+  gap: 18px;
+  align-items: flex-start;
+}
+
+.map-media {
+  width: 320px; /* 4:3-ish 이미지 크기 */
+  flex-shrink: 0;
+}
+.map-img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.03);
+}
+
+.map-main { flex: 1; }
+
+.map-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+.map-name { margin: 0; font-size: 18px; color: var(--accent); }
+.map-meta { text-align: right; color: var(--muted); font-size: 13px; }
+
+.map-desc { margin: 8px 0 12px 0; color: var(--muted); white-space:pre-line; }
+
+.map-actions { display:flex; gap:8px; margin-bottom:8px; }
+
+.map-comments-preview { margin-top:8px; border-top:1px solid rgba(255,255,255,0.02); padding-top:8px; }
+.comment-item { display:flex; gap:8px; margin-bottom:8px; align-items:flex-start; }
+.cm-avatar { width:36px; height:36px; border-radius:50%; object-fit:cover; background:#333; }
+.cm-left { width:44px; flex-shrink:0; }
+.cm-right { flex:1; }
+.cm-head { font-size:13px; color:var(--muted); display:flex; justify-content:space-between; align-items:center; }
+.cm-body { color:var(--muted); margin-top:4px; }
+
+/* comments popup specific */
+.comments-popup .card { padding: 0; }
+.comments-full-list { display:flex; flex-direction:column; gap:12px; }
