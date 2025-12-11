@@ -704,17 +704,56 @@ function openEditModal(docId, data) {
 // ---------- MAP 기능 (추가) ----------
 
 // helper: check if current user is admin by reading users/{uid}.role
-async function isAdminUser() {
-    const user = auth.currentUser;
-    if (!user) return false;
+// 브라우저 내 알림 메시지 출력
+function showMessage(msg, type='info') {
+  const el = document.createElement('div');
+  el.className = `in-browser-msg ${type}`;
+  el.textContent = msg;
+  Object.assign(el.style, {
+    position:'fixed', top:'20px', left:'50%', transform:'translateX(-50%)',
+    background:'#222', color:'#fff', padding:'10px 20px', borderRadius:'6px',
+    zIndex:9999, boxShadow:'0 2px 6px rgba(0,0,0,0.4)'
+  });
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 2500);
+}
 
-    try {
-        const uDoc = await getDoc(doc(db, 'users', user.uid));
-        return uDoc.exists() && uDoc.data().role === 'admin';
-    } catch(e) {
-        console.error('isAdminUser err', e);
-        return false;
-    }
+function showConfirm(msg) {
+  return new Promise(resolve => {
+    const confirmDiv = document.createElement('div');
+    confirmDiv.className = 'fullscreen confirm-popup';
+    confirmDiv.innerHTML = `
+      <div class="card" style="max-width:400px; width:90%; padding:20px; display:flex; flex-direction:column; gap:12px; text-align:center;">
+        <div>${msg}</div>
+        <div style="display:flex; justify-content:center; gap:12px;">
+          <button class="btn confirm-yes">확인</button>
+          <button class="btn confirm-no">취소</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(confirmDiv);
+    confirmDiv.querySelector('.confirm-yes').onclick = () => {
+      resolve(true);
+      confirmDiv.remove();
+    };
+    confirmDiv.querySelector('.confirm-no').onclick = () => {
+      resolve(false);
+      confirmDiv.remove();
+    };
+  });
+}
+
+// check if current user is admin
+async function isAdminUser() {
+  const user = auth.currentUser;
+  if (!user) return false;
+  try {
+    const uDoc = await getDoc(doc(db, 'users', user.uid));
+    return uDoc.exists() && uDoc.data().role === 'admin';
+  } catch(e) {
+    console.error('isAdminUser err', e);
+    return false;
+  }
 }
 
 // upload map image to storage
@@ -728,7 +767,6 @@ async function uploadMapImage(file, mapId) {
 function fmtTime(ts) {
   if (!ts) return '';
   try {
-    // Firestore Timestamp -> toDate
     const d = ts.toDate ? ts.toDate() : new Date(ts);
     return d.toLocaleString();
   } catch(e) {
@@ -739,61 +777,50 @@ function fmtTime(ts) {
 // render single map card
 function renderMapCard(mapDoc) {
   const mapId = mapDoc.id;
-  const data = mapDoc.data ? mapDoc.data() : mapDoc; // accept either DocumentSnapshot or raw object
+  const data = mapDoc.data ? mapDoc.data() : mapDoc;
   const img = data.image || '';
   const name = data.name || '이름 없음';
   const desc = data.description || '';
-  const danger = data.danger || 1; // 1..5
+  const danger = data.danger || 1;
   const types = Array.isArray(data.types) ? data.types.join(', ') : (data.types || '');
 
-  // card HTML
   const el = document.createElement('div');
   el.className = 'map-card card';
-
   el.innerHTML = `
     <div class="map-card-inner" data-id="${mapId}">
-      <div class="map-media">
-        <img class="map-img" src="${img}" alt="${name}">
-      </div>
-
+      <div class="map-media"><img class="map-img" src="${img}" alt="${name}"></div>
       <div class="map-main">
         <div class="map-head">
           <h3 class="map-name">${name}</h3>
           <div class="map-meta">
-            <div class="map-danger">
-            ${'★'.repeat(danger)}${'☆'.repeat(5 - danger)}
-            </div>
+            <div class="map-danger">${'★'.repeat(danger)}${'☆'.repeat(5 - danger)}</div>
             <div class="map-types">출현: ${types}</div>
           </div>
         </div>
-
         <div class="map-desc">${desc}</div>
-
         <div class="map-actions">
           <button class="btn map-open-comments">댓글 보기</button>
           <button class="btn map-add-comment">댓글 작성</button>
           <button class="btn link map-edit-btn" style="display:none">편집</button>
         </div>
-
         <div class="map-comments-preview">
           <div class="comments-count muted">댓글 0개</div>
           <div class="comments-list"></div>
-          <div class="comments-more" style="display:none"><button class="link map-more-comments">더보기</button></div>
+          <div class="comments-more" style="display:none">
+            <button class="link map-more-comments">더보기</button>
+          </div>
         </div>
       </div>
     </div>
   `;
 
-  // attach events
   el.querySelector('.map-open-comments').addEventListener('click', () => openCommentsPopup(mapId));
   el.querySelector('.map-add-comment').addEventListener('click', () => focusCommentInput(mapId));
   el.querySelector('.map-more-comments').addEventListener('click', () => openCommentsPopup(mapId));
   el.querySelector('.map-edit-btn').addEventListener('click', async () => openMapEditModal(mapId));
 
-  // show edit if admin
   (async () => {
-    const admin = await isAdminUser();
-    if (admin) {
+    if (await isAdminUser()) {
       const btn = el.querySelector('.map-edit-btn');
       if (btn) btn.style.display = 'inline-block';
     }
@@ -805,21 +832,14 @@ function renderMapCard(mapDoc) {
       const cSnap = await getDocs(collection(db, 'maps', mapId, 'comments'));
       const arr = [];
       cSnap.forEach(d => arr.push({ id: d.id, ...d.data() }));
-      // sort desc by createdAt
-      arr.sort((a,b) => {
-        const at = a.createdAt && a.createdAt.seconds ? a.createdAt.seconds : 0;
-        const bt = b.createdAt && b.createdAt.seconds ? b.createdAt.seconds : 0;
-        return bt - at;
-      });
-
+      arr.sort((a,b) => (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0));
       const preview = arr.slice(0, 3);
       const commentsList = el.querySelector('.comments-list');
       const commentsCount = el.querySelector('.comments-count');
       commentsCount.textContent = `댓글 ${arr.length}개`;
 
-      if (preview.length === 0) {
-        commentsList.innerHTML = `<div class="muted">댓글이 없습니다.</div>`;
-      } else {
+      if (!preview.length) commentsList.innerHTML = `<div class="muted">댓글이 없습니다.</div>`;
+      else {
         commentsList.innerHTML = '';
         preview.forEach(c => {
           const item = document.createElement('div');
@@ -827,67 +847,66 @@ function renderMapCard(mapDoc) {
           item.innerHTML = `
             <div class="cm-left"><img class="cm-avatar" src="${c.photo||''}" alt=""></div>
             <div class="cm-right">
-                <div class="cm-head">
+              <div class="cm-head">
                 <strong class="cm-name">${c.name||'익명'}</strong> 
                 <span class="muted cm-time">${fmtTime(c.createdAt)}</span>
-                </div>
-                <div class="cm-body">${c.text || ''}</div>
-                <div class="cm-admin" style="margin-top:6px; display:none; gap:8px;">
+              </div>
+              <div class="cm-body">${c.text || ''}</div>
+              <div class="cm-admin" style="margin-top:6px; display:none; gap:8px;">
                 <button class="link cm-edit">수정</button>
                 <button class="link cm-del">삭제</button>
-                </div>
+              </div>
             </div>
-            `;
+          `;
 
-        (async () => {
-            const admin = await isAdminUser();
-            if (admin) {
-                const btnWrap = item.querySelector('.cm-admin');
-                btnWrap.style.display = 'flex';
-
-                // 수정
-                btnWrap.querySelector('.cm-edit').onclick = async () => {
-                const newText = prompt('댓글 내용을 수정하시오.', c.text || '');
+          (async () => {
+            if (await isAdminUser()) {
+              const btnWrap = item.querySelector('.cm-admin');
+              btnWrap.style.display = 'flex';
+              btnWrap.querySelector('.cm-edit').onclick = async () => {
+                const newText = prompt('댓글 내용을 수정하시오.', c.text||'');
                 if (!newText) return;
-                await updateDoc(doc(db, 'maps', mapId, 'comments', c.id), {
-                    text: newText,
-                    editedAt: serverTimestamp()
-                });
-                renderMap();
-                };
-
-                // 삭제
-                btnWrap.querySelector('.cm-del').onclick = async () => {
-                const ok = confirm('정말 삭제하겠나.');
-                if (!ok) return;
-                await deleteDoc(doc(db, 'maps', mapId, 'comments', c.id));
-                renderMap();
-                };
+                try {
+                  await updateDoc(doc(db, 'maps', mapId, 'comments', c.id), { text: newText, editedAt: serverTimestamp() });
+                  renderMap();
+                  showMessage('댓글 수정 완료', 'info');
+                } catch(e) {
+                  console.error(e);
+                  showMessage('댓글 수정 실패', 'error');
+                }
+              };
+              btnWrap.querySelector('.cm-del').onclick = async () => {
+                try {
+                  await deleteDoc(doc(db, 'maps', mapId, 'comments', c.id));
+                  renderMap();
+                  showMessage('댓글 삭제 완료', 'info');
+                } catch(e) {
+                  console.error(e);
+                  showMessage('댓글 삭제 실패', 'error');
+                }
+              };
             }
-        })();
-        commentsList.appendChild(item);
+          })();
+          commentsList.appendChild(item);
         });
       }
 
-    const moreWrap = el.querySelector('.comments-more');
-    if (arr.length > 3 && moreWrap) moreWrap.style.display = 'block';
+      const moreWrap = el.querySelector('.comments-more');
+      if (arr.length > 3 && moreWrap) moreWrap.style.display = 'block';
     } catch(e) {
-    console.error('load comments preview err', e);
+      console.error('load comments preview err', e);
+      showMessage('댓글 로드 실패', 'error');
     }
   })();
 
   return el;
 }
 
-// focus an inline quick comment input (will open a small prompt)
+// focus an inline quick comment input
 function focusCommentInput(mapId) {
-  // simple prompt for now (you can replace with inline input UI)
-  if (!currentUser) {
-    alert('로그인이 필요합니다.');
-    return;
-  }
+  if (!currentUser) { showMessage('로그인이 필요합니다.', 'error'); return; }
   const text = prompt('댓글을 작성하시오 (최대 500자):');
-  if (!text || !text.trim()) return;
+  if (!text?.trim()) return;
   postMapComment(mapId, text.trim());
 }
 
@@ -900,21 +919,20 @@ async function postMapComment(mapId, text) {
     await setDoc(newRef, {
       uid: currentUser.uid,
       name: me.nickname || me.id || '사용자',
-      photo: me.colorHex ? '' : (me.photo || ''), // photo optional
+      photo: me.photo||'',
       text,
       createdAt: serverTimestamp()
     });
-    // refresh map area
     renderMap();
+    showMessage('댓글 등록 완료', 'info');
   } catch(e) {
     console.error('postMapComment err', e);
-    alert('댓글 등록 실패');
+    showMessage('댓글 등록 실패', 'error');
   }
 }
 
 // open full comments popup (scrollable)
 function openCommentsPopup(mapId) {
-  // create popup
   const popup = document.createElement('div');
   popup.className = 'fullscreen comments-popup';
   popup.innerHTML = `
@@ -932,7 +950,6 @@ function openCommentsPopup(mapId) {
       </div>
     </div>
   `;
-
   document.body.appendChild(popup);
 
   const closeBtn = popup.querySelector('.close-comments');
@@ -942,27 +959,22 @@ function openCommentsPopup(mapId) {
 
   closeBtn.onclick = () => popup.remove();
   postBtn.onclick = async () => {
-    if (!currentUser) { alert('로그인이 필요합니다.'); return; }
+    if (!currentUser) { showMessage('로그인이 필요합니다.', 'error'); return; }
     const v = inputEl.value.trim();
     if (!v) return;
     await postMapComment(mapId, v);
     popup.remove();
-    openCommentsPopup(mapId); // reopen to refresh (simple)
+    openCommentsPopup(mapId);
   };
 
-  // load all comments then render
   (async () => {
     try {
       const cSnap = await getDocs(collection(db, 'maps', mapId, 'comments'));
       const arr = [];
       cSnap.forEach(d => arr.push({ id: d.id, ...d.data() }));
-      arr.sort((a,b) => {
-        const at = a.createdAt && a.createdAt.seconds ? a.createdAt.seconds : 0;
-        const bt = b.createdAt && b.createdAt.seconds ? b.createdAt.seconds : 0;
-        return bt - at;
-      });
+      arr.sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
 
-      if (arr.length === 0) {
+      if (!arr.length) {
         listEl.innerHTML = `<div class="muted">댓글이 없습니다.</div>`;
       } else {
         listEl.innerHTML = '';
@@ -972,56 +984,65 @@ function openCommentsPopup(mapId) {
           item.style.marginBottom = '12px';
           item.innerHTML = `
             <div style="display:flex; gap:10px;">
-                <div style="width:44px; height:44px; border-radius:50%; overflow:hidden; background:#333;">
+              <div style="width:44px; height:44px; border-radius:50%; overflow:hidden; background:#333;">
                 <img src="${c.photo||''}" style="width:100%; height:100%; object-fit:cover;">
-                </div>
-                <div style="flex:1;">
+              </div>
+              <div style="flex:1;">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <strong>${c.name||'익명'}</strong>
-                    <span class="muted">${fmtTime(c.createdAt)}</span>
+                  <strong>${c.name||'익명'}</strong>
+                  <span class="muted">${fmtTime(c.createdAt)}</span>
                 </div>
                 <div class="cm-body" style="margin-top:6px;">${c.text||''}</div>
-
                 <div class="cm-admin" style="margin-top:6px; display:none; gap:10px;">
-                    <button class="link cm-edit">수정</button>
-                    <button class="link cm-del">삭제</button>
+                  <button class="link cm-edit">수정</button>
+                  <button class="link cm-del">삭제</button>
                 </div>
-                </div>
+              </div>
             </div>
-            `;
+          `;
 
-        (async () => {
-            const admin = await isAdminUser();
-            if (admin) {
-                const wrap = item.querySelector('.cm-admin');
-                wrap.style.display = 'flex';
+          (async () => {
+            if (await isAdminUser()) {
+              const wrap = item.querySelector('.cm-admin');
+              wrap.style.display = 'flex';
 
-                wrap.querySelector('.cm-edit').onclick = async () => {
+              wrap.querySelector('.cm-edit').onclick = async () => {
                 const newText = prompt('댓글 내용을 수정하시오.', c.text||'');
                 if (!newText) return;
-                await updateDoc(doc(db, 'maps', mapId, 'comments', c.id), {
-                    text: newText,
-                    editedAt: serverTimestamp()
-                });
-                popup.remove();
-                openCommentsPopup(mapId);
-                };
+                try {
+                  await updateDoc(doc(db, 'maps', mapId, 'comments', c.id), { text: newText, editedAt: serverTimestamp() });
+                  popup.remove();
+                  openCommentsPopup(mapId);
+                  showMessage('댓글이 수정되었습니다.', 'success');
+                } catch(e) {
+                  console.error(e);
+                  showMessage('댓글 수정 실패', 'error');
+                }
+              };
 
-                wrap.querySelector('.cm-del').onclick = async () => {
-                if (!confirm('삭제하겠나.')) return;
-                await deleteDoc(doc(db, 'maps', mapId, 'comments', c.id));
-                popup.remove();
-                openCommentsPopup(mapId);
-                };
+              wrap.querySelector('.cm-del').onclick = async () => {
+                const confirmed = await showConfirm('삭제하겠나.');
+                if (!confirmed) return;
+                try {
+                  await deleteDoc(doc(db, 'maps', mapId, 'comments', c.id));
+                  popup.remove();
+                  openCommentsPopup(mapId);
+                  showMessage('댓글이 삭제되었습니다.', 'success');
+                } catch(e) {
+                  console.error(e);
+                  showMessage('댓글 삭제 실패', 'error');
+                }
+              };
             }
-        })();
+          })();
 
-        listEl.appendChild(item);
+          listEl.appendChild(item);
         });
       }
     } catch(e) {
-      console.error('load all comments err', e);
+      console.error('load comments err', e);
       listEl.innerHTML = `<div class="muted">댓글 로드 실패</div>`;
+      showMessage('댓글 로드 실패', 'error');
     }
   })();
 }
@@ -1029,39 +1050,31 @@ function openCommentsPopup(mapId) {
 // open map edit modal (admin)
 function openMapEditModal(mapId) {
   (async () => {
-    const isAdmin = await isAdminUser();
-    if (!isAdmin) { alert('관리자 권한이 필요합니다.'); return; }
+    if (!(await isAdminUser())) { showMessage('관리자 권한이 필요합니다.', 'error'); return; }
 
     let data = {};
     if (mapId) {
-      const snap = await getDoc(doc(db, 'maps', mapId));
+      const snap = await getDoc(doc(db,'maps',mapId));
       if (snap.exists()) data = snap.data();
     }
 
-    // build modal
     const modal = document.createElement('div');
     modal.className = 'fullscreen map-edit-popup';
     modal.innerHTML = `
       <div class="card" style="max-width:900px; width:95%; max-height:90vh; overflow:auto;">
         <div style="display:flex; justify-content:space-between; align-items:center;">
-          <div class="muted">${mapId ? '맵 수정' : '맵 추가'}</div>
+          <div class="muted">${mapId?'맵 수정':'맵 추가'}</div>
           <button class="btn close-edit">닫기</button>
         </div>
         <div style="padding:12px; display:grid; gap:10px;">
-          <label>이름</label>
-          <input id="mapName" value="${data.name||''}">
-          <label>설명</label>
-          <textarea id="mapDesc" rows="4">${data.description||''}</textarea>
-          <label>위험도 (1-5)</label>
-          <input id="mapDanger" type="number" min="1" max="5" value="${data.danger||1}">
-          <label>출현 유형 (쉼표로 구분)</label>
-          <input id="mapTypes" value="${(data.types||[]).join ? (data.types||[]).join(', ') : (data.types||'')}">
-          <label>이미지 업로드</label>
-          <input id="mapImageFile" type="file" accept="image/*">
-          <label>이미지 URL</label>
-          <input id="mapImageUrl" value="${data.image||''}">
+          <label>이름</label><input id="mapName" value="${data.name||''}">
+          <label>설명</label><textarea id="mapDesc" rows="4">${data.description||''}</textarea>
+          <label>위험도 (1-5)</label><input id="mapDanger" type="number" min="1" max="5" value="${data.danger||1}">
+          <label>출현 유형 (쉼표로 구분)</label><input id="mapTypes" value="${(data.types||[]).join ? (data.types.join(', ')) : (data.types||'')}">
+          <label>이미지 업로드</label><input id="mapImageFile" type="file" accept="image/*">
+          <label>이미지 URL</label><input id="mapImageUrl" value="${data.image||''}">
           <div style="display:flex; gap:8px;">
-            <button class="btn save-map">${mapId ? '저장' : '생성'}</button>
+            <button class="btn save-map">${mapId?'저장':'생성'}</button>
             <button class="link cancel-map">취소</button>
           </div>
         </div>
@@ -1075,42 +1088,26 @@ function openMapEditModal(mapId) {
     modal.querySelector('.save-map').onclick = async () => {
       try {
         const name = modal.querySelector('#mapName').value.trim();
+        if (!name) { showMessage('이름을 입력하세요', 'error'); return; }
         const desc = modal.querySelector('#mapDesc').value.trim();
         const danger = Number(modal.querySelector('#mapDanger').value) || 1;
         const types = modal.querySelector('#mapTypes').value.split(',').map(s=>s.trim()).filter(Boolean);
         let imageUrl = modal.querySelector('#mapImageUrl').value.trim();
-
         const file = modal.querySelector('#mapImageFile').files[0];
-        let targetId = mapId;
+        let targetId = mapId || doc(collection(db,'maps')).id;
 
-        if (!name) { alert('이름을 입력하세요'); return; }
+        if (file) imageUrl = await uploadMapImage(file, targetId);
 
-        if (!targetId) {
-          // new map: create doc id first
-          const newRef = doc(collection(db, 'maps'));
-          targetId = newRef.id;
-        }
-
-        if (file) {
-          imageUrl = await uploadMapImage(file, targetId);
-        }
-
-        const payload = {
-          name,
-          description: desc,
-          danger,
-          types,
-          image: imageUrl,
-          updatedAt: serverTimestamp()
-        };
-
-        await setDoc(doc(db, 'maps', targetId), { ...( (await getDoc(doc(db,'maps',targetId))).exists() ? (await getDoc(doc(db,'maps',targetId))).data() : {} ), ...payload }, { merge: true });
+        const payload = { name, description: desc, danger, types, image: imageUrl, updatedAt: serverTimestamp() };
+        const prevData = (await getDoc(doc(db,'maps',targetId))).data() || {};
+        await setDoc(doc(db,'maps',targetId), { ...prevData, ...payload }, { merge:true });
 
         modal.remove();
         renderMap();
+        showMessage('맵이 저장되었습니다.', 'success');
       } catch(e) {
-        console.error('save map err', e);
-        alert('저장 실패');
+        console.error(e);
+        showMessage('저장 실패', 'error');
       }
     };
   })();
