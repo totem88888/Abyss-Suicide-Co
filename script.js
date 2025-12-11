@@ -579,77 +579,137 @@ function drawRadarChart(stats) {
 }
 
 function openProfileModal(docId, data) {
-  profileModal.innerHTML = `
+    profileModal.innerHTML = `
     <div class="modal-content">
 
-      <button id="closeProfile" class="back-btn">← 돌아가기</button>
+        <button id="closeProfile" class="back-btn">← 돌아가기</button>
 
-      <h2>${data.name}</h2>
+        <div class="profile-layout">
 
-      <div class="avatar big" 
-           style="width:180px; height:180px; margin:10px auto;
-                  background-image:url('${data.image || ""}')">
-      </div>
+            <div class="left-part">
+                <div class="avatar big"
+                     style="width:180px;height:180px;margin:10px auto;
+                         background-image:url('${data.image || ""}')">
+                </div>
+            </div>
 
-      <p>상태: ${data.status}</p>
-      <p style="white-space:pre-line">${data.desc || ""}</p>
+            <div class="right-part">
 
-      <div id="editArea"></div>
+                <div class="info-row">
+                    <span class="info-label">이름</span>
+                    <span class="info-value">${data.name || ""}</span>
+                </div>
+
+                <div class="info-row">
+                    <span class="info-label">성별</span>
+                    <span class="info-value">${data.gender || ""}</span>
+                </div>
+
+                <div class="info-row">
+                    <span class="info-label">나이</span>
+                    <span class="info-value">${data.age || ""}</span>
+                </div>
+
+                <div class="info-row">
+                    <span class="info-label">키 / 체중</span>
+                    <span class="info-value">${data.height || ""} / ${data.weight || ""}</span>
+                </div>
+
+                <div class="info-row">
+                    <span class="info-label">국적</span>
+                    <span class="info-value">${data.nation || ""}</span>
+                </div>
+
+                <hr style="margin:12px 0;">
+
+                <div class="info-row">
+                    <span class="info-label">비고</span>
+                    <span class="info-value">${data.desc || ""}</span>
+                </div>
+
+            </div>
+
+        </div>
+
+        <div class="stats-wrapper">
+            <div class="stats-left">
+                <div class="stat-row"><span>근력</span> <span>${data.str ?? 0}</span></div>
+                <div class="stat-row"><span>건강</span> <span>${data.vit ?? 0}</span></div>
+                <div class="stat-row"><span>민첩</span> <span>${data.agi ?? 0}</span></div>
+                <div class="stat-row"><span>정신력</span> <span>${data.wis ?? 0}</span></div>
+            </div>
+
+            <div class="stats-right">
+                <canvas id="statChart"></canvas>
+            </div>
+        </div>
+
+        <div style="text-align:center;margin-top:10px;">
+            <button id="editBtn">편집</button>
+        </div>
+
     </div>
-  `;
+    `;
 
-  profileModal.showModal();
-  document.getElementById("closeProfile").onclick = () => profileModal.close();
+    profileModal.showModal();
 
-  // 여기서만 editBtn 만들기
-  const editArea = document.getElementById("editArea");
-  const editBtn = document.createElement("button");
-  editBtn.textContent = "편집";
-  editBtn.onclick = () => openEditModal(docId, data);
-
-  editArea.appendChild(editBtn);
+    document.getElementById("closeProfile").onclick = () => profileModal.close();
+    document.getElementById("editBtn").onclick = () => openEditModal(docId, data);
 }
 
 function openEditModal(docId, data) {
-  editModal.innerHTML = `
+    editModal.innerHTML = `
     <div class="modal-content">
-      <label>이름</label>
-      <input id="editName" value="${data.name || ""}">
 
-      <label>상태</label>
-      <input id="editStatus" value="${data.status || ""}">
+        <label>이미지 업로드</label>
+        <input type="file" id="editImageFile">
 
-      <label>이미지 URL</label>
-      <input id="editImage" value="${data.image || ""}">
+        <label>이름</label>
+        <input id="editName" value="${data.name || ""}">
 
-      <label>설명</label>
-      <textarea id="editDesc">${data.desc || ""}</textarea>
+        <label>성별</label>
+        <input id="editGender" value="${data.gender || ""}">
 
-      <button id="saveStaff">저장</button>
+        <label>나이</label>
+        <input id="editAge" value="${data.age || ""}">
+
+        <label>키</label>
+        <input id="editHeight" value="${data.height || ""}">
+
+        <label>체중</label>
+        <input id="editWeight" value="${data.weight || ""}">
+
+        <label>국적</label>
+        <input id="editNation" value="${data.nation || ""}">
+
+        <label>비고</label>
+        <textarea id="editDesc">${data.desc || ""}</textarea>
+
+        <button id="saveStaff">저장</button>
+
     </div>
-  `;
-  editModal.showModal();
+    `;
 
-  document.getElementById("saveStaff").onclick = async () => {
-    await updateDoc(doc(db, "staff", docId), {
-      name: document.getElementById("editName").value,
-      status: document.getElementById("editStatus").value,
-      image: document.getElementById("editImage").value,
-      desc: document.getElementById("editDesc").value,
-      updatedAt: serverTimestamp()
-    });
+    editModal.showModal();
 
-    editModal.close();
-    openProfileModal(docId, {
-      ...data,
-      name: document.getElementById("editName").value,
-      status: document.getElementById("editStatus").value,
-      image: document.getElementById("editImage").value,
-      desc: document.getElementById("editDesc").value
-    });
+    document.getElementById("saveStaff").onclick = async () => {
 
-    renderStaff();
-  };
+        // 파일 업로드는 네 Firebase Storage 설정 보고 붙여준다
+        await updateDoc(doc(db, "staff", docId), {
+            name: document.getElementById("editName").value,
+            gender: document.getElementById("editGender").value,
+            age: document.getElementById("editAge").value,
+            height: document.getElementById("editHeight").value,
+            weight: document.getElementById("editWeight").value,
+            nation: document.getElementById("editNation").value,
+            desc: document.getElementById("editDesc").value,
+            updatedAt: serverTimestamp()
+        });
+
+        editModal.close();
+        renderStaff();
+        openProfileModal(docId, data);
+    };
 }
 
 async function renderMe(){ contentEl.innerHTML = '<div class="card">내 상태 탭</div>'; }

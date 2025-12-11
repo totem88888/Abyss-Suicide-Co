@@ -239,3 +239,22 @@ input[type=text], input[type=email], input[type=password] {
     flex-direction: column;
     gap: 6px;
 }
+
+.info-row {
+    display: flex;
+    align-items: center;
+    margin: 6px 0;
+}
+
+.info-label {
+    width: 90px;
+    background: #eee;
+    padding: 4px 6px;
+    border-radius: 4px;
+    font-weight: bold;
+    margin-right: 8px;
+}
+
+.info-value {
+    flex: 1;
+}
