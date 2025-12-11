@@ -39,14 +39,6 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
 
-async function isAdminUser() {
-    const user = auth.currentUser;
-    if (!user) return false;
-
-    // 네 관리 UID로 교체해
-    return user.uid === "관리자_UID";
-}
-
 async function uploadStaffImage(file, uid) {
     const storageRef = ref(storage, `staff/${uid}_${Date.now()}.png`);
     await uploadBytes(storageRef, file);
@@ -713,14 +705,16 @@ function openEditModal(docId, data) {
 
 // helper: check if current user is admin by reading users/{uid}.role
 async function isAdminUser() {
-  if (!currentUser) return false;
-  try {
-    const uDoc = await getDoc(doc(db, 'users', currentUser.uid));
-    return uDoc.exists() && (uDoc.data().role === 'admin');
-  } catch(e) {
-    console.error('isAdminUser err', e);
-    return false;
-  }
+    const user = auth.currentUser;
+    if (!user) return false;
+
+    try {
+        const uDoc = await getDoc(doc(db, 'users', user.uid));
+        return uDoc.exists() && uDoc.data().role === 'admin';
+    } catch(e) {
+        console.error('isAdminUser err', e);
+        return false;
+    }
 }
 
 // upload map image to storage
