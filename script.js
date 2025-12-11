@@ -149,11 +149,11 @@ signupBth.addEventListener('click', async ()=>{
     const pw = signupPassword.value;
     const nick = signupNickname.value.trim();
 
-    if (!id) { signupBoxMsg.textContent = '아이디를 입력해'; return; }
+    if (!id) { signupBoxMsg.textContent = '아이디를 입력해 주세요.'; return; }
 
-    if (!nick) { signupBoxMsg.textContent = '닉네임을 입력해'; return; }
+    if (!nick) { signupBoxMsg.textContent = '닉네임을 입력해 주세요.'; return; }
 
-    if (!email || !pw) { signupBoxMsg.textContent = '이메일과 비밀번호를 입력해'; return; }
+    if (!email || !pw) { signupBoxMsg.textContent = '이메일과 비밀번호를 입력해 주세요.'; return; }
 
     try { 
     const cred = await createUserWithEmailAndPassword(auth, email, pw);
@@ -201,7 +201,7 @@ loginBth.addEventListener('click', async ()=> {
     const pw = loginPassword.value;
 
     if (!id || !pw) { 
-        loginBoxMsg.textContent = '아이디와 비밀번호를 입력해'; 
+        loginBoxMsg.textContent = '아이디와 비밀번호를 입력해 주세요.'; 
         return; 
     }
 
@@ -211,7 +211,7 @@ loginBth.addEventListener('click', async ()=> {
         const snap = await getDocs(q);
 
         if (snap.empty) {
-            loginBoxMsg.textContent = '존재하지 않는 아이디';
+            loginBoxMsg.textContent = '존재하지 않는 아이디입니다.';
             return;
         }
 
@@ -224,6 +224,20 @@ loginBth.addEventListener('click', async ()=> {
         loginBoxMsg.textContent = '로그인 성공.';
     } catch(e) {
         loginBoxMsg.textContent = '로그인 실패: ' + (e.message || e.code);
+    }
+});
+
+loginForm.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        loginBth.click();
+    }
+});
+
+signupForm.addEventListener('keydown', e => {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        signupBth.click();
     }
 });
 
@@ -683,10 +697,6 @@ function openEditModal(docId, data) {
     setTimeout(() => renderStaff(), 20);
   };
 }
-
-card.addEventListener('click', () => {
-    openProfileModal(doc.data(), doc.id);
-});
 
 async function renderMe(){ contentEl.innerHTML = '<div class="card">내 상태 탭</div>'; }
 function renderMap(){ contentEl.innerHTML = '<div class="card">맵 탭</div>'; }
