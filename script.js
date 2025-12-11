@@ -6,7 +6,7 @@ import { getFirestore, doc, setDoc, getDoc, collection, getDocs, serverTimestamp
 
 import { query, where } from "https://www.gstatic.com/firebasejs/10.6.0/firebase-firestore.js";
 
-import { collection, getDocs, setDoc, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.x.x/firebase-firestore.js";
+import { updateDoc } from "https://www.gstatic.com/firebasejs/10.6.0/firebase-firestore.js";
 
 
 const firebaseConfig = {
