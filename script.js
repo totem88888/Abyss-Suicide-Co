@@ -517,7 +517,7 @@ const editBtn = document.createElement("button");
 editBtn.textContent = "수정";
 editBtn.className = "edit-btn";
 editBtn.onclick = () => {
-  profileModal.close();
+  openProfileModal.close();
   openEditModal(docId, data);
 };
 document.getElementById("editArea").appendChild(editBtn);
