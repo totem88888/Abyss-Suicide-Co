@@ -142,3 +142,57 @@ input[type=text], input[type=email], input[type=password] {
     color: var(--accent);
     cursor: pointer;
 }
+
+#staffArea {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 24px;
+    padding: 20px 10px;
+}
+
+.staff-item {
+    background: #2a2a2a;
+    border-radius: 12px;
+    padding: 14px;
+    text-align: center;
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+    cursor: pointer;
+}
+
+.staff-item:hover {
+    transform: translateY(-4px) scale(1.04);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.4);
+}
+
+.avatar {
+    width: 100%;
+    padding-bottom: 100%;
+    border-radius: 10px;
+    background-size: cover;
+    background-position: center;
+    border: 2px solid #444;
+    margin-bottom: 10px;
+}
+
+.staff-item:hover .avatar {
+    border-color: #888;
+}
+
+.modal-content {
+    padding: 20px;
+    background: #222;
+    color: #fff;
+    border-radius: 12px;
+}
+
+.back-btn {
+    background: none;
+    border: none;
+    color: #ccc;
+    font-size: 16px;
+    cursor: pointer;
+    margin-bottom: 10px;
+}
+.back-btn:hover {
+    color: #fff;
+}

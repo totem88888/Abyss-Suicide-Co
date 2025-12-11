@@ -6,6 +6,8 @@ import { getFirestore, doc, setDoc, getDoc, collection, getDocs, serverTimestamp
 
 import { query, where } from "https://www.gstatic.com/firebasejs/10.6.0/firebase-firestore.js";
 
+import { collection, getDocs, setDoc, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.x.x/firebase-firestore.js";
+
 
 const firebaseConfig = {
     apiKey: "AIzaSyDGmwk9FtwnjUKcH4T6alvMWVQqbhVrqfI",
@@ -147,7 +149,7 @@ signupBth.addEventListener('click', async ()=>{
         colorHex: randomHex(),
         decorations: [],
         silver: 0,
-        inventory: [],
+        inventory: {},
         status: 'alive',
         achievements: {
             deathCount: 0,
@@ -159,6 +161,16 @@ signupBth.addEventListener('click', async ()=>{
         },
         createdAt: serverTimestamp()
     });
+    await setDoc(doc(db, 'staff', uid), {
+        uid,
+        name: nick,          // 닉네임을 직원명으로 사용
+        status: 'alive',
+        image: '',
+        silver: 0,
+        desc: '',
+        updatedAt: serverTimestamp()
+    });
+
     signupBoxMsg.textContent = '가입 성공. 로그인 처리 중.';
     } catch(e) {
     signupBoxMsg.textContent = '가입 실패: ' + (e.message || e.code);
@@ -426,26 +438,124 @@ async function renderMain(){
     }
 }
 
-// async function renderStaff(){
-//     contentEl.innerHTML = '<div class="card"><div class="muted">직원 목록</div><div id="staffArea">불러오는 중...</div></div>';
-//     try{
-//     const usersSnap = await getDocs(collection(db,'users'));
-//     const staffArea = document.getElementById('staffArea');
-//     staffArea.innerHTML = '';
-//     usersSnap.forEach(u=>{
-//         const d = u.data();
-//         const it = document.createElement('div'); it.className='staff-item';
-//         const av = document.createElement('div'); av.className='avatar'; av.style.background = d.colorHex || '#555'; av.textContent = (d.nickname||'?').slice(0,1);
-//         const info = document.createElement('div'); info.innerHTML = `<div>${d.nickname||d.email||u.id}</div><div class="muted">${d.status||'alive'}</div>`;
-//         it.appendChild(av); it.appendChild(info);
-//         staffArea.appendChild(it);
-//     });
-//     } catch(e) {
-//     contentEl.innerHTML = '<div class="card muted">직원 목록 로드 실패</div>';
-//     }
-// }
+async function renderStaff() {
+  contentEl.innerHTML = `
+    <div class="card">
+      <div class="muted">직원 목록</div>
+      <div id="staffArea">불러오는 중...</div>
+    </div>
+  `;
 
-async function renderStaff(){ contentEl.innerHTML = '<div class="card">직원 탭</div>'; }
+  const staffArea = document.getElementById("staffArea");
+
+  try {
+    const q = await getDocs(collection(db, "staff"));
+    staffArea.innerHTML = "";
+
+    q.forEach(docSnap => {
+      const f = docSnap.data();
+
+      const box = document.createElement("div");
+      box.className = "staff-item";
+
+      const avatar = document.createElement("div");
+      avatar.className = "avatar";
+      avatar.style.backgroundImage = f.image ? `url(${f.image})` : "";
+      avatar.style.backgroundColor = f.image ? "transparent" : "#444";
+
+      const name = document.createElement("div");
+      name.style.marginTop = "8px";
+      name.textContent = f.name || "이름 없음";
+
+      box.onclick = () => openProfileModal(docSnap.id, f);
+
+      box.appendChild(avatar);
+      box.appendChild(name);
+      staffArea.appendChild(box);
+    });
+
+  } catch (e) {
+    staffArea.innerHTML = '<div class="muted">직원 불러오기 실패</div>';
+  }
+}
+
+function openProfileModal(docId, data) {
+  profileModal.innerHTML = `
+    <div class="modal-content">
+
+      <button id="closeProfile" class="back-btn">← 돌아가기</button>
+
+      <h2>${data.name}</h2>
+
+      <div class="avatar big" 
+           style="width:180px; height:180px; margin:10px auto;
+                  background-image:url('${data.image || ""}')">
+      </div>
+
+      <p>상태: ${data.status}</p>
+      <p style="white-space:pre-line">${data.desc || ""}</p>
+
+      <div id="editArea"></div>
+    </div>
+  `;
+
+  profileModal.showModal();
+
+  document.getElementById("closeProfile").onclick = () => profileModal.close();
+}
+
+const editBtn = document.createElement("button");
+editBtn.textContent = "수정";
+editBtn.className = "edit-btn";
+editBtn.onclick = () => {
+  profileModal.close();
+  openEditModal(docId, data);
+};
+document.getElementById("editArea").appendChild(editBtn);
+
+
+function openEditModal(docId, data) {
+  editModal.innerHTML = `
+    <div class="modal-content">
+      <label>이름</label>
+      <input id="editName" value="${data.name || ""}">
+
+      <label>상태</label>
+      <input id="editStatus" value="${data.status || ""}">
+
+      <label>이미지 URL</label>
+      <input id="editImage" value="${data.image || ""}">
+
+      <label>설명</label>
+      <textarea id="editDesc">${data.desc || ""}</textarea>
+
+      <button id="saveStaff">저장</button>
+    </div>
+  `;
+  editModal.showModal();
+
+  document.getElementById("saveStaff").onclick = async () => {
+    await updateDoc(doc(db, "staff", docId), {
+      name: document.getElementById("editName").value,
+      status: document.getElementById("editStatus").value,
+      image: document.getElementById("editImage").value,
+      desc: document.getElementById("editDesc").value,
+      updatedAt: serverTimestamp()
+    });
+
+    editModal.close();
+    openProfileModal(docId, {
+      ...data,
+      name: document.getElementById("editName").value,
+      status: document.getElementById("editStatus").value,
+      image: document.getElementById("editImage").value,
+      desc: document.getElementById("editDesc").value
+    });
+
+    renderStaff(); // 목록 갱신
+  };
+}
+
 async function renderMe(){ contentEl.innerHTML = '<div class="card">내 상태 탭</div>'; }
 function renderMap(){ contentEl.innerHTML = '<div class="card">맵 탭</div>'; }
 function renderDex(){ contentEl.innerHTML = '<div class="card">도감 탭</div>'; }
