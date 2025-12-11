@@ -15,6 +15,15 @@ import {
     updateDoc
 } from "https://www.gstatic.com/firebasejs/10.6.0/firebase-firestore.js";
 
+import { getStorage, ref, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.6.0/firebase-storage.js";
+
+const storage = getStorage();
+
+async function uploadStaffImage(file, uid) {
+    const storageRef = ref(storage, `staff/${uid}_${Date.now()}.png`);
+    await uploadBytes(storageRef, file);
+    return await getDownloadURL(storageRef);
+}
 const firebaseConfig = {
     apiKey: "AIzaSyDGmwk9FtwnjUKcH4T6alvMWVQqbhVrqfI",
     authDomain: "abyss-suicide-co.firebaseapp.com",
@@ -547,122 +556,84 @@ async function updateStaff(docId, prevData) {
 
 let radarObj = null;
 
-function drawRadarChart(stats) {
-  const ctx = document.getElementById("statRadar").getContext("2d");
+function drawStatChart(data) {
+  const ctx = document.getElementById("statChart");
 
-  if (radarObj) radarObj.destroy();
-
-  radarObj = new Chart(ctx, {
+  new Chart(ctx, {
     type: 'radar',
     data: {
-      labels: ['전투', '정신', '민첩', '사회성', '연구'],
+      labels: ["근력", "건강", "민첩", "정신력"],
       datasets: [{
-        data: [
-          stats.combat,
-          stats.mental,
-          stats.dex,
-          stats.social,
-          stats.research
-        ]
+        data: [data.str || 0, data.vit || 0, data.agi || 0, data.wil || 0]
       }]
     },
-    options: {
-      scales: {
-        r: {
-          min: 0,
-          max: 100,
-          ticks: { stepSize: 20 }
-        }
-      }
-    }
+    options: { responsive: false }
   });
 }
 
 function openProfileModal(docId, data) {
-    profileModal.innerHTML = `
+  profileModal.innerHTML = `
     <div class="modal-content">
 
-        <button id="closeProfile" class="back-btn">← 돌아가기</button>
+      <button id="closeProfile" class="back-btn">← 돌아가기</button>
 
-        <div class="profile-layout">
+      <h2>${data.name}</h2>
 
-            <div class="left-part">
-                <div class="avatar big"
-                     style="width:180px;height:180px;margin:10px auto;
-                         background-image:url('${data.image || ""}')">
-                </div>
-            </div>
+      <div class="avatar big"
+           style="width:180px; height:180px; margin:10px auto;
+                  background-image:url('${data.image || ""}')">
+      </div>
 
-            <div class="right-part">
+      <div class="profile-block">
+        <p><span class="label">이름</span> ${data.name || ""}</p>
+        <p><span class="label">성별</span> ${data.gender || ""}</p>
+        <p><span class="label">나이</span> ${data.age || ""}</p>
+        <p><span class="label">키·체중</span> ${data.body || ""}</p>
+        <p><span class="label">국적</span> ${data.nation || ""}</p>
 
-                <div class="info-row">
-                    <span class="info-label">이름</span>
-                    <span class="info-value">${data.name || ""}</span>
-                </div>
+        <hr>
 
-                <div class="info-row">
-                    <span class="info-label">성별</span>
-                    <span class="info-value">${data.gender || ""}</span>
-                </div>
+        <p><span class="label">비고</span></p>
+        <p style="white-space:pre-line">${data.note || ""}</p>
+      </div>
 
-                <div class="info-row">
-                    <span class="info-label">나이</span>
-                    <span class="info-value">${data.age || ""}</span>
-                </div>
-
-                <div class="info-row">
-                    <span class="info-label">키 / 체중</span>
-                    <span class="info-value">${data.height || ""} / ${data.weight || ""}</span>
-                </div>
-
-                <div class="info-row">
-                    <span class="info-label">국적</span>
-                    <span class="info-value">${data.nation || ""}</span>
-                </div>
-
-                <hr style="margin:12px 0;">
-
-                <div class="info-row">
-                    <span class="info-label">비고</span>
-                    <span class="info-value">${data.desc || ""}</span>
-                </div>
-
-            </div>
-
+      <div class="stat-area">
+        <div class="stat-left">
+          <p>근력: ${data.str || 1}</p>
+          <p>건강: ${data.vit || 1}</p>
+          <p>민첩: ${data.agi || 1}</p>
+          <p>정신력: ${data.wil || 1}</p>
         </div>
+        <canvas id="statChart" class="stat-right" width="250" height="250"></canvas>
+      </div>
 
-        <div class="stats-wrapper">
-            <div class="stats-left">
-                <div class="stat-row"><span>근력</span> <span>${data.str ?? 0}</span></div>
-                <div class="stat-row"><span>건강</span> <span>${data.vit ?? 0}</span></div>
-                <div class="stat-row"><span>민첩</span> <span>${data.agi ?? 0}</span></div>
-                <div class="stat-row"><span>정신력</span> <span>${data.wis ?? 0}</span></div>
-            </div>
-
-            <div class="stats-right">
-                <canvas id="statChart"></canvas>
-            </div>
-        </div>
-
-        <div style="text-align:center;margin-top:10px;">
-            <button id="editBtn">편집</button>
-        </div>
+      <div id="editArea"></div>
 
     </div>
-    `;
+  `;
 
-    profileModal.showModal();
+  profileModal.showModal();
 
-    document.getElementById("closeProfile").onclick = () => profileModal.close();
-    document.getElementById("editBtn").onclick = () => openEditModal(docId, data);
+  document.getElementById("closeProfile").onclick = () => profileModal.close();
+
+  const editArea = document.getElementById("editArea");
+  const editBtn = document.createElement("button");
+
+  editBtn.textContent = "편집";
+  editBtn.onclick = () => openEditModal(docId, data);
+
+  editArea.appendChild(editBtn);
+
+  drawStatChart(data);
 }
 
 function openEditModal(docId, data) {
-    editModal.innerHTML = `
+  editModal.innerHTML = `
     <div class="modal-content">
 
-        <label>이미지 업로드</label>
-        <input type="file" id="editImageFile">
+      <button id="closeEdit" class="back-btn">← 돌아가기</button>
+
+      <div class="edit-grid">
 
         <label>이름</label>
         <input id="editName" value="${data.name || ""}">
@@ -673,43 +644,84 @@ function openEditModal(docId, data) {
         <label>나이</label>
         <input id="editAge" value="${data.age || ""}">
 
-        <label>키</label>
-        <input id="editHeight" value="${data.height || ""}">
-
-        <label>체중</label>
-        <input id="editWeight" value="${data.weight || ""}">
+        <label>키·체중</label>
+        <input id="editBody" value="${data.body || ""}">
 
         <label>국적</label>
         <input id="editNation" value="${data.nation || ""}">
 
         <label>비고</label>
-        <textarea id="editDesc">${data.desc || ""}</textarea>
+        <textarea id="editNote">${data.note || ""}</textarea>
 
-        <button id="saveStaff">저장</button>
+        <label>이미지 업로드</label>
+        <input id="editImageFile" type="file" accept="image/*">
 
+        <label>이미지 URL</label>
+        <input id="editImage" value="${data.image || ""}">
+      </div>
+
+      <div class="edit-stats">
+        <label>근력</label><input id="editStr" value="${data.str || 0}">
+        <label>건강</label><input id="editVit" value="${data.vit || 0}">
+        <label>민첩</label><input id="editAgi" value="${data.agi || 0}">
+        <label>정신력</label><input id="editWil" value="${data.wil || 0}">
+      </div>
+
+      <button id="saveStaff">저장</button>
     </div>
-    `;
+  `;
 
-    editModal.showModal();
+  editModal.showModal();
 
-    document.getElementById("saveStaff").onclick = async () => {
+  document.getElementById("closeEdit").onclick = () => editModal.close();
 
-        // 파일 업로드는 네 Firebase Storage 설정 보고 붙여준다
-        await updateDoc(doc(db, "staff", docId), {
-            name: document.getElementById("editName").value,
-            gender: document.getElementById("editGender").value,
-            age: document.getElementById("editAge").value,
-            height: document.getElementById("editHeight").value,
-            weight: document.getElementById("editWeight").value,
-            nation: document.getElementById("editNation").value,
-            desc: document.getElementById("editDesc").value,
-            updatedAt: serverTimestamp()
-        });
+  document.getElementById("saveStaff").onclick = async () => {
 
-        editModal.close();
-        renderStaff();
-        openProfileModal(docId, data);
-    };
+    // 파일 업로드 존재하면 변환
+    let finalImg = document.getElementById("editImage").value;
+    const file = document.getElementById("editImageFile").files[0];
+
+    if (file) {
+      finalImg = await uploadStaffImage(file, docId);  // 아래에 함수 추가해줌
+    }
+
+    await updateDoc(doc(db, "staff", docId), {
+      name: document.getElementById("editName").value,
+      gender: document.getElementById("editGender").value,
+      age: document.getElementById("editAge").value,
+      body: document.getElementById("editBody").value,
+      nation: document.getElementById("editNation").value,
+      note: document.getElementById("editNote").value,
+      image: finalImg,
+
+      str: Number(document.getElementById("editStr").value),
+      vit: Number(document.getElementById("editVit").value),
+      agi: Number(document.getElementById("editAgi").value),
+      wil: Number(document.getElementById("editWil").value),
+
+      updatedAt: serverTimestamp()
+    });
+
+    editModal.close();
+
+    openProfileModal(docId, {
+      ...data,
+      name: document.getElementById("editName").value,
+      gender: document.getElementById("editGender").value,
+      age: document.getElementById("editAge").value,
+      body: document.getElementById("editBody").value,
+      nation: document.getElementById("editNation").value,
+      note: document.getElementById("editNote").value,
+      image: finalImg,
+
+      str: Number(document.getElementById("editStr").value),
+      vit: Number(document.getElementById("editVit").value),
+      agi: Number(document.getElementById("editAgi").value),
+      wil: Number(document.getElementById("editWil").value)
+    });
+
+    renderStaff();
+  };
 }
 
 async function renderMe(){ contentEl.innerHTML = '<div class="card">내 상태 탭</div>'; }
@@ -725,10 +737,10 @@ onAuthStateChanged(auth, async (user)=>{
     startClock();
     subscribeSystem();
     loadTab('main');
-    try{
+    try {
         const snap = await getDoc(doc(db,'users',user.uid));
         miniProfile.textContent = snap.exists() ? snap.data().nickname || user.email : user.email || '사용자';
-    }catch(e){
+    } catch(e) {
         miniProfile.textContent = user.email || '사용자';
     }
     } else {
