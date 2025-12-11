@@ -64,6 +64,8 @@ const signupBth = document.getElementById('signup-bth');
 const gotoLoginBth = document.getElementById('goto-login-bth');
 const signupBoxMsg = document.getElementById('signup-box-msg');
 
+const profileModal = document.getElementById("profileModal");
+
 let currentUser = null;
 
 function initNav() {
@@ -489,7 +491,7 @@ async function renderStaff() {
 }
 
 function openProfileModal(docId, data) {
-  openProfileModal.innerHTML = `
+  profileModal.innerHTML = `
     <div class="modal-content">
 
       <button id="closeProfile" class="back-btn">← 돌아가기</button>
@@ -508,9 +510,9 @@ function openProfileModal(docId, data) {
     </div>
   `;
 
-  openProfileModal.showModal();
+  profileModal.showModal();
 
-  document.getElementById("closeProfile").onclick = () => openProfileModal.close();
+  document.getElementById("closeProfile").onclick = () => profileModal.close();
 
   const editArea = document.getElementById("editArea");
 
@@ -525,7 +527,7 @@ const editBtn = document.createElement("button");
 editBtn.textContent = "수정";
 editBtn.className = "edit-btn";
 editBtn.onclick = () => {
-  openProfileModal.close();
+  profileModal.close();
   openEditModal(docId, data);
 };
 
