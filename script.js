@@ -21,7 +21,7 @@ const firebaseConfig = {
     apiKey: "AIzaSyDGmwk9FtwnjUKcH4T6alvMWVQqbhVrqfI",
     authDomain: "abyss-suicide-co.firebaseapp.com",
     projectId: "abyss-suicide-co",
-    storageBucket: "abyss-suicide-co.firebasestorage.app",
+    storageBucket: "abyss-suicide-co.appspot.com",
      messagingSenderId: "711710259422",
     appId: "1:711710259422:web:3c5ba7c93edb3d6d6baa4f"
 };
