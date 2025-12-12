@@ -608,63 +608,39 @@ function openProfileModal(docId, data) {
 
   const editBtn = document.createElement("button");
   editBtn.textContent = "편집";
-  editBtn.onclick = () => openEditModal(docId, data);
+  editBtn.onclick = () => openInlineEdit(docId, data);
   document.getElementById("editArea").appendChild(editBtn);
 
   drawStatChart(data);
 }
 
 
-function openEditModal(docId, data) {
-  editModal.innerHTML = `
-    <div class="modal-content">
+function openInlineEdit(docId, data) {
+  const editArea = document.getElementById("editArea");
+  editArea.innerHTML = `
+    <div class="edit-grid-inline">
+      <label>이름</label><input id="editName" value="${data.name || ''}">
+      <label>성별</label><input id="editGender" value="${data.gender || ''}">
+      <label>나이</label><input id="editAge" value="${data.age || ''}">
+      <label>키·체중</label><input id="editBody" value="${data.body || ''}">
+      <label>국적</label><input id="editNation" value="${data.nation || ''}">
+      <label>비고</label><textarea id="editNote">${data.note || ''}</textarea>
 
-      <button id="closeEdit" class="back-btn">← 돌아가기</button>
+      <label>이미지 업로드</label><input id="editImageFile" type="file" accept="image/*">
+      <label>이미지 URL</label><input id="editImage" value="${data.image || ''}">
 
-      <div class="edit-grid">
-
-        <label>이름</label>
-        <input id="editName" value="${data.name || ""}">
-
-        <label>성별</label>
-        <input id="editGender" value="${data.gender || ""}">
-
-        <label>나이</label>
-        <input id="editAge" value="${data.age || ""}">
-
-        <label>키·체중</label>
-        <input id="editBody" value="${data.body || ""}">
-
-        <label>국적</label>
-        <input id="editNation" value="${data.nation || ""}">
-
-        <label>비고</label>
-        <textarea id="editNote">${data.note || ""}</textarea>
-
-        <label>이미지 업로드</label>
-        <input id="editImageFile" type="file" accept="image/*">
-
-        <label>이미지 URL</label>
-        <input id="editImage" value="${data.image || ""}">
-      </div>
-
-      <div class="edit-stats">
+      <div class="edit-stats-inline">
         <label>근력</label><input id="editStr" value="${data.str || 0}">
         <label>건강</label><input id="editVit" value="${data.vit || 0}">
         <label>민첩</label><input id="editAgi" value="${data.agi || 0}">
         <label>정신력</label><input id="editWil" value="${data.wil || 0}">
       </div>
 
-      <button id="saveStaff">저장</button>
+      <button id="saveStaffInline">저장</button>
     </div>
   `;
 
-  editModal.showModal();
-
-  document.getElementById("closeEdit").onclick = () => editModal.close();
-
-  document.getElementById("saveStaff").onclick = async () => {
-
+  document.getElementById("saveStaffInline").onclick = async () => {
     let finalImg = document.getElementById("editImage").value;
     const file = document.getElementById("editImageFile").files[0];
 
@@ -680,25 +656,51 @@ function openEditModal(docId, data) {
       nation: document.getElementById("editNation").value,
       note: document.getElementById("editNote").value,
       image: finalImg,
-
       str: Number(document.getElementById("editStr").value),
       vit: Number(document.getElementById("editVit").value),
       agi: Number(document.getElementById("editAgi").value),
       wil: Number(document.getElementById("editWil").value),
-
       updatedAt: serverTimestamp()
     };
 
     await updateDoc(doc(db, "staff", docId), newData);
 
-    editModal.close();
-
-    const merged = { ...data, ...newData };
-
-    openProfileModal(docId, merged);
-
-    setTimeout(() => renderStaff(), 20);
+    // 화면 갱신
+    openProfileModal(docId, { ...data, ...newData });
+    renderStaff();
+    editArea.innerHTML = ''; // 편집 영역 초기화
   };
+}
+
+  document.getElementById("saveStaffInline").onclick = async () => {
+    let finalImg = document.getElementById("editImage").value;
+    const file = document.getElementById("editImageFile").files[0];
+
+    if (file) {
+      finalImg = await uploadStaffImage(file, docId);
+    }
+
+    const newData = {
+      name: document.getElementById("editName").value,
+      gender: document.getElementById("editGender").value,
+      age: document.getElementById("editAge").value,
+      body: document.getElementById("editBody").value,
+      nation: document.getElementById("editNation").value,
+      note: document.getElementById("editNote").value,
+      image: finalImg,
+      str: Number(document.getElementById("editStr").value),
+      vit: Number(document.getElementById("editVit").value),
+      agi: Number(document.getElementById("editAgi").value),
+      wil: Number(document.getElementById("editWil").value),
+      updatedAt: serverTimestamp()
+    };
+
+    await updateDoc(doc(db, "staff", docId), newData);
+
+    // 화면 갱신
+    openProfileModal(docId, { ...data, ...newData });
+    renderStaff();
+    editArea.innerHTML = '';
 }
 
 // ---------- MAP 기능 (추가) ----------
@@ -817,7 +819,7 @@ function renderMapCard(mapDoc) {
   el.querySelector('.map-open-comments').addEventListener('click', () => openCommentsPopup(mapId));
   el.querySelector('.map-add-comment').addEventListener('click', () => focusCommentInput(mapId));
   el.querySelector('.map-more-comments').addEventListener('click', () => openCommentsPopup(mapId));
-  el.querySelector('.map-edit-btn').addEventListener('click', async () => openMapEditModal(mapId));
+  el.querySelector('.map-edit-btn').addEventListener('click', async () => openMapInlineEdit(mapId));
 
   (async () => {
     if (await isAdminUser()) {
@@ -1048,7 +1050,7 @@ function openCommentsPopup(mapId) {
 }
 
 // open map edit modal (admin)
-function openMapEditModal(mapId) {
+function openMapInlineEdit(mapId) {
   (async () => {
     if (!(await isAdminUser())) { showMessage('관리자 권한이 필요합니다.', 'error'); return; }
 
@@ -1058,42 +1060,36 @@ function openMapEditModal(mapId) {
       if (snap.exists()) data = snap.data();
     }
 
-    const modal = document.createElement('div');
-    modal.className = 'fullscreen map-edit-popup';
-    modal.innerHTML = `
-      <div class="card" style="max-width:900px; width:95%; max-height:90vh; overflow:auto;">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-          <div class="muted">${mapId?'맵 수정':'맵 추가'}</div>
-          <button class="btn close-edit">닫기</button>
-        </div>
-        <div style="padding:12px; display:grid; gap:10px;">
-          <label>이름</label><input id="mapName" value="${data.name||''}">
-          <label>설명</label><textarea id="mapDesc" rows="4">${data.description||''}</textarea>
-          <label>위험도 (1-5)</label><input id="mapDanger" type="number" min="1" max="5" value="${data.danger||1}">
-          <label>출현 유형 (쉼표로 구분)</label><input id="mapTypes" value="${(data.types||[]).join ? (data.types.join(', ')) : (data.types||'')}">
-          <label>이미지 업로드</label><input id="mapImageFile" type="file" accept="image/*">
-          <label>이미지 URL</label><input id="mapImageUrl" value="${data.image||''}">
-          <div style="display:flex; gap:8px;">
-            <button class="btn save-map">${mapId?'저장':'생성'}</button>
-            <button class="link cancel-map">취소</button>
-          </div>
+    const container = document.getElementById('mapsGrid');
+    const editDiv = document.createElement('div');
+    editDiv.className = 'map-inline-edit card';
+    editDiv.innerHTML = `
+      <div style="display:grid; gap:8px; padding:12px;">
+        <label>이름</label><input id="mapNameInline" value="${data.name||''}">
+        <label>설명</label><textarea id="mapDescInline" rows="3">${data.description||''}</textarea>
+        <label>위험도 (1-5)</label><input id="mapDangerInline" type="number" min="1" max="5" value="${data.danger||1}">
+        <label>출현 유형 (쉼표로 구분)</label><input id="mapTypesInline" value="${(data.types||[]).join ? (data.types.join(', ')) : (data.types||'')}">
+        <label>이미지 업로드</label><input id="mapImageFileInline" type="file" accept="image/*">
+        <label>이미지 URL</label><input id="mapImageUrlInline" value="${data.image||''}">
+        <div style="display:flex; gap:8px;">
+          <button class="btn save-map-inline">${mapId?'저장':'생성'}</button>
+          <button class="link cancel-map-inline">취소</button>
         </div>
       </div>
     `;
-    document.body.appendChild(modal);
+    container.prepend(editDiv);
 
-    modal.querySelector('.close-edit').onclick = () => modal.remove();
-    modal.querySelector('.cancel-map').onclick = () => modal.remove();
+    editDiv.querySelector('.cancel-map-inline').onclick = () => editDiv.remove();
 
-    modal.querySelector('.save-map').onclick = async () => {
+    editDiv.querySelector('.save-map-inline').onclick = async () => {
       try {
-        const name = modal.querySelector('#mapName').value.trim();
+        const name = editDiv.querySelector('#mapNameInline').value.trim();
         if (!name) { showMessage('이름을 입력하세요', 'error'); return; }
-        const desc = modal.querySelector('#mapDesc').value.trim();
-        const danger = Number(modal.querySelector('#mapDanger').value) || 1;
-        const types = modal.querySelector('#mapTypes').value.split(',').map(s=>s.trim()).filter(Boolean);
-        let imageUrl = modal.querySelector('#mapImageUrl').value.trim();
-        const file = modal.querySelector('#mapImageFile').files[0];
+        const desc = editDiv.querySelector('#mapDescInline').value.trim();
+        const danger = Number(editDiv.querySelector('#mapDangerInline').value) || 1;
+        const types = editDiv.querySelector('#mapTypesInline').value.split(',').map(s=>s.trim()).filter(Boolean);
+        let imageUrl = editDiv.querySelector('#mapImageUrlInline').value.trim();
+        const file = editDiv.querySelector('#mapImageFileInline').files[0];
         let targetId = mapId || doc(collection(db,'maps')).id;
 
         if (file) imageUrl = await uploadMapImage(file, targetId);
@@ -1102,7 +1098,7 @@ function openMapEditModal(mapId) {
         const prevData = (await getDoc(doc(db,'maps',targetId))).data() || {};
         await setDoc(doc(db,'maps',targetId), { ...prevData, ...payload }, { merge:true });
 
-        modal.remove();
+        editDiv.remove();
         renderMap();
         showMessage('맵이 저장되었습니다.', 'success');
       } catch(e) {
@@ -1133,7 +1129,7 @@ async function renderMap() {
       const b = document.createElement('button');
       b.className = 'btn';
       b.textContent = '새 맵 추가';
-      b.onclick = () => openMapEditModal(null);
+      b.onclick = () => openMapInlineEdit(null);
       controls.appendChild(b);
     }
   })();
