@@ -51,12 +51,30 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
 
+let currentUser = null;
+
+
 // 인증 상태 변화 감지 및 currentUser 설정
 onAuthStateChanged(auth, user => {
     currentUser = user;
-    // user가 변경되면 화면을 새로고침하거나 필요한 UI를 업데이트하는 로직 추가 가능
-    // 예: renderStaff(); 
+    renderMap();
+    renderStaff();
+    renderDex();
+    renderMain()
+    renderMe();
+
 });
+
+async function checkAndCreateSheet(uid, nickname) {
+    const sheetDocRef = doc(db, 'sheets', uid);
+    const sheetDoc = await getDoc(sheetDocRef);
+
+    if (!sheetDoc.exists()) {
+        const defaultSheetData = createDefaultSheet(uid, nickname);
+        await setDoc(sheetDocRef, defaultSheetData);
+        console.log(`Default sheet created for user: ${uid}`);
+    }
+}
 
 // [saveUserDataAndSheet 함수 내부의 3단계]
     // 3. 'sheets' 문서가 없으면 생성
@@ -99,8 +117,6 @@ const gotoLoginBth = document.getElementById('goto-login-bth');
 const signupBoxMsg = document.getElementById('signup-box-msg');
 
 const profileModal = document.getElementById("profileModal");
-
-let currentUser = null;
 
 // [수정] 로그인 상태 감지 리스너 추가 (새로고침 해도 로그인 유지)
 onAuthStateChanged(auth, (user) => {
@@ -280,18 +296,15 @@ signupBth.addEventListener('click', async ()=>{
         const cred = await createUserWithEmailAndPassword(auth, email, pw);
         const uid = cred.user.uid;
         await setDoc(doc(db,'users',uid), {
-            email, id, password: pw, nickname: nick, colorHex: randomHex(),
-            decorations: [], silver: 0, inventory: {}, status: 'alive',
-            achievements: {
-                deathCount: 0, expeditionCount: 0, interviewCount: 0,
-                objectCount: 0, creatureSubduedCount: 0, haveSilverCount: 0
-            },
+            email, id, nickname: nick, colorHex: randomHex(),
+            decorations: [], silver: 0, 
             createdAt: serverTimestamp()
         });
         await setDoc(doc(db, 'staff', uid), {
             uid, name: nick, status: 'alive', image: '', silver: 0, desc: '',
             updatedAt: serverTimestamp()
         });
+        await checkAndCreateSheet(uid, nick);
         signupBoxMsg.textContent = '가입 성공. 로그인 처리 중.';
     } catch(e) {
         signupBoxMsg.textContent = '가입 실패: ' + (e.message || e.code);
