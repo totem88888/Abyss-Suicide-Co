@@ -51,8 +51,34 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
 
-let currentUser = null;
+// DOM 요소 참조
+const header = document.getElementById('header');
+const navEl = document.getElementById('nav');
+const contentEl = document.getElementById('content');
+const logOutEl = document.getElementById('log-out');
+const nowTimeEl = document.getElementById('nowTime');
+const systemInfo = document.getElementById('systemInfo');
 
+const login = document.getElementById('login');
+const loginForm = document.getElementById('login-form');
+const loginId = document.getElementById('login-id');
+const loginPassword = document.getElementById('login-password');
+const loginBth = document.getElementById('login-bth');
+const gotoSignupBth = document.getElementById('goto-signup-bth');
+const loginBoxMsg = document.getElementById('login-box-msg');
+
+const signupForm = document.getElementById('signup-form');
+const signupId = document.getElementById('signup-id');
+const signupPassword = document.getElementById('signup-password');
+const signupEmail = document.getElementById('signup-email');
+const signupNickname = document.getElementById('signup-nickname');
+const signupBth = document.getElementById('signup-bth');
+const gotoLoginBth = document.getElementById('goto-login-bth');
+const signupBoxMsg = document.getElementById('signup-box-msg');
+
+const profileModal = document.getElementById("profileModal");
+
+let currentUser = null;
 
 // 인증 상태 변화 감지 및 currentUser 설정
 onAuthStateChanged(auth, user => {
@@ -90,33 +116,6 @@ async function checkAndCreateSheet(uid, nickname) {
 // [파일 최상단 또는 전역 변수 영역에 추가]
 const DEFAULT_MAP_IMAGE = "https://via.placeholder.com/320x200?text=No+Image";
 // 💡 참고: 'db', 'auth', 'currentUser', 'contentEl' 등은 기존처럼 전역에 정의되어 있어야 합니다.
-
-// DOM 요소 참조
-const header = document.getElementById('header');
-const navEl = document.getElementById('nav');
-const contentEl = document.getElementById('content');
-const logOutEl = document.getElementById('log-out');
-const nowTimeEl = document.getElementById('nowTime');
-const systemInfo = document.getElementById('systemInfo');
-
-const login = document.getElementById('login');
-const loginForm = document.getElementById('login-form');
-const loginId = document.getElementById('login-id');
-const loginPassword = document.getElementById('login-password');
-const loginBth = document.getElementById('login-bth');
-const gotoSignupBth = document.getElementById('goto-signup-bth');
-const loginBoxMsg = document.getElementById('login-box-msg');
-
-const signupForm = document.getElementById('signup-form');
-const signupId = document.getElementById('signup-id');
-const signupPassword = document.getElementById('signup-password');
-const signupEmail = document.getElementById('signup-email');
-const signupNickname = document.getElementById('signup-nickname');
-const signupBth = document.getElementById('signup-bth');
-const gotoLoginBth = document.getElementById('goto-login-bth');
-const signupBoxMsg = document.getElementById('signup-box-msg');
-
-const profileModal = document.getElementById("profileModal");
 
 // [수정] 로그인 상태 감지 리스너 추가 (새로고침 해도 로그인 유지)
 onAuthStateChanged(auth, (user) => {
