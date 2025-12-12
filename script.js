@@ -58,6 +58,7 @@ const contentEl = document.getElementById('content');
 const abyssFlowEl = document.getElementById('abyssFlow');
 const staffStatusEl = document.getElementById('staffStatus');
 const staffScheduleEl = document.getElementById('staffSchedule');
+const staffRankEl = document.getElementById('staffRank');
 
 const logOutEl = document.getElementById('log-out');
 const nowTimeEl = document.getElementById('nowTime');
@@ -467,7 +468,7 @@ async function renderMain(){
           }
       }
 
-        document.getElementById('staffRank').innerHTML = `
+       staffRankEl.innerHTML = `
             <div>은화: ${topSilverName} (${maxSilver}) | 생존왕: ${topSurvivorName} (${minDeath})</div>
         `;
         document.getElementById('todayEvent').textContent = '이벤트 데이터 없음'; // 임시
