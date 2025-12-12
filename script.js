@@ -1123,10 +1123,10 @@ function openCommentsPopup(mapId) {
 
 // 코드명 생성에 사용될 상수
 const DANGER_TYPES = {
-    '유광': 'U',
-    '해수': 'S',
-    '심해': 'D',
-    '파생': 'P' // 파생은 코드명 규칙이 다름
+    '유광': '유광',
+    '해수': '해수',
+    '심해': '심해',
+    '파생': '파생' // 파생은 코드명 규칙이 다름
 };
 const SHAPE_TYPES = ['P', 'F', 'O', 'C'];
 
@@ -1161,6 +1161,40 @@ function calculateAbyssStats(stats) {
 }
 
 /**
+ * 인라인 편집 필드 값 변경을 처리하고 데이터 객체에 반영합니다.
+ * @param {object} data - 전체 심연체 데이터 객체 (참조로 전달)
+ * @param {string} section - 'basic', 'stats', 'management', 'logs'
+ * @param {string} key - 변경할 필드 키 또는 인덱스 및 서브 키 (e.g., 'name', 'basicInfo[1].value')
+ * @param {*} value - 새로운 값
+ */
+function handleEditFieldChange(data, section, key, value) {
+    if (key.includes('[')) {
+        // 동적 배열 처리 (예: 'basicInfo[1].value')
+        const match = key.match(/(\w+)\[(\d+)\].(\w+)/);
+        if (match) {
+            const arrKey = match[1];
+            const index = parseInt(match[2]);
+            const subKey = match[3];
+            if (data[section] && data[section][arrKey] && data[section][arrKey][index]) {
+                 data[section][arrKey][index][subKey] = value;
+            }
+        }
+    } else if (section === 'basic' && (key === 'discoverySeq' || key === 'derivedSeq')) {
+        // 숫자 필드는 강제 변환
+        data[section][key] = Number(value);
+    } else if (section === 'basic' || section === 'stats') {
+         data[section][key] = value;
+    } 
+    
+    // 코드명 실시간 업데이트 (필요한 경우)
+    if (section === 'basic' && ['danger', 'shape', 'discoverySeq', 'derivedSeq'].includes(key)) {
+        const d = data.basic;
+        data.basic.code = generateAbyssCode(d.danger, d.shape, d.discoverySeq, d.derivedSeq);
+    }
+    // console.log('Data Updated:', section, key, value, data);
+}
+
+/**
  * 심연체 코드명 생성 로직
  * @param {string} danger 위험도 (유광, 해수 등)
  * @param {string} shape 외형 (P, F 등)
@@ -1172,7 +1206,11 @@ function generateAbyssCode(danger, shape, discoverySeq, derivedSeq) {
     const dangerCode = DANGER_TYPES[danger] || '';
     const shapeCode = shape || '';
     
-    if (danger === '파생' && derivedSeq) {
+    // discoverySeq, derivedSeq가 undefined일 경우 0으로 처리하여 오류 방지
+    discoverySeq = discoverySeq || 0;
+    derivedSeq = derivedSeq || 0;
+
+    if (danger === '파생' && derivedSeq > 0) {
         // (외형)(발견 순서)-(파생 순서)
         return `${shapeCode}${discoverySeq}-${derivedSeq}`;
     } else {
@@ -1181,242 +1219,107 @@ function generateAbyssCode(danger, shape, discoverySeq, derivedSeq) {
     }
 }
 
-// 이전에 정의된 contentEl 사용 가정
+// --- 유틸리티 및 헬퍼 함수 (추가) ---
 
-async function renderDex() {
-    contentEl.innerHTML = '<div class="card muted">도감 정보 로딩중...</div>';
-    const isManager = await isAdminUser();
+/**
+ * 공개 여부 퍼센티지를 계산하는 스텁 함수 (실제 로직 구현 필요)
+ */
+function calculateDisclosurePercentage(abyssData) {
+    // 임시 로직: 기본 정보의 공개 필드 갯수를 세어 임시 퍼센티지 반환
+    const totalFields = 8 + 4; // Basic (8) + Stats (4)
+    let publicCount = 0;
     
+    Object.values(abyssData.basic.isPublic || {}).forEach(isP => { if (isP) publicCount++; });
+    Object.values(abyssData.stats.isPublic || {}).forEach(isP => { if (isP) publicCount++; });
+    
+    // 관리 정보와 로그의 isPublic 필드도 계산해야 함. 여기서는 임시로 50% 반환
+    return Math.min(100, Math.floor((publicCount / totalFields) * 50) + 50);
+}
+
+/**
+ * DB에 데이터를 저장하는 스텁 함수 (실제 DB 연동 로직 구현 필요)
+ */
+async function saveAbyssData(id, data) {
+    showMessage('데이터를 Firebase에 저장 중...', 'info');
     try {
-        const snap = await getDocs(collection(db, 'abyssal_dex'));
-        const abyssList = [];
-        snap.forEach(d => abyssList.push({ id: d.id, ...d.data() }));
+        // 실제로는 data 객체의 유효성을 검사하고 Firestore에 updateDoc/setDoc을 호출해야 함.
+        await new Promise(resolve => setTimeout(resolve, 500)); // 0.5초 딜레이 시뮬레이션
+        await setDoc(doc(db, 'abyssal_dex', id), data, { merge: true });
+        showMessage('저장 완료!', 'success');
+    } catch (error) {
+        console.error("Error saving data:", error);
+        throw error;
+    }
+}
 
-        const totalCount = abyssList.length;
-        const completedCount = abyssList.filter(a => calculateDisclosurePercentage(a) === 100).length;
+/**
+ * 입력/선택 필드를 렌더링하거나, 일반 텍스트를 렌더링합니다.
+ */
+function renderInlineField(f, currentValue, isEditMode, section, index = null, subKey = null) {
+    // 배열 필드의 키 생성 (e.g., 'basicInfo[1].value')
+    const key = index !== null ? `${f.key}[${index}].${subKey}` : f.key;
 
-        let html = '';
-
-        // 0-1. 심연체 개방 정보 요약
-        html += `<div class="card" style="margin-bottom: 20px;">
-            <h2>도감 개방 현황: ${completedCount} / ${totalCount}</h2>
-            <p class="muted">총 ${totalCount}개의 심연체 중 ${completedCount}개의 정보가 완전히 개방되었습니다.</p>
-        </div>`;
-
-        // 0-2. 관리자: 새 심연체 추가 버튼
-        if (isManager) {
-            html += `<button class="btn" id="addNewAbyssBtn" style="margin-bottom: 20px;">
-                새 심연체 추가 +
-            </button>`;
+    if (isEditMode && !f.readOnly) {
+        if (f.type === 'select') {
+            const optionsHtml = f.options.map(opt => 
+                `<option value="${opt}" ${opt === currentValue ? 'selected' : ''}>${opt}</option>`
+            ).join('');
+            return `
+                <select data-key="${key}" data-section="${section}" class="inline-edit-field form-control-inline">
+                    ${optionsHtml}
+                </select>
+            `;
         }
-
-        html += '<div class="dex-grid" style="display: flex; flex-wrap: wrap; gap: 20px; justify-content: center;">';
         
-        abyssList.forEach(abyss => {
-            html += renderDexCard(abyss, isManager);
-        });
-        
-        html += '</div>';
-        
-        contentEl.innerHTML = html;
-
-        // 이벤트 리스너 부착
-        if (isManager) {
-            document.getElementById('addNewAbyssBtn').onclick = () => createNewAbyss();
+        const type = f.type || 'text';
+        if (type === 'textarea') {
+            return `
+                <textarea data-key="${key}" data-section="${section}" 
+                          class="inline-edit-field form-control-inline" rows="3" style="width:100%;">${currentValue}</textarea>
+            `;
         }
-        document.querySelectorAll('.dex-card').forEach(card => {
-            const abyssId = card.dataset.id;
-            card.onclick = () => renderDexDetail(abyssId);
-        });
-
-    } catch(e) {
-        console.error(e);
-        contentEl.innerHTML = '<div class="card error">도감 정보를 로드하는 데 실패했습니다.</div>';
+        
+        return `
+            <input type="${type}" data-key="${key}" data-section="${section}" 
+                   class="inline-edit-field form-control-inline" value="${currentValue}" 
+                   min="${f.min || ''}" style="width:100%;">
+        `;
     }
+    return currentValue; // 읽기 모드
 }
+
+// --- 섹션 렌더링 함수 ---
 
 /**
- * 심연체 카드 렌더링 (그리드 뷰)
+ * 기본 정보 섹션 렌더링 (인라인 편집 적용)
  */
-function renderDexCard(abyssData, isManager) {
-    const id = abyssData.id;
-    const name = abyssData.basic.name || '정보 없음';
-    const imgUrl = abyssData.basic.image || '';
-    const disclosurePercent = calculateDisclosurePercentage(abyssData);
-    
-    // 테두리 색상 계산 (0% > Red, 100% > Green)
-    const red = 255 - Math.floor(disclosurePercent * 2.55);
-    const green = Math.floor(disclosurePercent * 2.55);
-    const borderColor = `rgb(${red}, ${green}, 0)`;
-
-    // 1. 1:1 비율의 정사각형 사진이 한 줄에 4개씩 배치됨
-    return `
-        <div class="dex-card" data-id="${id}" 
-             style="width: calc(25% - 15px); aspect-ratio: 1 / 1; 
-                    background-image: url('${imgUrl}'); background-size: cover; 
-                    border: 5px solid ${borderColor}; position: relative; cursor: pointer;
-                    transition: all 0.3s;">
-            <div class="dex-overlay" 
-                 style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-                        background: rgba(0, 0, 0, 0.6); opacity: 0; transition: opacity 0.3s;
-                        display: flex; flex-direction: column; justify-content: center; align-items: center;
-                        color: white;">
-                <strong style="font-size: 1.2em; text-align: center;">${name}</strong>
-                <span style="margin-top: 5px;">개방률: ${disclosurePercent}%</span>
-            </div>
-        </div>
-        <style>
-            .dex-card[data-id="${id}"]:hover .dex-overlay { opacity: 1; background: rgba(var(--accent-rgb), 0.7); }
-            .dex-card[data-id="${id}"]:hover { transform: scale(1.05); }
-        </style>
-    `;
-}
-
-/**
- * 새 심연체 생성 (관리자)
- */
-async function createNewAbyss() {
-    const newDocRef = doc(collection(db, 'abyssal_dex'));
-    const newId = newDocRef.id;
-
-    // 템플릿 데이터 (기본적으로 모두 비공개)
-    const initialData = {
-        basic: {
-            code: 'N-A0',
-            name: 'New Abyssal Entity',
-            danger: '유광',
-            shape: 'P',
-            discoverySeq: 0,
-            image: '',
-            majorDamage: '',
-            deathChance: '',
-            sanityChance: '',
-            isPublic: {
-                name: false, code: false, danger: false, shape: false, discoverySeq: false,
-                majorDamage: false, deathChance: false, sanityChance: false
-            }
-        },
-        stats: { strength: 1, health: 1, agility: 1, mind: 1, isPublic: {} },
-        management: {
-            basicInfo: [{ label: '기본 정보', value: '', isPublic: false }],
-            collectionInfo: [{ label: '채취 정보', value: '', isPublic: false }],
-            otherInfo: [{ label: '기타 정보', value: '', isPublic: false }]
-        },
-        logs: [
-            { title: '기본 일지', content: '기록 시작', createdAt: serverTimestamp(), isPublic: true },
-        ],
-        createdAt: serverTimestamp(),
-    };
-    
-    try {
-        await setDoc(newDocRef, initialData);
-        showMessage('새 심연체 추가 완료. 편집 모드로 이동합니다.', 'info');
-        renderDexDetail(newId, true); // 생성 후 바로 편집 모드로 이동
-    } catch (e) {
-        console.error(e);
-        showMessage('새 심연체 추가 실패', 'error');
-    }
-}
-
-/**
- * 심연체 상세 보기/편집 렌더링
- * @param {string} id 심연체 ID
- * @param {boolean} [isEditMode=false] 편집 모드로 시작할지 여부
- */
-async function renderDexDetail(id, isEditMode = false) {
-    const abyssDoc = await getDoc(doc(db, 'abyssal_dex', id));
-    if (!abyssDoc.exists()) {
-        showMessage('존재하지 않는 심연체입니다.', 'error');
-        renderDex();
-        return;
-    }
-    const data = abyssDoc.data();
-    const isManager = await isAdminUser();
-    
-    // 코드명 자동 업데이트
-    const code = generateAbyssCode(data.basic.danger, data.basic.shape, data.basic.discoverySeq, data.basic.derivedSeq);
-    data.basic.code = code;
-
-    const calculatedStats = calculateAbyssStats(data.stats);
-    const disclosurePercent = calculateDisclosurePercentage(data);
-
-    let html = `
-        <div class="dex-detail-wrap card">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-                <button class="btn link" id="backToDexList">← 도감 목록으로</button>
-                <div style="display: flex; gap: 10px;">
-                    <div style="font-size: 1.2em; color: ${disclosurePercent === 100 ? 'var(--green)' : 'var(--accent)'};">
-                        개방률: ${disclosurePercent}%
-                    </div>
-                    ${isManager ? `<button class="btn ${isEditMode ? 'warning' : ''}" id="toggleEditMode">
-                        ${isEditMode ? '편집 종료' : '편집'}
-                    </button>` : ''}
-                </div>
-            </div>
-
-            <div class="dex-sections-container">
-                <div class="dex-section" id="basicInfoSection"></div>
-                <div class="dex-section" id="statsSection"></div>
-                <div class="dex-section" id="managementSection"></div>
-                <div class="dex-section" id="logsSection"></div>
-            </div>
-
-            <hr style="margin: 30px 0;">
-
-            <div class="dex-comments-area" data-id="${id}">
-                ${renderCommentArea(id, data.comments || [])}
-            </div>
-        </div>
-    `;
-    
-    contentEl.innerHTML = html;
-
-    // 각 섹션 렌더링
-    renderBasicInfoSection(document.getElementById('basicInfoSection'), data, isEditMode, isManager);
-    renderStatsSection(document.getElementById('statsSection'), data, calculatedStats, isEditMode, isManager);
-    renderManagementSection(document.getElementById('managementSection'), data, isEditMode, isManager);
-    renderLogsSection(document.getElementById('logsSection'), data, isEditMode, isManager);
-
-    // 이벤트 리스너 부착
-    document.getElementById('backToDexList').onclick = renderDex;
-    if (isManager) {
-        document.getElementById('toggleEditMode').onclick = () => {
-            if (isEditMode) {
-                // 편집 종료 시 저장 로직
-                saveAbyssData(id, data).then(() => {
-                    renderDexDetail(id, false);
-                }).catch(() => {
-                    renderDexDetail(id, true); // 저장 실패 시 편집 모드 유지
-                });
-            } else {
-                renderDexDetail(id, true);
-            }
-        };
-    }
-    
-    // 댓글 이벤트 리스너 (9, 10)
-    attachCommentEventListeners(id);
-}
-
 function renderBasicInfoSection(el, data, isEditMode, isManager) {
     const d = data.basic;
+    const section = 'basic';
     
-    // 3.1: 1:1 정사각형 사진
+    // 3.1: 1:1 정사각형 사진 인라인 편집
     const imgHtml = `
         <div style="width: 100%; aspect-ratio: 1 / 1; 
                     background-image: url('${d.image || ''}'); background-size: cover; 
                     background-position: center; border-radius: 8px; margin-bottom: 15px;">
-        ${isEditMode ? `<input type="text" id="editImageURL" placeholder="이미지 URL" value="${d.image || ''}" style="width: 100%; margin-top: 105%;">` : ''}
         </div>
+        ${isEditMode ? `
+            <input type="text" id="editImageURL" placeholder="이미지 URL" value="${d.image || ''}" style="width: 100%; margin-top: 5px;" 
+                   data-key="image" data-section="${section}" class="inline-edit-field form-control-inline">
+            <input type="file" id="editImageFile" accept="image/*" style="width: 100%; margin-top: 5px;">
+        ` : ''}
     `;
 
     // 3.1: 기본 정보 표
+    const discoveryKey = d.danger === '파생' ? 'derivedSeq' : 'discoverySeq';
+    const discoveryLabel = d.danger === '파생' ? '파생 순서' : '발견 순서';
+    
     const fields = [
-        { label: '코드명', key: 'code', type: 'text', readOnly: true }, // 3.1. 수정 불가
+        { label: '코드명', key: 'code', type: 'text', readOnly: true },
         { label: '명칭', key: 'name', type: 'text' },
-        { label: '위험도', key: 'danger', type: 'select', options: Object.keys(DANGER_TYPES) }, // 3.1.1
-        { label: '외형', key: 'shape', type: 'select', options: SHAPE_TYPES }, // 3.1.2
-        { label: d.danger === '파생' ? '파생 순서' : '발견 순서', key: d.danger === '파생' ? 'derivedSeq' : 'discoverySeq', type: 'number', min: 1 }, // 3.1.1
+        { label: '위험도', key: 'danger', type: 'select', options: Object.keys(DANGER_TYPES) },
+        { label: '외형', key: 'shape', type: 'select', options: SHAPE_TYPES },
+        { label: discoveryLabel, key: discoveryKey, type: 'number', min: 1 },
         { label: '주요 피해', key: 'majorDamage', type: 'text' },
         { label: '사망 가능성', key: 'deathChance', type: 'text' },
         { label: '광기 가능성', key: 'sanityChance', type: 'text' }
@@ -1424,49 +1327,313 @@ function renderBasicInfoSection(el, data, isEditMode, isManager) {
 
     let tableHtml = '<table class="info-table" style="width: 100%;">';
     fields.forEach(f => {
-        const value = f.readOnly ? d[f.key] : (d[f.key] || '');
+        const value = d[f.key] || (f.type === 'number' ? 0 : '');
         const isPublic = d.isPublic[f.key] !== undefined ? d.isPublic[f.key] : false;
-        const displayValue = isPublic ? value : '<span class="muted">(비공개)</span>';
         const masked = !isPublic && !isManager;
 
         tableHtml += `
             <tr class="${masked ? 'masked-row' : ''}">
                 <td style="width: 30%; font-weight: bold;">
-                    ${isManager && !f.readOnly ? `<input type="checkbox" data-key="${f.key}" ${isPublic ? 'checked' : ''}>` : ''}
+                    ${isManager && isEditMode && !f.readOnly ? `<input type="checkbox" data-key="${f.key}" data-section="${section}-isPublic" ${isPublic ? 'checked' : ''} style="margin-right: 5px;">` : ''}
                     ${f.label}
                 </td>
                 <td>
-                    ${masked ? '<div class="masked-data"></div>' : (isEditMode && !f.readOnly ? renderInput(f, value, d.id) : displayValue)}
+                    ${masked ? '<div class="masked-data"></div>' : renderInlineField(f, value, isEditMode, section)}
                 </td>
             </tr>
         `;
     });
     tableHtml += '</table>';
 
-    // 최종 렌더링 (3. 클릭 시 나오는 상세 화면 구조)
     el.innerHTML = `
         <h3>기본 정보</h3>
         <div style="display: flex; gap: 20px;">
-            <div style="flex: 0 0 150px;">${imgHtml}</div>
+            <div style="flex: 0 0 200px; max-width: 200px;">${imgHtml}</div>
             <div style="flex: 1;">${tableHtml}</div>
         </div>
     `;
     
-    // 3.1.1, 3.1.2: 편집 중 값 변경 시 데이터 반영 및 코드 재생성 (복잡하여 생략하고, 저장 시에만 처리하는 것이 안정적임)
-    // 7. 체크박스 이벤트 리스너 부착
-    if (isManager && isEditMode) {
+    // **인라인 편집 이벤트 리스너 부착**
+    if (isEditMode) {
+        el.querySelectorAll('.inline-edit-field').forEach(field => {
+            field.onchange = (e) => {
+                handleEditFieldChange(data, e.target.dataset.section, e.target.dataset.key, e.target.value);
+                // 실시간 코드명 및 필드 레이블 반영을 위해 섹션만 리렌더링
+                renderBasicInfoSection(el, data, isEditMode, isManager);
+            };
+        });
+        
+        // 공개 체크박스 이벤트 리스너 부착
         el.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
             checkbox.onchange = (e) => {
                 const key = e.target.dataset.key;
                 data.basic.isPublic[key] = e.target.checked;
             };
         });
-        // 입력 필드 변경 감지 (저장 로직에서 사용)
-        // ... (input change listeners to update 'data' object)
     }
 }
-// ... (renderStatsSection, renderManagementSection, renderLogsSection)
-// ... (saveAbyssData, calculateDisclosurePercentage 함수 구현 필요)
+
+/**
+ * 심연체 정보 섹션 렌더링 (스탯 및 계산된 능력치)
+ */
+function renderStatsSection(el, data, calculatedStats, isEditMode, isManager) {
+    const d = data.stats;
+    const section = 'stats';
+    const statsKeys = ['strength', 'health', 'agility', 'mind'];
+    
+    let statTable = '<table class="info-table" style="width: 100%;">';
+    statsKeys.forEach(key => {
+        const label = { strength: '근력', health: '건강', agility: '민첩', mind: '정신력' }[key];
+        const value = d[key] || 0;
+        const isPublic = d.isPublic[key] !== undefined ? d.isPublic[key] : false;
+        const masked = !isPublic && !isManager;
+
+        statTable += `
+            <tr class="${masked ? 'masked-row' : ''}">
+                <td style="width: 50%; font-weight: bold;">
+                    ${isManager && isEditMode ? `<input type="checkbox" data-key="${key}" data-section="${section}-isPublic" ${isPublic ? 'checked' : ''} style="margin-right: 5px;">` : ''}
+                    ${label}
+                </td>
+                <td>
+                    ${masked ? '<div class="masked-data"></div>' : renderInlineField({key, type: 'number', min: 1}, value, isEditMode, section)}
+                </td>
+            </tr>
+        `;
+    });
+    statTable += '</table>';
+    
+    el.innerHTML = `
+        <h3>심연체 정보 (스테이터스)</h3>
+        <div style="display: flex; gap: 20px;">
+            <div style="flex: 1;">
+                <h4>스테이터스</h4>
+                ${statTable}
+                <canvas id="radarChart-${data.id}" width="200" height="200" style="margin-top: 15px;"></canvas>
+            </div>
+            <div style="flex: 1;">
+                <h4>계산된 능력치</h4>
+                <table class="info-table" style="width: 100%;">
+                    <tr><td style="width: 50%;">최대 체력</td><td>${calculatedStats.maxHp}</td></tr>
+                    <tr><td>최대 정신력</td><td>${calculatedStats.maxMp}</td></tr>
+                    <tr><td>물리 공격력</td><td>${calculatedStats.physicalAttack}</td></tr>
+                    <tr><td>정신 공격력</td><td>${calculatedStats.mentalAttack}</td></tr>
+                </table>
+            </div>
+        </div>
+    `;
+
+    // **인라인 편집 이벤트 리스너 부착**
+    if (isEditMode) {
+        el.querySelectorAll('.inline-edit-field').forEach(field => {
+            field.onchange = (e) => {
+                // 스탯 변경 시 계산된 값과 그래프까지 반영하기 위해 전체 상세 화면을 다시 렌더링합니다.
+                handleEditFieldChange(data, e.target.dataset.section, e.target.dataset.key, e.target.value);
+                renderDexDetail(data.id, true); 
+            };
+        });
+        
+        // 공개 체크박스 이벤트 리스너 부착
+        el.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+            checkbox.onchange = (e) => {
+                const key = e.target.dataset.key;
+                data.stats.isPublic[key] = e.target.checked;
+            };
+        });
+    }
+
+    // 그래프 그리기 (Chart.js 등의 라이브러리가 필요함)
+    // drawRadarChart(document.getElementById(`radarChart-${data.id}`), d); 
+}
+
+/**
+ * 관리 정보 섹션 렌더링 (동적 추가/삭제, 인라인 편집 적용)
+ */
+function renderManagementSection(el, data, isEditMode, isManager) {
+    const d = data.management;
+    const section = 'management';
+    
+    const renderArrayInfo = (key, title, labelBase) => {
+        let html = `<h4>${title}</h4><table class="info-table" style="width: 100%;">`;
+        
+        d[key].forEach((item, index) => {
+            const isPublic = item.isPublic !== undefined ? item.isPublic : false;
+            const masked = !isPublic && !isManager;
+            const itemLabel = index === 0 && key === 'basicInfo' ? '기본 정보' : `${labelBase} (${index + 1})`;
+
+            html += `
+                <tr class="${masked ? 'masked-row' : ''}">
+                    <td style="width: 30%; font-weight: bold; vertical-align: top; padding-top: 8px;">
+                        ${isManager && isEditMode ? `<input type="checkbox" data-key="${key}[${index}].isPublic" data-section="${section}" ${isPublic ? 'checked' : ''} style="margin-right: 5px;">` : ''}
+                        ${itemLabel}
+                        ${isManager && isEditMode && index > 0 ? `<button class="btn-xs danger" data-action="delete" data-key="${key}" data-index="${index}" style="margin-left: 5px;">-</button>` : ''}
+                    </td>
+                    <td>
+                        ${masked ? '<div class="masked-data"></div>' : renderInlineField({key, type: 'textarea', readOnly: false}, item.value, isEditMode, section, index, 'value')}
+                    </td>
+                </tr>
+            `;
+        });
+        
+        if (isManager && isEditMode) {
+            html += `<tr><td colspan="2"><button class="btn-xs primary" data-action="add" data-key="${key}">+ ${title} 추가</button></td></tr>`;
+        }
+        
+        html += '</table>';
+        return html;
+    };
+
+    el.innerHTML = `
+        <h3>관리 정보</h3>
+        ${renderArrayInfo('basicInfo', '관리 정보', '추가 정보')}
+        ${renderArrayInfo('collectionInfo', '채취 정보', '채취 정보')}
+        ${renderArrayInfo('otherInfo', '기타 정보', '기타 정보')}
+    `;
+
+    if (isEditMode) {
+        // 인라인 편집 이벤트 리스너
+        el.querySelectorAll('.inline-edit-field').forEach(field => {
+            field.onchange = (e) => {
+                handleEditFieldChange(data, e.target.dataset.section, e.target.dataset.key, e.target.value);
+            };
+        });
+        
+        // 체크박스 이벤트 리스너
+        el.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+            checkbox.onchange = (e) => {
+                handleEditFieldChange(data, e.target.dataset.section, e.target.dataset.key, e.target.checked);
+            };
+        });
+
+        // 동적 배열 관리 버튼 이벤트 리스너
+        el.querySelectorAll('button[data-action]').forEach(button => {
+            button.onclick = (e) => {
+                const action = e.target.dataset.action;
+                const key = e.target.dataset.key;
+                const index = parseInt(e.target.dataset.index);
+
+                if (action === 'add') {
+                    if (data.management[key].length < 10) { // 임시 최대 제한
+                        data.management[key].push({ label: '새 정보', value: '', isPublic: false });
+                    } else {
+                        showMessage('더 이상 정보를 추가할 수 없습니다.', 'warning');
+                    }
+                } else if (action === 'delete') {
+                    if (key === 'basicInfo' && index === 0) {
+                        showMessage('기본 관리 정보는 삭제할 수 없습니다.', 'error');
+                        return;
+                    }
+                    data.management[key].splice(index, 1);
+                }
+                // 변경 후 섹션 리렌더링
+                renderManagementSection(el, data, isEditMode, isManager);
+            };
+        });
+    }
+}
+
+/**
+ * 연구 일지 섹션 렌더링
+ */
+function renderLogsSection(el, data, isEditMode, isManager) {
+    const d = data.logs || [];
+    const section = 'logs';
+    
+    let logsHtml = d.map((log, index) => {
+        const logLabel = index === 0 ? '기본 일지' : `연구 일지 (${index})`;
+        const isPublic = log.isPublic || false; // 7. 기본 일지는 항상 공개
+        const masked = !isPublic && !isManager;
+
+        return `
+            <div class="card log-entry ${masked ? 'masked-log' : ''}" style="margin-bottom: 15px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h4 style="margin: 0;">${logLabel}</h4>
+                    <span class="muted" style="font-size: 0.9em;">${log.createdAt ? fmtTime(log.createdAt) : '날짜 없음'}</span>
+                </div>
+                
+                ${isManager && isEditMode && index > 0 ? 
+                    `<button class="btn-xs danger" data-action="delete" data-index="${index}" style="float: right;">- 삭제</button>` : ''}
+                
+                <p style="margin-top: 10px;">
+                    <strong>제목:</strong> 
+                    ${masked ? '<div class="masked-data"></div>' : renderInlineField({key:'logs', type:'text'}, log.title, isEditMode, section, index, 'title')}
+                </p>
+                <p>
+                    <strong>내용:</strong>
+                    ${masked ? '<div class="masked-data" style="height: 50px;"></div>' : renderInlineField({key:'logs', type:'textarea'}, log.content, isEditMode, section, index, 'content')}
+                </p>
+            </div>
+        `;
+    }).join('');
+
+    el.innerHTML = `
+        <h3>연구 일지</h3>
+        <div class="log-list">${logsHtml}</div>
+        ${isManager && isEditMode && d.length < 4 ? 
+            `<button class="btn primary" id="addLogBtn" style="margin-top: 15px;">+ 연구 일지 추가</button>` : ''}
+    `;
+
+    if (isEditMode) {
+        // 인라인 편집 이벤트 리스너
+        el.querySelectorAll('.inline-edit-field').forEach(field => {
+            field.onchange = (e) => {
+                handleEditFieldChange(data, e.target.dataset.section, e.target.dataset.key, e.target.value);
+            };
+        });
+
+        // 일지 추가 버튼
+        document.getElementById('addLogBtn')?.addEventListener('click', () => {
+            if (d.length < 4) {
+                d.push({ title: '새 일지', content: '내용 없음', createdAt: serverTimestamp(), isPublic: false });
+                renderLogsSection(el, data, isEditMode, isManager);
+            }
+        });
+
+        // 일지 삭제 버튼
+        el.querySelectorAll('button[data-action="delete"]').forEach(button => {
+            button.onclick = (e) => {
+                const index = parseInt(e.target.dataset.index);
+                if (index > 0) { // 기본 일지는 삭제 불가 (index 0)
+                    d.splice(index, 1);
+                    renderLogsSection(el, data, isEditMode, isManager);
+                }
+            };
+        });
+    }
+}
+
+
+// --- 기존의 renderDex, createNewAbyss, renderDexDetail 함수는 위에 제공된 코드를 그대로 사용합니다. ---
+// (중복된 renderBasicInfoSection 함수는 삭제해야 합니다.)
+
+// --- 댓글 관련 함수 (fmtTime, postDexComment, openCommentsPopup) 스텁 ---
+
+/**
+ * Firebase Timestamp를 포맷하는 스텁 함수
+ */
+function fmtTime(timestamp) {
+    if (!timestamp) return '방금';
+    // 실제로는 timestamp.toDate().toLocaleString() 등을 사용해야 함.
+    return '2025.12.12'; 
+}
+
+/**
+ * 댓글을 DB에 포스팅하는 스텁 함수
+ */
+async function postDexComment(abyssId, text) {
+    console.log(`[STUB] 댓글 등록: ${abyssId}, ${text}`);
+    // 실제로는 Firestore에 addDoc(collection(db, 'abyssal_dex', abyssId, 'comments'), { ... }) 호출
+    await new Promise(resolve => setTimeout(resolve, 300));
+}
+
+/**
+ * 전체 댓글 팝업을 여는 스텁 함수
+ */
+function openCommentsPopup(id, collectionName) {
+    alert(`[STUB] ${collectionName}/${id}의 전체 댓글을 팝업으로 표시합니다.`);
+}
+
+// --- 중복된 함수를 제거하고 나머지 코드를 이어서 붙여넣으면 됩니다. ---
+// **주의: 중복된 `renderBasicInfoSection`는 반드시 제거해야 합니다.**
 
 /**
  * 댓글 영역 렌더링 (9. 인라인 댓글, 미리보기 3개)
