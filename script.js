@@ -55,6 +55,7 @@ const storage = getStorage(app);
 const header = document.getElementById('header');
 const navEl = document.getElementById('nav');
 const contentEl = document.getElementById('content');
+const abyssFlowEl = document.getElementById('abyssFlow');
 const logOutEl = document.getElementById('log-out');
 const nowTimeEl = document.getElementById('nowTime');
 const systemInfo = document.getElementById('systemInfo');
@@ -77,6 +78,9 @@ const gotoLoginBth = document.getElementById('goto-login-bth');
 const signupBoxMsg = document.getElementById('signup-box-msg');
 
 const profileModal = document.getElementById("profileModal");
+
+const DEFAULT_MAP_IMAGE = './images/default-map.png';
+const DEFAULT_PROFILE_IMAGE = './images/default-profile.png';
 
 let currentUser = null;
 
@@ -113,8 +117,6 @@ async function checkAndCreateSheet(uid, nickname) {
         console.log(`Default sheet created for user: ${uid}`);
     }
 
-// [파일 최상단 또는 전역 변수 영역에 추가]
-const DEFAULT_MAP_IMAGE = "https://via.placeholder.com/320x200?text=No+Image";
 // 💡 참고: 'db', 'auth', 'currentUser', 'contentEl' 등은 기존처럼 전역에 정의되어 있어야 합니다.
 
 // [수정] 로그인 상태 감지 리스너 추가 (새로고침 해도 로그인 유지)
@@ -401,18 +403,18 @@ async function renderMain(){
         const cfgSnap = await getDoc(doc(db, 'system', 'abyssConfig'));
 
         if (flowText && savedDate === todayKey) {
-            document.getElementById('abyssFlow').textContent = '오늘 심연은 ' + flowText + '습니다.';
+            abyssFlowEl.textContent = '오늘 심연은 ' + flowText + '습니다.';
         } else if (cfgSnap.exists()) {
             const flows = cfgSnap.data().flows || [];
             if (flows.length > 0) {
                 const picked = pickByWeight(flows);
                 await setDoc(todayRef, { flowText: picked, dateKey: todayKey, updatedAt: serverTimestamp() });
-                document.getElementById('abyssFlow').textContent = '오늘 심연의 기류는 ' + picked + ' 입니다.';
+                abyssFlowEl.textContent = '오늘 심연의 기류는 ' + picked + ' 입니다.';
             } else {
-                document.getElementById('abyssFlow').textContent = '기류 데이터 없음';
+                abyssFlowEl.textContent = '기류 데이터 없음';
             }
         } else {
-            document.getElementById('abyssFlow').textContent = '기류 설정 없음';
+            abyssFlowEl.textContent = '기류 설정 없음';
         }
 
         const usersSnap = await getDocs(collection(db, 'users'));
@@ -1699,7 +1701,7 @@ function renderDexCard(abyssData, isManager) {
     // 사진 공개 여부
     const isImagePublic = basic.isPublic?.image || false;
     const showImage = isImagePublic || isManager;
-    const imgUrl = showImage ? (basic.image || '') : ''; // 비공개 시 URL을 비웁니다.
+    const imgUrl = showImage ? (basic.image || DEFAULT_PROFILE_IMAGE) : ''; // 비공개 시 URL을 비웁니다.
 
     // 코드명/이름 공개 여부
     const isCodePublic = basic.isPublic?.code || false;
