@@ -51,6 +51,14 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
 
+// 인증 상태 변화 감지 및 currentUser 설정
+onAuthStateChanged(auth, user => {
+    currentUser = user;
+    // user가 변경되면 화면을 새로고침하거나 필요한 UI를 업데이트하는 로직 추가 가능
+    // 예: renderStaff(); 
+});
+
+
 // DOM 요소 참조
 const header = document.getElementById('header');
 const navEl = document.getElementById('nav');
@@ -98,9 +106,17 @@ onAuthStateChanged(auth, (user) => {
 
 // --- 유틸리티 함수 ---
 
-async function uploadStaffImage(file, uid) {
-    const storageRef = ref(storage, `staff/${uid}_${Date.now()}.png`);
+/**
+ * 직원 프로필 이미지를 Storage에 업로드하고 URL을 반환합니다.
+ * @param {File} file 업로드할 파일 객체
+ * @param {string} staffId 직원 문서 ID
+ * @returns {Promise<string>} 다운로드 가능한 이미지 URL
+ */
+async function uploadStaffImage(file, staffId) {
+    // 직원 이미지는 staff/[ID]/profile.png 등으로 저장하는 것이 좋습니다.
+    const storageRef = ref(storage, `staff/${staffId}_${Date.now()}.png`);
     await uploadBytes(storageRef, file);
+    showMessage('이미지 업로드 완료', 'info');
     return await getDownloadURL(storageRef);
 }
 
@@ -129,14 +145,23 @@ function pickByWeight(list) {
     return list[list.length - 1].text;
 }
 
-function fmtTime(ts) {
-    if (!ts) return '';
-    try {
-        const d = ts.toDate ? ts.toDate() : new Date(ts);
-        return d.toLocaleString();
-    } catch(e) {
-        return String(ts);
-    }
+/**
+ * Firestore Timestamp를 상대적인 시간 문자열로 포맷합니다.
+ * @param {object} timestamp Firestore Timestamp 객체
+ * @returns {string} 포맷된 시간 문자열
+ */
+function fmtTime(timestamp) {
+    if (!timestamp || !timestamp.seconds) return '';
+    const date = timestamp.toDate();
+    const now = new Date();
+    const diffSeconds = Math.floor((now - date) / 1000);
+
+    if (diffSeconds < 60) return '방금 전';
+    if (diffSeconds < 3600) return `${Math.floor(diffSeconds / 60)}분 전`;
+    if (diffSeconds < 86400) return `${Math.floor(diffSeconds / 3600)}시간 전`;
+    
+    // 하루 이상 차이날 경우 YYYY.MM.DD 형식으로 표시
+    return date.toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '.').replace(/\.$/, '');
 }
 
 // --- UI 제어 함수 ---
@@ -297,10 +322,7 @@ async function loadTab(tabId){
     switch(tabId) {
         case 'main': await renderMain(); break;
         case 'staff': await renderStaff(); break;
-        case 'me': 
-            // await renderMe(); // renderMe 함수 없음, 임시 처리
-            contentEl.innerHTML = '<div class="card">내 정보 기능 준비중</div>';
-            break;
+        case 'me': await renderMe(); break;
         case 'map': await renderMap(); break;
         case 'dex': await renderDex(); break; // [수정] renderDex 호출
         default: contentEl.innerHTML = '<div class="card">알 수 없는 탭</div>';
@@ -1235,17 +1257,22 @@ function calculateDisclosurePercentage(abyssData) {
 }
 
 /**
- * DB에 데이터를 저장하는 스텁 함수 (실제 DB 연동 로직 구현 필요)
+ * DB에 데이터를 저장하는 함수 (Firestore setDoc 사용)
+ * @param {string} id - 심연체 ID
+ * @param {object} data - 저장할 심연체 데이터 객체
  */
 async function saveAbyssData(id, data) {
     showMessage('데이터를 Firebase에 저장 중...', 'info');
     try {
-        // 실제로는 data 객체의 유효성을 검사하고 Firestore에 updateDoc/setDoc을 호출해야 함.
-        await new Promise(resolve => setTimeout(resolve, 500)); // 0.5초 딜레이 시뮬레이션
+        // data 객체의 유효성을 검사하고 Firestore에 setDoc을 호출 (merge: true로 부분 업데이트 가능)
+        // save 전에 코드명, 계산된 스탯 등을 최종 업데이트하는 것이 좋습니다.
+        data.basic.code = generateAbyssCode(data.basic.danger, data.basic.shape, data.basic.discoverySeq, data.basic.derivedSeq);
+        
         await setDoc(doc(db, 'abyssal_dex', id), data, { merge: true });
         showMessage('저장 완료!', 'success');
     } catch (error) {
         console.error("Error saving data:", error);
+        showMessage('저장 중 오류 발생', 'error');
         throw error;
     }
 }
@@ -1501,52 +1528,89 @@ function renderDexCard(abyssData, isManager) {
  * 새 심연체 생성 (관리자)
  */
 async function createNewAbyss() {
-    const newDocRef = doc(collection(db, 'abyssal_dex'));
+    showMessage('새 심연체 순서를 계산하고 있습니다...', 'info');
+
+    const abyssCollectionRef = collection(db, 'abyssal_dex');
+    const newDocRef = doc(abyssCollectionRef);
     const newId = newDocRef.id;
 
-    // 템플릿 데이터 (기본적으로 모두 비공개)
+    let nextDiscoverySeq = 1;
+
+    try {
+        // 1. 모든 심연체 데이터 조회
+        const snap = await getDocs(abyssCollectionRef);
+        let maxSeq = 0;
+        
+        snap.forEach(d => {
+            const data = d.data();
+            const danger = data.basic?.danger;
+            const seq = data.basic?.discoverySeq || 0;
+            
+            // 2. '파생'이 아닌 심연체의 discoverySeq만 확인하여 최대값을 찾음
+            if (danger !== '파생' && seq > maxSeq) {
+                maxSeq = seq;
+            }
+        });
+        
+        // 3. 다음 순서는 최대값 + 1
+        nextDiscoverySeq = maxSeq + 1;
+        
+    } catch(e) {
+        console.error("최대 discoverySeq 조회 실패:", e);
+        // 조회 실패 시 기본값 1 사용
+        showMessage('순서 조회 중 오류 발생. 기본값 1을 사용합니다.', 'warning');
+    }
+
+    // 템플릿 데이터 (기본값 설정)
     const initialData = {
-        id: newId, // 임시 ID 추가
+        id: newId, 
         basic: {
-            code: '유광-P1', // 초기값 설정
-            name: '새 심연체',
-            danger: '유광',
+            // 조회된 nextDiscoverySeq 적용
+            discoverySeq: nextDiscoverySeq, 
+            danger: '유광', // 기본 위험도
             shape: 'P',
-            discoverySeq: 1, // 겹치지 않도록 실제 저장 시 유효성 검사 필요
+            name: `새 심연체 ${nextDiscoverySeq}`, // 이름도 순서에 맞춰 초기 설정
+            derivedSeq: 0, 
             image: '',
             majorDamage: '',
             deathChance: '',
             sanityChance: '',
-            // 6. 공개 여부 설정 (기본적으로 모두 false)
             isPublic: {
                 name: false, code: false, danger: false, shape: false, discoverySeq: false,
-                majorDamage: false, deathChance: false, sanityChance: false
+                majorDamage: false, deathChance: false, sanityChance: false, image: false
             }
         },
-        stats: { strength: 1, health: 1, agility: 1, mind: 1, 
-                 // 6. 스탯 공개 여부
-                 isPublic: { strength: false, health: false, agility: false, mind: false } },
+        stats: { 
+            strength: 1, health: 1, agility: 1, mind: 1, 
+            isPublic: { strength: false, health: false, agility: false, mind: false } 
+        },
         management: {
-            // 3.4.1. 관리 정보는 배열로 시작
             basicInfo: [{ label: '기본 정보', value: '초기 관리 정보', isPublic: false }],
             collectionInfo: [{ label: '채취 정보', value: '초기 채취 정보', isPublic: false }],
             otherInfo: [{ label: '기타 정보', value: '초기 기타 정보', isPublic: false }]
         },
-        // 4. 연구 일지 (첫 번째는 조건 없이 공개: 7)
         logs: [
             { title: '기본 일지', content: '기록 시작', createdAt: serverTimestamp(), isPublic: true },
         ],
+        comments: [],
         createdAt: serverTimestamp(),
-        // 이 시점에는 DB에 저장하지 않고, 바로 상세 페이지의 편집 모드로 이동하여 사용자가 내용을 채우게 합니다.
     };
+    
+    // 코드명 최종 계산
+    initialData.basic.code = generateAbyssCode(
+        initialData.basic.danger, 
+        initialData.basic.shape, 
+        initialData.basic.discoverySeq, 
+        initialData.basic.derivedSeq
+    );
 
-    // DB에 빈 데이터로 먼저 저장 (UID 확보)
+    // 4. DB에 데이터 저장 및 상세 편집 모드로 이동
     try {
         await setDoc(newDocRef, initialData);
-        showMessage('새 심연체 템플릿 추가 완료. 내용을 편집하세요.', 'info');
-        renderDexDetail(newId, true); // 생성 후 바로 편집 모드로 이동
+        showMessage(`새 심연체 [${initialData.basic.code}] 템플릿 추가 완료. 내용을 편집하세요.`, 'info');
+        renderDexDetail(newId, true, initialData); 
     } catch (e) {
-        console.error(e);
+        console.error("새 심연체 추가 실패:", e);
         showMessage('새 심연체 추가 실패', 'error');
     }
 }
@@ -1555,18 +1619,28 @@ async function createNewAbyss() {
  * 심연체 상세 보기/편집 렌더링
  * @param {string} id 심연체 ID
  * @param {boolean} [isEditMode=false] 편집 모드로 시작할지 여부
+ * @param {object} [preloadedData=null] 미리 로드된 데이터 (선택 사항)
  */
-async function renderDexDetail(id, isEditMode = false) {
-    const abyssDoc = await getDoc(doc(db, 'abyssal_dex', id));
-    if (!abyssDoc.exists()) {
-        showMessage('존재하지 않는 심연체입니다.', 'error');
-        renderDex();
-        return;
+async function renderDexDetail(id, isEditMode = false, preloadedData = null) {
+    let data;
+    
+    if (preloadedData) {
+        data = preloadedData;
+    } else {
+        const abyssDoc = await getDoc(doc(db, 'abyssal_dex', id));
+        if (!abyssDoc.exists()) {
+            showMessage('존재하지 않는 심연체입니다.', 'error');
+            renderDex();
+            return;
+        }
+        data = abyssDoc.data();
     }
-    const data = abyssDoc.data();
+    
     const isManager = await isAdminUser();
     
-    // 코드명 자동 업데이트
+    // (이하 기존 renderDexDetail 로직은 동일)
+    // ...
+    // 코드명 자동 업데이트 및 스탯 계산
     const code = generateAbyssCode(data.basic.danger, data.basic.shape, data.basic.discoverySeq, data.basic.derivedSeq);
     data.basic.code = code;
 
@@ -1624,7 +1698,6 @@ async function renderDexDetail(id, isEditMode = false) {
                     console.error('Save failed:', e);
                     showMessage('저장 중 오류 발생', 'error');
                     // 저장 실패 시 편집 모드 유지
-                    // renderDexDetail(id, true); 
                 });
             } else {
                 renderDexDetail(id, true); // 편집 모드로 전환
@@ -1754,6 +1827,31 @@ function renderBasicInfoSection(el, data, isEditMode, isManager) {
                 data.basic.isPublic[key] = e.target.checked;
             };
         });
+
+        document.getElementById('editImageFile')?.addEventListener('change', async (e) => {
+          const file = e.target.files[0];
+          if (!file) return;
+
+          showMessage('이미지 업로드 중...', 'info');
+          
+          try {
+              // Firebase Storage의 uploadBytes와 getDownloadURL 함수 필요
+              const storageRef = ref(storage, `abyss_images/${data.id}_${file.name}`);
+              const uploadTask = await uploadBytes(storageRef, file);
+              const imageUrl = await getDownloadURL(uploadTask.ref);
+
+              // data 객체 업데이트
+              handleEditFieldChange(data, section, 'image', imageUrl);
+
+              // 업데이트된 데이터로 화면 리렌더링
+              renderBasicInfoSection(el, data, isEditMode, isManager);
+              showMessage('이미지 업로드 및 반영 완료', 'success');
+
+          } catch (error) {
+              console.error("이미지 업로드 실패:", error);
+              showMessage('이미지 업로드 실패', 'error');
+          }
+      });
     }
 }
 
@@ -1961,3 +2059,574 @@ function attachCommentEventListeners(abyssId) {
     });
 }
 
+/**
+ * 현재 로그인된 사용자가 관리자인지 확인합니다.
+ * @returns {Promise<boolean>}
+ */
+async function isAdminUser() {
+    const user = auth.currentUser;
+    if (!user) return false;
+    try {
+        // 'users' 컬렉션에서 사용자 UID로 문서 조회
+        const uDoc = await getDoc(doc(db, 'users', user.uid));
+        // 사용자가 존재하고 역할(role)이 'admin'인지 확인
+        return uDoc.exists() && uDoc.data().role === 'admin';
+    } catch(e) {
+        console.error('isAdminUser check failed:', e);
+        return false;
+    }
+}
+
+/**
+ * 현재 로그인된 사용자 ID (시트 ID로 사용)를 반환합니다.
+ * @returns {Promise<string|null>}
+ */
+async function getCurrentUserSheetId() {
+    // onAuthStateChanged는 비동기적으로 사용하기 어려우므로,
+    // auth.currentUser를 직접 사용하거나, 랩핑된 Promise를 사용해야 함.
+    const user = auth.currentUser;
+    return user ? user.uid : null;
+}
+
+/**
+ * 특정 시트 ID에 대한 데이터를 Firestore에서 가져옵니다.
+ * 'sheets' 컬렉션에 모든 데이터가 저장되어 있다고 가정합니다.
+ * @param {string} sheetId - 가져올 시트의 ID (사용자 UID와 동일)
+ * @returns {Promise<Object>} 시트 데이터 객체
+ */
+async function fetchSheetData(sheetId) {
+    // 'sheets' 컬렉션에서 해당 ID의 문서 조회
+    const sheetDoc = await getDoc(doc(db, 'sheets', sheetId));
+    if (!sheetDoc.exists()) {
+        throw new Error(`Sheet data not found for ID: ${sheetId}`);
+    }
+    
+    // 데이터 구조가 깊어지면 깊은 복사나 추가 처리가 필요할 수 있지만,
+    // 여기서는 문서 데이터를 직접 반환
+    return sheetDoc.data();
+}
+
+/**
+ * 인벤토리 아이템에 대한 설명을 데이터베이스에서 가져옵니다.
+ * 'items' 컬렉션에 아이템 정보가 저장되어 있다고 가정합니다.
+ * @param {string} itemName - 아이템 이름
+ * @returns {Promise<string>} 아이템 설명
+ */
+async function fetchItemDescription(itemName) {
+    try {
+        // 'items' 컬렉션에서 name 필드가 itemName과 일치하는 문서 쿼리
+        const q = query(collection(db, 'items'), where('name', '==', itemName));
+        const snap = await getDocs(q);
+        
+        if (!snap.empty) {
+            // 첫 번째 일치하는 아이템의 description 반환
+            return snap.docs[0].data().description || "설명 없음";
+        }
+    } catch(e) {
+        console.error("Failed to fetch item description:", e);
+    }
+    return "설명 없음 (DB 로드 실패)";
+}
+
+// --- 가상의 외부 의존성 및 유틸리티 함수 (실제 사용 환경에 맞게 정의 필요) ---
+// const db; // Firebase Firestore 인스턴스
+// const auth; // Firebase Auth 인스턴스
+// function isAdminUser() { ... } // 관리자 권한 확인 함수
+// function showMessage(msg, type) { ... } // 메시지 표시 함수
+// function showConfirm(msg) { ... } // 확인 팝업 함수
+
+// 현재 로그인된 사용자의 시트 ID를 가져오는 가상 함수
+async function getCurrentUserSheetId() {
+    const user = auth.currentUser;
+    if (user) {
+        // 실제 로직: Firestore의 users 컬렉션에서 sheetId를 가져옴
+        // 여기서는 임시 ID 반환
+        return user.uid; 
+    }
+    return null;
+}
+
+// 지도 데이터와 유사하게 시트 데이터를 가져오는 가상 함수
+async function fetchSheetData(sheetId) {
+    // 실제 로직: Firestore에서 데이터를 가져옴
+    // 여기서는 테스트 데이터 반환
+    const isAdmin = await isAdminUser();
+    
+    // 만약 관리자 모드에서 다른 시트를 보는 경우, 해당 시트 ID로 데이터를 가져옴.
+    // 여기서는 admin이 아닐 경우 항상 본인의 데이터만 가져옴.
+    
+    // 이 시트 ID로 데이터베이스에서 데이터를 가져온다고 가정
+    console.log(`Fetching data for sheet ID: ${sheetId}`);
+    
+    return {
+        // 3. 인적사항
+        personnel: {
+            name: "에이전트 707", gender: "여", age: 28, height: 172, weight: 65,
+            nationality: "한국", education: "심연 연구소 특수교육", 
+            career: "전직 용병, 현직 에이전트", family: "없음", contact: "비공개",
+            marriage: "미혼", medical: "특이사항 없음", criminal: "없음",
+            etc: "특수 능력 '공명' 보유. 주로 은닉 작전에 투입됨.",
+            photoUrl: "https://via.placeholder.com/150x200?text=Agent+Photo"
+        },
+        // 3-2. 스탯
+        stats: {
+            muscle: 3, agility: 4, endurance: 3, flexibility: 2, visual: 5, auditory: 4,
+            situation: 5, reaction: 5,
+            intellect: 4, judgment: 5, memory: 4, spirit: 5, decision: 4, stress: 3,
+        },
+        // 4. 인벤토리
+        inventory: {
+            silver: 450,
+            items: [
+                { id: 1, name: "표준형 권총", count: 1, source: "지급품", desc: "표준형 9mm 권총." },
+                { id: 2, name: "응급 키트", count: 3, source: "개인 소지", desc: "경미한 부상을 치료할 수 있는 키트." },
+                { id: 3, name: "정화 앰플", count: 1, source: "특수 지급", desc: "오염도 일부 제거." },
+            ]
+        },
+        // 5. 현재 상태
+        status: {
+            // 정신력 최대치 계산: (10 * spirit) + 50
+            currentSpirit: 75,
+            maxSpirit: (10 * 5) + 50, // stats.spirit (5) 기반
+            
+            // 부상도/오염도 (0~100)
+            injuries: {
+                head: 10, neck: 0, leftEye: 0, rightEye: 0,
+                leftArm: 5, leftHand: 0, 
+                leftLeg: 20, leftFoot: 0, 
+                torso: 15,
+                rightArm: 0, rightHand: 0, 
+                rightLeg: 0, rightFoot: 0,
+            },
+            contaminations: {
+                head: 5, neck: 0, leftEye: 0, rightEye: 0,
+                leftArm: 0, leftHand: 0, 
+                leftLeg: 10, leftFoot: 0, 
+                torso: 5,
+                rightArm: 0, rightHand: 0, 
+                rightLeg: 0, rightFoot: 0,
+            },
+            // 현재 오염도 및 침식도
+            currentContamination: 15, // 예시 값
+            currentErosion: 5, // 예시 값
+            
+            // 6. 통계
+            stats: {
+                deaths: 2, explorations: 15, interviews: 5, itemsCarried: 3, abyssDefeated: 4, silverCarried: 450
+            }
+        }
+    };
+}
+
+// 인벤토리 설명은 데이터베이스에서 별도로 가져와야 한다는 가정을 처리하는 가상 함수
+async function fetchItemDescription(itemName) {
+    // 실제 로직: 아이템 DB에서 설명을 가져옴
+    if (itemName === "표준형 권총") return "표준형 9mm 권총.";
+    if (itemName === "응급 키트") return "경미한 부상을 치료할 수 있는 키트.";
+    if (itemName === "정화 앰플") return "오염도 일부 제거.";
+    return "설명 없음";
+}
+
+// 시간 포맷 (맵 코드에 포함되어 있었을 것으로 추정)
+function fmtTime(timestamp) {
+    if (!timestamp || !timestamp.seconds) return 'N/A';
+    const date = new Date(timestamp.seconds * 1000);
+    return date.toLocaleDateString();
+}
+
+// 부상도/오염도에 따른 텍스트 구절 반환
+function getStatusText(injuryPercent, contaminationPercent) {
+    let injuryText = "";
+    let contaminationText = "";
+
+    // 부상도 텍스트
+    if (injuryPercent === 0) injuryText = "부상 없음.";
+    else if (injuryPercent <= 10) injuryText = "경미한 찰과상.";
+    else if (injuryPercent <= 30) injuryText = "타박상 및 출혈.";
+    else if (injuryPercent <= 60) injuryText = "깊은 상처 및 골절 가능성.";
+    else injuryText = "심각한 부상, 활동 불가 수준.";
+    
+    // 오염도 텍스트
+    if (contaminationPercent === 0) contaminationText = "오염 없음.";
+    else if (contaminationPercent <= 10) contaminationText = "경미한 오염, 즉시 제거 가능.";
+    else if (contaminationPercent <= 30) contaminationText = "중간 오염, 징후 발현.";
+    else if (contaminationPercent <= 60) contaminationText = "심각한 오염, 신체 능력 저하.";
+    else contaminationText = "치명적인 오염, 변이 진행 중.";
+
+    return [injuryText, contaminationText];
+}
+
+// 부위별 색상을 계산하는 함수 (검은색 -> 파란색(부상) / 보라색(오염) / 섞임)
+function calculatePartColor(injury, contamination) {
+    // 0~100 스케일
+    const i = Math.min(100, injury) / 100;
+    const c = Math.min(100, contamination) / 100;
+
+    // 검정(0,0,0)을 베이스로 파랑(부상)과 보라색(오염)을 섞음
+    // 부상(Blue) 증가, 오염(Purple=Red+Blue) 증가
+    
+    // R: 오염도에 의해 증가
+    const r = Math.round(i * 10 + c * 100); 
+    // G: 기본적으로 낮음
+    const g = Math.round(i * 10 + c * 10);
+    // B: 부상도와 오염도 모두에 의해 증가
+    const b = Math.round(i * 150 + c * 150); 
+    
+    // 부상도와 오염도가 모두 0일 때 (어두운 배경색과 섞여야 하므로)
+    if (i === 0 && c === 0) return 'rgba(255, 255, 255, 0.1)'; 
+    
+    // 색상 포화도를 높여서 변화를 명확하게 (최대 255를 넘지 않도록 제한)
+    const red = Math.min(200, r + 50);
+    const green = Math.min(200, g + 50);
+    const blue = Math.min(255, b + 50);
+
+    return `rgb(${red}, ${green}, ${blue})`;
+}
+
+// ----------------------------------------------------------------------
+
+/**
+ * 개인 캐릭터 시트 전체를 렌더링합니다.
+ * (이전 응답과 동일한 로직을 사용하며, 위에 정의된 Firebase 헬퍼 함수를 통해 데이터를 가져옴)
+ * @param {string} [targetSheetId] - 관리자가 특정 유저 시트를 볼 때 사용하는 ID.
+ */
+async function renderMe(targetSheetId = null) {
+    // 0-2. 관리자/본인 시트 확인
+    const isAdmin = await isAdminUser();
+    let currentSheetId = targetSheetId;
+    
+    if (!targetSheetId) {
+        currentSheetId = await getCurrentUserSheetId();
+        if (!currentSheetId) {
+            contentEl.innerHTML = '<div class="card muted">로그인 후 본인의 시트를 확인하세요.</div>';
+            return;
+        }
+    } else if (!isAdmin) {
+        contentEl.innerHTML = '<div class="card error">권한이 없습니다.</div>';
+        return;
+    }
+    
+    contentEl.innerHTML = '<div class="card muted">시트 로딩중...</div>';
+    
+    try {
+        // 1. 시트 데이터를 데이터베이스에서 가져옴 (Firebase 연동)
+        const sheetData = await fetchSheetData(currentSheetId);
+        
+        const sheetContainer = document.createElement('div');
+        sheetContainer.className = 'char-sheet-container';
+        
+        // 2. 인적사항 섹션 렌더링
+        sheetContainer.appendChild(renderPersonnelSection(sheetData.personnel, currentSheetId, isAdmin));
+        
+        // 3. 스탯 섹션 렌더링
+        // 스탯 섹션에는 두 개의 방사형 그래프가 포함됩니다.
+        // 
+        sheetContainer.appendChild(renderStatsSection(sheetData.stats, isAdmin));
+        
+        // 4. 인벤토리 섹션 렌더링 (비동기 함수 사용)
+        sheetContainer.appendChild(await renderInventorySection(sheetData.inventory, isAdmin));
+
+        // 5. 현재 상태 섹션 렌더링
+        sheetContainer.appendChild(renderStatusSection(sheetData.status, sheetData.stats.spirit, isAdmin));
+        
+        contentEl.innerHTML = '';
+        contentEl.appendChild(sheetContainer);
+        
+    } catch(e) {
+        console.error("Sheet load failed:", e);
+        contentEl.innerHTML = `<div class="card error">시트 로드 실패: ${e.message}</div>`;
+    }
+}
+
+// 인적사항 섹션 렌더링
+function renderPersonnelSection(p, sheetId, isAdmin) {
+    const section = document.createElement('div');
+    section.className = 'card map-card'; // 기존 카드 스타일 활용
+    section.innerHTML = `
+        <h2 style="margin-top:0;">👤 인적사항 (ID: ${sheetId})</h2>
+        <div class="personnel-grid">
+            <div class="photo-area">
+                <img src="${p.photoUrl}" alt="프로필 사진" style="width:100%; height:auto; aspect-ratio: 3/4; object-fit: cover;">
+            </div>
+            <div class="details-area">
+                ${renderHorizontalTable('표 1: 기본 정보', [
+                    { label: '이름', value: p.name },
+                    { label: '성별', value: p.gender },
+                    { label: '나이', value: p.age },
+                    { label: '키/체중', value: `${p.height}cm / ${p.weight}kg` },
+                    { label: '국적', value: p.nationality },
+                ], isAdmin)}
+                
+                ${renderHorizontalTable('표 2: 상세 정보', [
+                    { label: '학력', value: p.education },
+                    { label: '경력', value: p.career },
+                    { label: '가족관계', value: p.family },
+                    { label: '연락처', value: p.contact },
+                    { label: '결혼 여부', value: p.marriage },
+                    { label: '병력', value: p.medical },
+                    { label: '범죄 전과', value: p.criminal },
+                    { label: '비고', value: p.etc, isLong: true },
+                ], isAdmin)}
+            </div>
+        </div>
+        ${isAdmin ? `<button class="btn link admin-edit-btn" onclick="openPersonnelEdit('${sheetId}', ${JSON.stringify(p)})">인적사항 편집</button>` : ''}
+    `;
+    return section;
+}
+
+// 스탯 섹션 렌더링
+function renderStatsSection(s, isAdmin) {
+    const section = document.createElement('div');
+    section.className = 'card map-card';
+    section.innerHTML = `
+        <h2>💪 스탯</h2>
+        <div class="stats-grid">
+            <div class="radar-chart-wrap">
+                <div class="chart-container-1">
+                    
+                </div>
+                ${renderHorizontalTable('표 1: 신체 스탯', [
+                    { label: '근력', value: s.muscle },
+                    { label: '민첩', value: s.agility },
+                    { label: '지구력', value: s.endurance },
+                    { label: '유연성', value: s.flexibility },
+                    { label: '시각', value: s.visual },
+                    { label: '청각', value: s.auditory },
+                    { label: '상황 인지 능력', value: s.situation },
+                    { label: '반응속도', value: s.reaction },
+                ], isAdmin, true)}
+            </div>
+            <div class="radar-chart-wrap">
+                ${renderHorizontalTable('표 2: 정신 스탯', [
+                    { label: '지능', value: s.intellect },
+                    { label: '판단력', value: s.judgment },
+                    { label: '기억력', value: s.memory },
+                    { label: '정신력', value: s.spirit },
+                    { label: '의사 결정 능력', value: s.decision },
+                    { label: '스트레스 내성', value: s.stress },
+                ], isAdmin, true)}
+                <div class="chart-container-2">
+                    
+                </div>
+            </div>
+        </div>
+        ${isAdmin ? `<button class="btn link admin-edit-btn" onclick="openStatsEdit(sheetId, ${JSON.stringify(s)})">스탯 편집</button>` : ''}
+    `;
+    return section;
+}
+
+// 인벤토리 섹션 렌더링
+async function renderInventorySection(inv, isAdmin) {
+    const section = document.createElement('div');
+    section.className = 'card map-card';
+    
+    let itemRows = '';
+    if (inv.items.length === 0) {
+        itemRows = `<tr><td colspan="5" style="text-align: center; color: #aaa;">소지한 물건이 없습니다.</td></tr>`;
+    } else {
+        for (const [index, item] of inv.items.entries()) {
+            // 4. 인벤토리 설명은 DB에서 받아와야 함을 가정
+            const desc = item.desc || await fetchItemDescription(item.name);
+            itemRows += `
+                <tr>
+                    <td>${index + 1}</td>
+                    <td>${item.name}</td>
+                    <td>${desc}</td>
+                    <td>${item.source}</td>
+                    <td>${item.count}</td>
+                </tr>
+            `;
+        }
+    }
+    
+    section.innerHTML = `
+        <h2>🎒 인벤토리</h2>
+        <div style="margin-bottom: 15px; font-weight: bold; padding: 5px; background: rgba(255, 255, 255, 0.05);">
+            소지한 은화: <span style="color: gold;">${inv.silver}</span> 개
+        </div>
+        
+        <table class="data-table" style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr>
+                    <th>번호</th>
+                    <th>이름</th>
+                    <th>설명</th>
+                    <th>출처</th>
+                    <th>수량</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${itemRows}
+            </tbody>
+        </table>
+        
+        ${isAdmin ? `<button class="btn link admin-edit-btn" onclick="openInventoryEdit(sheetId, ${JSON.stringify(inv)})">인벤토리 편집</button>` : ''}
+    `;
+    return section;
+}
+
+// 현재 상태 섹션 렌더링
+function renderStatusSection(s, spiritStat, isAdmin) {
+    const section = document.createElement('div');
+    section.className = 'card map-card';
+    
+    const injuryParts = ['head', 'neck', 'leftEye', 'rightEye', 'leftArm', 'leftHand', 'leftLeg', 'leftFoot', 'torso', 'rightArm', 'rightHand', 'rightLeg', 'rightFoot'];
+    const mapKeyToLabel = {
+        head: '<머리>', neck: '목', leftEye: '왼쪽 안구', rightEye: '오른쪽 안구',
+        leftArm: '<왼팔>', leftHand: '<왼손>', leftLeg: '<왼다리>', leftFoot: '왼발',
+        torso: '<상체>', rightArm: '<오른팔>', rightHand: '<오른손>', rightLeg: '<오른다리>', rightFoot: '오른발'
+    };
+    const mainParts = ['head', 'leftArm', 'leftLeg', 'torso', 'rightArm', 'rightLeg']; // 사람 아이콘 부위
+
+    // 5-1. 정신력 바 및 상태 구절
+    const spiritPercent = (s.currentSpirit / s.maxSpirit) * 100;
+    
+    let physicalStatusText = '양호';
+    const totalInjury = injuryParts.reduce((sum, key) => sum + s.injuries[key], 0);
+    const totalContamination = injuryParts.reduce((sum, key) => sum + s.contaminations[key], 0);
+    
+    if (totalInjury > 50) physicalStatusText = '불안정';
+    if (totalInjury > 100) physicalStatusText = '심각';
+    if (totalInjury === 0 && totalContamination === 0) physicalStatusText = '여유로움';
+
+
+    section.innerHTML = `
+        <h2>⚕️ 현재 상태</h2>
+
+        <div style="display: flex; align-items: center; gap: 20px; margin-bottom: 20px;">
+            <div style="flex-grow: 1;">
+                <div style="font-weight: bold; margin-bottom: 5px;">
+                    현재 정신력: ${s.currentSpirit} / ${s.maxSpirit} (정신력 스탯: ${spiritStat})
+                </div>
+                <div style="background: rgba(255, 255, 255, 0.1); height: 15px; border-radius: 4px; overflow: hidden;">
+                    <div style="width: ${spiritPercent}%; background: ${spiritPercent > 30 ? 'green' : 'red'}; height: 100%; transition: width 0.3s;"></div>
+                </div>
+            </div>
+            <div style="min-width: 200px; text-align: right;">
+                <div style="color: ${physicalStatusText === '여유로움' ? 'lime' : 'yellow'}; font-weight: bold;">
+                    현재 신체 상태는 '${physicalStatusText}'입니다.
+                </div>
+                <div>현재 오염도: ${s.currentContamination}%</div>
+                <div>현재 침식도: ${s.currentErosion}%</div>
+            </div>
+        </div>
+
+        <div class="injury-status-grid">
+            <div class="injury-list left-side">
+                ${renderInjuryBlock(['head', 'neck', 'leftEye', 'rightEye'], s, mapKeyToLabel)}
+                ${renderInjuryBlock(['leftArm', 'leftHand'], s, mapKeyToLabel)}
+                ${renderInjuryBlock(['leftLeg', 'leftFoot'], s, mapKeyToLabel)}
+            </div>
+            
+            <div class="human-icon-container">
+                
+            </div>
+            
+            <div class="injury-list right-side">
+                ${renderInjuryBlock(['torso'], s, mapKeyToLabel)}
+                ${renderInjuryBlock(['rightArm', 'rightHand'], s, mapKeyToLabel)}
+                ${renderInjuryBlock(['rightLeg', 'rightFoot'], s, mapKeyToLabel)}
+            </div>
+        </div>
+        
+        <h3 style="margin-top: 30px;">📊 현재 통계</h3>
+        ${renderHorizontalTable('현재 통계', [
+            { label: '죽은 횟수', value: s.stats.deaths },
+            { label: '탐사를 나간 횟수', value: s.stats.explorations },
+            { label: '면담을 진행한 횟수', value: s.stats.interviews },
+            { label: '소지하고 있는 소지품 수', value: s.stats.itemsCarried },
+            { label: '심연체를 제압한 횟수', value: s.stats.abyssDefeated },
+            { label: '소지 은화', value: s.stats.silverCarried },
+        ], isAdmin, true)}
+
+        ${isAdmin ? `<button class="btn link admin-edit-btn" onclick="openStatusEdit(sheetId, ${JSON.stringify(s)})">상태 및 통계 편집</button>` : ''}
+    `;
+    return section;
+}
+
+// 부상도 상세 단락을 렌더링하는 함수 (5-2)
+function renderInjuryBlock(parts, status, mapKeyToLabel) {
+    let detailRows = '';
+    
+    parts.forEach(key => {
+        const isMainPart = mapKeyToLabel[key].startsWith('<'); // 대표 부위 확인
+        const injury = status.injuries[key];
+        const contamination = status.contaminations[key];
+        
+        const [injuryText, contaminationText] = getStatusText(injury, contamination);
+        const color = calculatePartColor(injury, contamination);
+
+        if (isMainPart) {
+            // 대표 부위: 바로 아래 행을 내용으로 사용 (부상/오염 텍스트)
+            detailRows += `
+                <div class="injury-row main-part" style="border: 1px solid ${color};">
+                    <div class="part-label" style="font-weight: bold;">
+                        ${mapKeyToLabel[key].replace(/[<>]/g, '')} (${injury}%, ${contamination}%)
+                    </div>
+                    <div class="part-content">
+                        <p style="color: #ff9999; margin: 0;">부상: ${injuryText}</p>
+                        <p style="color: #ccccff; margin: 0;">오염: ${contaminationText}</p>
+                    </div>
+                </div>
+            `;
+        } else {
+            // 비대표 부위: 두 행과 열 중 왼쪽 세부 부위, 오른쪽 내용
+            detailRows += `
+                <div class="injury-row sub-part">
+                    <div class="sub-label">
+                        ${mapKeyToLabel[key]} (${injury}%, ${contamination}%)
+                    </div>
+                    <div class="sub-content" style="border-left: 1px solid rgba(255,255,255,0.1);">
+                        <p style="color: #ff9999; margin: 0;">부상: ${injuryText}</p>
+                        <p style="color: #ccccff; margin: 0;">오염: ${contaminationText}</p>
+                    </div>
+                </div>
+            `;
+        }
+    });
+
+    return `<div class="injury-block">${detailRows}</div>`;
+}
+
+
+/**
+ * 가로형 테이블 HTML을 생성합니다.
+ * @param {string} title - 표의 제목 (사용하지 않을 수도 있음).
+ * @param {Array<Object>} rows - {label: string, value: any, isLong: boolean} 객체 배열.
+ * @param {boolean} isAdmin - 관리자 권한 여부.
+ * @param {boolean} isStatLike - 스탯/통계와 같이 레이아웃이 단순한 경우.
+ * @returns {string} HTML 테이블 마크업.
+ */
+function renderHorizontalTable(title, rows, isAdmin, isStatLike = false) {
+    let rowHtml = '';
+    rows.forEach(row => {
+        const inputId = `${isStatLike ? 'stat' : 'person'}${row.label.replace(/\s/g, '')}`;
+        let valueContent;
+
+        if (isAdmin) {
+            // 관리자일 경우 Input 필드로 대체 (편집 모드 가정)
+            const inputType = typeof row.value === 'number' ? 'number' : 'text';
+            valueContent = row.isLong 
+                ? `<textarea id="${inputId}" style="width:100%; min-height:60px;">${row.value}</textarea>`
+                : `<input type="${inputType}" id="${inputId}" value="${row.value}" style="width:100%;">`;
+        } else {
+            // 일반 사용자일 경우 값만 표시
+            valueContent = row.value;
+        }
+
+        rowHtml += `
+            <tr class="horizontal-table-row">
+                <td class="table-label" style="font-weight: bold; padding: 8px; background: rgba(255, 255, 255, 0.03); width: 150px;">${row.label}</td>
+                <td class="table-value" style="padding: 8px;">${valueContent}</td>
+            </tr>
+        `;
+    });
+
+    return `
+        <table class="data-table horizontal" style="width: 100%; margin-top: 10px; border-collapse: collapse;">
+            <tbody>
+                ${rowHtml}
+            </tbody>
+        </table>
+    `;
+}
