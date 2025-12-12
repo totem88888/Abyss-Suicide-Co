@@ -451,17 +451,21 @@ async function renderMain(){
         let currentDay = daySnap.exists() ? (daySnap.data().currentDay || 1) : 1;
         const schedSnap = await getDoc(doc(db, 'schedule', 'days'));
 
-        if (schedSnap.exists()) {
-            const daysData = schedSnap.data().days || {};
-            const todayList = daysData[currentDay] || [];
-            if (todayList.length > 0) {
-                staffScheduleEl.innerHTML = todayList.map(t => `<div>${t}</div>`).join('');
-            } else {
-                staffScheduleEl.textContent = `${currentDay}일차 일정 없음`;
-            }
-        } else {
-            staffScheduleEl.textContent = '스케줄 데이터 없음';
-        }
+        if (staffScheduleEl) { // ✅ Null 체크 추가
+          if (schedSnap.exists()) {
+              const daysData = schedSnap.data().days || {};
+              const currentDay = '월요일'; // currentDay가 정의된 곳의 값으로 대체해야 함
+              const todayList = daysData[currentDay] || []; 
+              
+              if (todayList.length > 0) {
+                  staffScheduleEl.innerHTML = todayList.map(t => `<div>${t}</div>`).join('');
+              } else {
+                  staffScheduleEl.textContent = `${currentDay}일차 일정 없음`;
+              }
+          } else {
+              staffScheduleEl.textContent = '스케줄 데이터 없음';
+          }
+      }
 
         document.getElementById('staffRank').innerHTML = `
             <div>은화: ${topSilverName} (${maxSilver}) | 생존왕: ${topSurvivorName} (${minDeath})</div>
