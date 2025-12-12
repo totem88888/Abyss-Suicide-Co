@@ -1916,6 +1916,111 @@ function renderLogsSection(el, data, isEditMode, isManager) {
     }
 }
 
+// Firestore 임포트 가정: import { doc, deleteDoc, db } from 'firebase/firestore';
+
+/**
+ * DB에서 심연체 데이터를 삭제하는 함수 (Firestore deleteDoc 사용)
+ * @param {string} id - 심연체 ID
+ */
+async function deleteAbyssData(id) {
+    if (!confirm('정말로 이 심연체를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
+        return;
+    }
+    
+    showMessage('데이터를 Firebase에서 삭제 중...', 'danger');
+    try {
+        await deleteDoc(doc(db, 'abyssal_dex', id));
+        showMessage('삭제 완료! 도감 목록으로 돌아갑니다.', 'success');
+        // 삭제 후 목록으로 돌아갑니다.
+        renderDex(); 
+    } catch (error) {
+        console.error("Error deleting data:", error);
+        showMessage('삭제 중 오류 발생', 'error');
+        throw error;
+    }
+}
+
+// Chart.js 임포트 가정: <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+// 전역 변수: let currentChart = null; // Chart.js 인스턴스를 저장하여 중복 생성을 방지
+
+/**
+ * 심연체 스탯을 방사형 그래프(레이더 차트)로 렌더링
+ * @param {object} stats - { strength, health, agility, mind }
+ * @param {object} calculatedStats - { maxHp, maxMp, physicalAttack, mentalAttack }
+ */
+function renderRadarChart(stats, calculatedStats) {
+    const chartContainerEl = document.getElementById('radarChartContainer');
+    if (!chartContainerEl) return;
+    
+    // 캔버스가 이미 존재하면 제거하고 새로 생성
+    chartContainerEl.innerHTML = '<canvas id="abyssRadarChart" width="400" height="400"></canvas>';
+    const ctx = document.getElementById('abyssRadarChart').getContext('2d');
+
+    // 이전 차트 인스턴스 파괴
+    if (window.currentChart) {
+        window.currentChart.destroy();
+    }
+    
+    const maxVal = Math.max(stats.strength, stats.health, stats.agility, stats.mind, 5); // 최소 5를 최대값 기준으로 설정
+
+    // 레이더 차트 데이터
+    const data = {
+        labels: ['STR (힘)', 'HEALTH (체력)', 'AGI (민첩)', 'MIND (정신)'],
+        datasets: [{
+            label: '기본 스탯',
+            data: [stats.strength, stats.health, stats.agility, stats.mind],
+            backgroundColor: 'rgba(102, 204, 255, 0.5)', // 연한 파란색
+            borderColor: 'rgb(102, 204, 255)',
+            pointBackgroundColor: 'rgb(102, 204, 255)',
+            pointBorderColor: '#fff',
+            pointHoverBackgroundColor: '#fff',
+            pointHoverBorderColor: 'rgb(102, 204, 255)'
+        }]
+    };
+
+    // 레이더 차트 옵션
+    const options = {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+            r: {
+                angleLines: { display: true },
+                suggestedMin: 0,
+                suggestedMax: maxVal * 1.2, // 최대값보다 약간 크게 설정
+                pointLabels: {
+                    font: { size: 14 }
+                },
+                ticks: {
+                    stepSize: Math.ceil(maxVal / 5) || 1, // 5단계로 눈금 표시
+                    display: false // 눈금 값 숨기기
+                }
+            }
+        },
+        plugins: {
+            legend: { display: false },
+            tooltip: {
+                callbacks: {
+                    label: function(context) {
+                        let label = context.dataset.label || '';
+                        if (label) {
+                            label += ': ';
+                        }
+                        label += context.parsed.r;
+                        return label;
+                    }
+                }
+            }
+        }
+    };
+
+    // 차트 생성
+    window.currentChart = new Chart(ctx, {
+        type: 'radar',
+        data: data,
+        options: options
+    });
+}
+
 /**
  * 심연체 카드 렌더링 (그리드 뷰)
  * @param {object} abyssData - 심연체 데이터 객체
@@ -2148,6 +2253,9 @@ async function renderDexDetail(id, isEditMode = false, preloadedData = null) {
         </div>
     ` : '';
 
+    const deleteButtonHtml = isManager && !isEditMode ? 
+        `<button class="btn danger" id="deleteAbyssBtn" style="margin-left: 10px;">심연체 삭제</button>` : '';
+
     let html = `
         <div class="dex-detail-wrap card">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
@@ -2159,16 +2267,25 @@ async function renderDexDetail(id, isEditMode = false, preloadedData = null) {
                     ${isManager ? `<button class="btn ${isEditMode ? 'warning' : ''}" id="toggleEditMode">
                         ${isEditMode ? '저장 및 편집 종료' : '편집'}
                     </button>` : ''}
-                </div>
+                    ${deleteButtonHtml} </div>
             </div>
 
-            ${presetButtonsHtml} // ✅ 프리셋 버튼 추가
+            ${presetButtonsHtml}
 
-            <div class="dex-sections-container">
-                <div class="dex-section" id="basicInfoSection"></div>
-                <div class="dex-section" id="statsSection"></div>
-                <div class="dex-section" id="managementSection"></div>
-                <div class="dex-section" id="logsSection"></div>
+            <div class="dex-sections-container" style="display: flex; flex-wrap: wrap;">
+                <div class="dex-section" id="basicInfoSection" style="flex: 1 1 50%; padding-right: 15px;"></div>
+                <div class="dex-section" id="statsSection" style="flex: 1 1 50%; padding-left: 15px;"></div>
+                
+                <div class="dex-section" id="radarChartSection" style="flex: 1 1 100%; margin-top: 20px;">
+                    <h3>스탯 분포 (레이더 차트)</h3>
+                    <div id="radarChartContainer" style="width: 100%; height: 400px; margin-top: 10px;">
+                        </div>
+                </div>
+                
+                <hr style="flex: 1 1 100%; margin: 20px 0;">
+
+                <div class="dex-section" id="managementSection" style="flex: 1 1 50%; padding-right: 15px;"></div>
+                <div class="dex-section" id="logsSection" style="flex: 1 1 50%; padding-left: 15px;"></div>
             </div>
 
             <hr style="margin: 30px 0;">
@@ -2186,6 +2303,8 @@ async function renderDexDetail(id, isEditMode = false, preloadedData = null) {
     renderStatsSection(document.getElementById('statsSection'), data, calculatedStats, isEditMode, isManager);
     renderManagementSection(document.getElementById('managementSection'), data, isEditMode, isManager);
     renderLogsSection(document.getElementById('logsSection'), data, isEditMode, isManager);
+
+    renderRadarChart(data.stats, calculatedStats);
 
     // 이벤트 리스너 부착
     document.getElementById('backToDexList').onclick = renderDex;
@@ -2205,6 +2324,10 @@ async function renderDexDetail(id, isEditMode = false, preloadedData = null) {
                 renderDexDetail(id, true); // 편집 모드로 전환
             }
         };
+
+        document.getElementById('deleteAbyssBtn')?.addEventListener('click', () => {
+            deleteAbyssData(id);
+        });
 
         // ✅ 프리셋 버튼 이벤트 리스너 부착
         document.querySelectorAll('.disclosure-preset-btn').forEach(button => {
