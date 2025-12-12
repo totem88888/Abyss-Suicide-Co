@@ -663,6 +663,7 @@ async function openMapInlineEdit(mapId, data) {
     const currentDanger = data.danger || 1;
     const currentTypes = Array.isArray(data.types) ? data.types.join(', ') : (data.types || '');
 
+    // 맵 편집 폼 HTML 렌더링 (이 부분은 원본과 동일)
     cardInner.innerHTML = `
         <div class="map-edit-form">
             <h4>맵 편집 (ID: ${mapId})</h4>
@@ -711,20 +712,20 @@ async function openMapInlineEdit(mapId, data) {
         </div>
     `;
 
-    // 유틸리티 함수: 위험도 별 표시
+    // ✅ [수정] 유틸리티 함수: 위험도 별 표시를 cardInner 기준으로 다시 정의
     const updateDangerStars = (value) => {
-    // ID 대신 tempEl 안에서 찾도록 수정
-    const starsEl = tempEl.querySelector("#dangerStars"); 
-    if (starsEl) {
-        const danger = Math.min(5, Math.max(1, Number(value) || 1));
-        starsEl.textContent = '★'.repeat(danger) + '☆'.repeat(5 - danger);
-    }
-};
+        // cardInner 내부에서 #dangerStars를 찾도록 수정
+        const starsEl = cardInner.querySelector("#dangerStars"); 
+        if (starsEl) {
+            const danger = Math.min(5, Math.max(1, Number(value) || 1));
+            starsEl.textContent = '★'.repeat(danger) + '☆'.repeat(5 - danger);
+        }
+    };
 
     // 초기 별 표시
     updateDangerStars(currentDanger);
 
-    // 이벤트 리스너: 이미지 미리보기 및 위험도 별표 업데이트
+    // 이벤트 리스너: 이미지 미리보기 및 위험도 별표 업데이트 (나머지 로직은 원본과 동일)
     const imgPreviewEl = cardInner.querySelector('.map-img-preview');
     const imgUrlInput = document.getElementById("editMapImage");
     const imgFileInput = document.getElementById("editMapImageFile");
@@ -747,7 +748,7 @@ async function openMapInlineEdit(mapId, data) {
             reader.readAsDataURL(file);
             imgUrlInput.value = ''; // 파일 입력 시 URL 입력 비활성화/초기화
         } else if (!imgUrlInput.value) {
-             imgPreviewEl.src = ''; // 파일이 없고 URL도 없으면 미리보기 비우기
+            imgPreviewEl.src = ''; // 파일이 없고 URL도 없으면 미리보기 비우기
         }
     });
     
@@ -756,7 +757,7 @@ async function openMapInlineEdit(mapId, data) {
         updateDangerStars(e.target.value);
     });
 
-    // 저장 로직 (기존과 동일)
+    // 저장 로직 (원본과 동일)
     document.getElementById("saveMapInline").onclick = async () => {
         let finalImg = document.getElementById("editMapImage").value;
         const file = document.getElementById("editMapImageFile").files[0];
@@ -786,13 +787,13 @@ async function openMapInlineEdit(mapId, data) {
         }
     };
 
-    // 취소 로직 (기존과 동일)
+    // 취소 로직 (원본과 동일)
     document.getElementById("cancelMapInline").onclick = () => {
         cardInner.innerHTML = originalContent; // 원래 내용으로 복구
         renderMap();
     };
     
-    // 삭제 로직 (기존과 동일)
+    // 삭제 로직 (원본과 동일)
     document.getElementById("deleteMapInline").onclick = async () => {
         if (await showConfirm(`정말로 맵 '${data.name}'을 삭제하시겠습니까? (복구 불가)`)) {
             try {
@@ -806,6 +807,91 @@ async function openMapInlineEdit(mapId, data) {
         }
     };
 }
+
+// 초기 별 표시
+updateDangerStars(currentDanger);
+
+// 이벤트 리스너: 이미지 미리보기 및 위험도 별표 업데이트
+const imgPreviewEl = cardInner.querySelector('.map-img-preview');
+const imgUrlInput = document.getElementById("editMapImage");
+const imgFileInput = document.getElementById("editMapImageFile");
+const dangerInput = document.getElementById("editMapDanger");
+
+// 1. URL 입력 시 미리보기 업데이트
+imgUrlInput.addEventListener('input', () => {
+    imgPreviewEl.src = imgUrlInput.value;
+    imgFileInput.value = ''; // URL 입력 시 파일 입력 비활성화/초기화
+});
+
+// 2. 파일 선택 시 미리보기 업데이트
+imgFileInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            imgPreviewEl.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+        imgUrlInput.value = ''; // 파일 입력 시 URL 입력 비활성화/초기화
+    } else if (!imgUrlInput.value) {
+          imgPreviewEl.src = ''; // 파일이 없고 URL도 없으면 미리보기 비우기
+    }
+});
+
+// 3. 위험도 입력 시 별표 업데이트
+dangerInput.addEventListener('input', (e) => {
+    updateDangerStars(e.target.value);
+});
+
+// 저장 로직 (기존과 동일)
+document.getElementById("saveMapInline").onclick = async () => {
+    let finalImg = document.getElementById("editMapImage").value;
+    const file = document.getElementById("editMapImageFile").files[0];
+
+    try {
+        if (file) {
+            finalImg = await uploadMapImage(file, mapId);
+        }
+
+        const typesArray = document.getElementById("editMapTypes").value.split(',').map(t => t.trim()).filter(t => t);
+
+        const newData = {
+            name: document.getElementById("editMapName").value,
+            danger: Number(document.getElementById("editMapDanger").value),
+            types: typesArray,
+            description: document.getElementById("editMapDesc").value,
+            image: finalImg,
+            updatedAt: serverTimestamp()
+        };
+
+        await updateDoc(doc(db, "maps", mapId), newData);
+        showMessage('맵 정보 저장 완료', 'info');
+        renderMap(); // 맵 목록 새로고침
+    } catch(e) {
+        console.error(e);
+        showMessage('맵 정보 저장 실패', 'error');
+    }
+};
+
+// 취소 로직 (기존과 동일)
+document.getElementById("cancelMapInline").onclick = () => {
+    cardInner.innerHTML = originalContent; // 원래 내용으로 복구
+    renderMap();
+};
+
+// 삭제 로직 (기존과 동일)
+document.getElementById("deleteMapInline").onclick = async () => {
+    if (await showConfirm(`정말로 맵 '${data.name}'을 삭제하시겠습니까? (복구 불가)`)) {
+        try {
+            await deleteDoc(doc(db, "maps", mapId));
+            showMessage('맵 삭제 완료', 'info');
+            renderMap();
+        } catch(e) {
+            console.error(e);
+            showMessage('맵 삭제 실패', 'error');
+        }
+    }
+};
 
 async function renderMap() {
     contentEl.innerHTML = '<div class="card muted">맵 로딩중...</div>';
@@ -840,6 +926,7 @@ async function renderMap() {
 async function openNewMapInlineEdit() {
     const tempId = 'new_map_' + Date.now();
     const tempEl = document.createElement('div');
+    // ... (임시 카드 생성 및 삽입 로직은 원본과 동일) ...
     tempEl.className = 'map-card card';
     tempEl.id = tempId;
     tempEl.style.marginBottom = '20px';
@@ -850,7 +937,7 @@ async function openNewMapInlineEdit() {
 
     const defaultImage = ''; // 새 맵은 기본 이미지 없음
 
-    // 편집 폼 렌더링
+    // 편집 폼 렌더링 (이 부분은 원본과 동일)
     tempEl.innerHTML = `
         <div class="map-card-inner" data-id="new">
             <div class="map-edit-form">
@@ -900,8 +987,9 @@ async function openNewMapInlineEdit() {
         </div>
       `;
     
-    // 유틸리티 함수: 위험도 별 표시
+    // ✅ [수정] 유틸리티 함수: 위험도 별 표시
     const updateDangerStars = (value) => {
+        // tempEl 내부에서 #dangerStars를 찾도록 수정 (원래 의도대로)
         const starsEl = tempEl.querySelector("#dangerStars");
         if (starsEl) {
             const danger = Math.min(5, Math.max(1, Number(value) || 1));
@@ -910,7 +998,7 @@ async function openNewMapInlineEdit() {
     };
     updateDangerStars(1); // 초기 별 표시
 
-    // 이벤트 리스너: 이미지 미리보기 및 위험도 별표 업데이트
+    // 이벤트 리스너: 이미지 미리보기 및 위험도 별표 업데이트 (나머지 로직은 원본과 동일)
     const imgPreviewEl = tempEl.querySelector('.map-img-preview');
     const imgUrlInput = document.getElementById("newMapImage");
     const imgFileInput = document.getElementById("newMapImageFile");
@@ -933,7 +1021,7 @@ async function openNewMapInlineEdit() {
             reader.readAsDataURL(file);
             imgUrlInput.value = ''; // 파일 입력 시 URL 입력 비활성화/초기화
         } else if (!imgUrlInput.value) {
-             imgPreviewEl.src = ''; // 파일이 없고 URL도 없으면 미리보기 비우기
+            imgPreviewEl.src = ''; // 파일이 없고 URL도 없으면 미리보기 비우기
         }
     });
     
@@ -942,7 +1030,7 @@ async function openNewMapInlineEdit() {
         updateDangerStars(e.target.value);
     });
 
-    // 저장 로직 (기존과 동일)
+    // 저장 로직 (원본과 동일)
     document.getElementById("saveNewMapInline").onclick = async () => {
         let finalImg = document.getElementById("newMapImage").value;
         const file = document.getElementById("newMapImageFile").files[0];
@@ -981,7 +1069,7 @@ async function openNewMapInlineEdit() {
         }
     };
     
-    // 취소 로직 (기존과 동일)
+    // 취소 로직 (원본과 동일)
     document.getElementById("cancelNewMapInline").onclick = () => {
         tempEl.remove();
     };
@@ -1600,6 +1688,9 @@ async function renderDex() {
 /**
  * 관리 정보 섹션 렌더링 (동적 추가/삭제, 인라인 편집 적용)
  */
+/**
+ * 관리 정보 섹션 렌더링 (동적 추가/삭제, 인라인 편집 적용)
+ */
 function renderManagementSection(el, data, isEditMode, isManager) {
     const d = data.management;
     const section = 'management';
@@ -1608,30 +1699,30 @@ function renderManagementSection(el, data, isEditMode, isManager) {
         let html = `<h4>${title}</h4><table class="info-table" style="width: 100%;">`;
         const items = d[key] || [];
 
-        // ✅ 기타 정보가 비어있을 때 안내 문구 출력
-        if (key === 'otherInfo' && items.length === 0 && !isManager) {
-             html += `<tr><td colspan="2" class="muted" style="text-align: center;">
-                 기타 정보가 존재하지 않습니다.
-             </td></tr>`;
+        // 1. 안내 문구 메시지 설정 (배열이 완전히 비어있는 경우)
+        let emptyMessage = null;
+        if (key === 'otherInfo' && items.length === 0) {
+            emptyMessage = '기타 정보가 존재하지 않습니다.';
+        } else if (key === 'collectionInfo' && items.length === 0) {
+            emptyMessage = '채취 정보가 존재하지 않습니다.'; // ✅ 채취 정보 안내 문구 추가
         }
         
-        // basicInfo의 첫 번째 항목은 기본값이므로, items가 1개이고 기본값인 경우에도 렌더링을 처리해야 함
-        // 여기서는 items 배열이 비어있지 않은 경우에만 테이블 행을 렌더링합니다.
-
-        let hasRenderedRows = false;
+        let hasVisibleRows = false;
 
         items.forEach((item, index) => {
-            // key가 'basicInfo'이고 index가 0인 경우는 기본 정보이므로, 삭제 버튼을 막기 위해 index > 0인지 확인합니다.
             const isBasicInfoDefault = (key === 'basicInfo' && index === 0);
             
-            // 일반 사용자에게는 공개된 항목만 표시
+            // 비관리자이면서 비공개 항목이고 기본 정보 항목도 아닐 경우 스킵
             if (!isManager && !item.isPublic && !isBasicInfoDefault) return;
-
-            hasRenderedRows = true;
+            
+            hasVisibleRows = true;
 
             const isPublic = item.isPublic !== undefined ? item.isPublic : false;
             const masked = !isPublic && !isManager;
             const itemLabel = isBasicInfoDefault ? '기본 정보' : `${labelBase} (${index + 1})`;
+
+            // basicInfo의 첫 번째 항목은 배열의 크기가 1보다 클 때만 삭제 방지 (나머지는 모두 삭제 가능)
+            const isProtectedBasicInfo = (key === 'basicInfo' && index === 0 && items.length > 1);
 
             html += `
                 <tr class="${masked ? 'masked-row' : ''}">
@@ -1639,8 +1730,8 @@ function renderManagementSection(el, data, isEditMode, isManager) {
                         ${isManager && isEditMode ? `<input type="checkbox" data-key="${key}[${index}].isPublic" data-section="${section}" ${isPublic ? 'checked' : ''} style="margin-right: 5px;">` : ''}
                         ${itemLabel}
                         
-                        ${isManager && isEditMode && (!isBasicInfoDefault || key === 'otherInfo') ? 
-                            // 기타 정보(otherInfo)는 index 0이어도 사용자가 지울 수 있어야 함. (요청 사항 반영)
+                        ${isManager && isEditMode && !isProtectedBasicInfo ? 
+                            // basicInfo[0]이 배열의 마지막 항목이거나 (삭제 시 빈 배열), collectionInfo, otherInfo일 경우 삭제 버튼 표시
                             `<button class="btn-xs danger" data-action="delete" data-key="${key}" data-index="${index}" style="margin-left: 5px;">-</button>` : ''}
                     </td>
                     <td>
@@ -1650,10 +1741,15 @@ function renderManagementSection(el, data, isEditMode, isManager) {
             `;
         });
         
-        // 관리자 모드에서 기타 정보 섹션에 데이터가 없고, 기본 행(index 0)이 존재하지 않을 때만 안내 문구 출력
-        if (isManager && !hasRenderedRows && (key === 'otherInfo' || (key === 'basicInfo' && items.length === 0))) {
+        // 2. 항목이 비어있고, emptyMessage가 설정된 경우 (otherInfo 또는 collectionInfo가 비어있는 경우)
+        if (!hasVisibleRows && emptyMessage) {
             html += `<tr><td colspan="2" class="muted" style="text-align: center;">
-                ${key === 'otherInfo' ? '기타 정보가 존재하지 않습니다.' : '관리 정보가 존재하지 않습니다.'}
+                ${emptyMessage}
+            </td></tr>`;
+        } else if (!hasVisibleRows && key === 'basicInfo' && items.length === 0) {
+            // 기본 정보가 아예 없는 경우 (매우 드문 경우)
+            html += `<tr><td colspan="2" class="muted" style="text-align: center;">
+                관리 정보가 존재하지 않습니다.
             </td></tr>`;
         }
 
@@ -1674,7 +1770,7 @@ function renderManagementSection(el, data, isEditMode, isManager) {
     `;
 
     if (isEditMode) {
-        // ... (기존 인라인 편집, 체크박스 이벤트 리스너는 그대로 유지) ...
+        // 인라인 편집 및 체크박스 이벤트 리스너 (기존과 동일)
         el.querySelectorAll('.inline-edit-field').forEach(field => {
             field.onchange = (e) => {
                 handleEditFieldChange(data, e.target.dataset.section, e.target.dataset.key, e.target.value);
@@ -1693,25 +1789,23 @@ function renderManagementSection(el, data, isEditMode, isManager) {
                 const action = e.target.dataset.action;
                 const key = e.target.dataset.key;
                 const index = parseInt(e.target.dataset.index);
+                const currentArray = data.management[key];
 
                 if (action === 'add') {
-                    if (data.management[key].length < 10) { 
-                        data.management[key].push({ label: '새 정보', value: '', isPublic: false });
+                    if (currentArray.length < 10) { 
+                        currentArray.push({ label: '새 정보', value: '', isPublic: false });
                     } else {
                         showMessage('더 이상 정보를 추가할 수 없습니다.', 'warning');
                     }
                 } else if (action === 'delete') {
-                    // ✅ 기타 정보 (otherInfo)는 index 0이어도 삭제 허용.
-                    if (key === 'basicInfo' && index === 0 && data.management[key].length > 1) {
+                    // basicInfo의 index 0을 삭제하려고 할 때, 배열 길이가 1보다 크면 방지
+                    if (key === 'basicInfo' && index === 0 && currentArray.length > 1) {
                          showMessage('기본 관리 정보는 삭제할 수 없습니다. (최소 1개 유지 필요)', 'error');
                          return;
                     }
-                    if (key === 'basicInfo' && index === 0 && data.management[key].length === 1) {
-                         // 기본 정보가 마지막 1개일 때, 삭제 대신 초기화 (안내 문구 출력을 위해)
-                         data.management[key].splice(index, 1);
-                    } else {
-                        data.management[key].splice(index, 1);
-                    }
+                    
+                    // 그 외 모든 경우 (collectionInfo, otherInfo의 모든 항목 및 basicInfo[0]이 마지막 항목인 경우) 삭제 진행
+                    currentArray.splice(index, 1);
                 }
                 // 변경 후 섹션 리렌더링
                 renderManagementSection(el, data, isEditMode, isManager);
@@ -1992,36 +2086,67 @@ async function createNewAbyss() {
 }
 
 /**
+ * 특정 섹션의 모든 공개 여부 필드를 일괄적으로 설정합니다.
+ * @param {object} data - 전체 심연체 데이터 객체 (참조로 전달)
+ * @param {string} sectionKey - 'basic', 'stats', 'management', 'logs'
+ * @param {boolean} isPublic - true면 공개, false면 비공개
+ */
+
+function setSectionDisclosure(data, sectionKey, isPublic) {
+    if (sectionKey === 'basic' || sectionKey === 'stats') {
+        const isPublicObj = data[sectionKey].isPublic;
+        if (isPublicObj) {
+            Object.keys(isPublicObj).forEach(key => {
+                isPublicObj[key] = isPublic;
+            });
+        }
+    } else if (sectionKey === 'management') {
+        const managementKeys = ['basicInfo', 'collectionInfo', 'otherInfo'];
+        managementKeys.forEach(arrayKey => {
+            data.management[arrayKey].forEach(item => {
+                item.isPublic = isPublic;
+            });
+        });
+    } else if (sectionKey === 'logs') {
+        data.logs.forEach(log => {
+            log.isPublic = isPublic;
+        });
+    }
+}
+
+/**
  * 심연체 상세 보기/편집 렌더링
  * @param {string} id 심연체 ID
  * @param {boolean} [isEditMode=false] 편집 모드로 시작할지 여부
  * @param {object} [preloadedData=null] 미리 로드된 데이터 (선택 사항)
  */
 async function renderDexDetail(id, isEditMode = false, preloadedData = null) {
-    let data;
-    
-    if (preloadedData) {
-        data = preloadedData;
-    } else {
-        const abyssDoc = await getDoc(doc(db, 'abyssal_dex', id));
-        if (!abyssDoc.exists()) {
-            showMessage('존재하지 않는 심연체입니다.', 'error');
-            renderDex();
-            return;
-        }
-        data = abyssDoc.data();
-    }
-    
+    // ... (데이터 로딩 및 초기 설정 기존과 동일) ...
+    let data; 
+    // ...
     const isManager = await isAdminUser();
     
-    // (이하 기존 renderDexDetail 로직은 동일)
-    // ...
-    // 코드명 자동 업데이트 및 스탯 계산
+    // ... (코드명 자동 업데이트 및 스탯 계산 기존과 동일) ...
     const code = generateAbyssCode(data.basic.danger, data.basic.shape, data.basic.discoverySeq, data.basic.derivedSeq);
     data.basic.code = code;
 
     const calculatedStats = calculateAbyssStats(data.stats);
     const disclosurePercent = calculateDisclosurePercentage(data);
+
+    // 섹션 프리셋 버튼 HTML 생성
+    const presetButtonsHtml = isManager && isEditMode ? `
+        <div style="margin-bottom: 15px; border: 1px dashed var(--muted); padding: 10px; border-radius: 5px; display: flex; gap: 10px; flex-wrap: wrap;">
+            <strong>전체 공개/비공개 프리셋:</strong>
+            <button class="btn-xs primary disclosure-preset-btn" data-section="basic" data-public="true">기본 정보 공개</button>
+            <button class="btn-xs danger disclosure-preset-btn" data-section="basic" data-public="false">기본 정보 비공개</button>
+            <button class="btn-xs primary disclosure-preset-btn" data-section="stats" data-public="true">스탯 공개</button>
+            <button class="btn-xs danger disclosure-preset-btn" data-section="stats" data-public="false">스탯 비공개</button>
+            <button class="btn-xs primary disclosure-preset-btn" data-section="management" data-public="true">관리 정보 공개</button>
+            <button class="btn-xs danger disclosure-preset-btn" data-section="management" data-public="false">관리 정보 비공개</button>
+            <button class="btn-xs primary disclosure-preset-btn" data-section="logs" data-public="true">연구 일지 공개</button>
+            <button class="btn-xs danger disclosure-preset-btn" data-section="logs" data-public="false">연구 일지 비공개</button>
+        </div>
+    ` : '';
 
     let html = `
         <div class="dex-detail-wrap card">
@@ -2036,6 +2161,8 @@ async function renderDexDetail(id, isEditMode = false, preloadedData = null) {
                     </button>` : ''}
                 </div>
             </div>
+
+            ${presetButtonsHtml} // ✅ 프리셋 버튼 추가
 
             <div class="dex-sections-container">
                 <div class="dex-section" id="basicInfoSection"></div>
@@ -2054,7 +2181,7 @@ async function renderDexDetail(id, isEditMode = false, preloadedData = null) {
     
     contentEl.innerHTML = html;
 
-    // 각 섹션 렌더링 시 isEditMode와 data 객체를 전달하여 인라인 편집 구현
+    // 각 섹션 렌더링
     renderBasicInfoSection(document.getElementById('basicInfoSection'), data, isEditMode, isManager);
     renderStatsSection(document.getElementById('statsSection'), data, calculatedStats, isEditMode, isManager);
     renderManagementSection(document.getElementById('managementSection'), data, isEditMode, isManager);
@@ -2065,20 +2192,45 @@ async function renderDexDetail(id, isEditMode = false, preloadedData = null) {
     
     if (isManager) {
         document.getElementById('toggleEditMode').onclick = () => {
+             // ... (기존 편집 모드 토글 로직 유지)
             if (isEditMode) {
                 // 편집 종료 시 저장 로직
                 saveAbyssData(id, data).then(() => {
-                    // 저장 성공 후 다시 읽기 모드로 리렌더링
                     renderDexDetail(id, false); 
                 }).catch((e) => {
                     console.error('Save failed:', e);
                     showMessage('저장 중 오류 발생', 'error');
-                    // 저장 실패 시 편집 모드 유지
                 });
             } else {
                 renderDexDetail(id, true); // 편집 모드로 전환
             }
         };
+
+        // ✅ 프리셋 버튼 이벤트 리스너 부착
+        document.querySelectorAll('.disclosure-preset-btn').forEach(button => {
+            button.onclick = (e) => {
+                const sectionKey = e.target.dataset.section;
+                const isPublic = e.target.dataset.public === 'true';
+
+                // 데이터 모델 업데이트
+                setSectionDisclosure(data, sectionKey, isPublic);
+                
+                // 섹션별로 UI 리렌더링 (전체 페이지 리렌더링보다 빠름)
+                renderBasicInfoSection(document.getElementById('basicInfoSection'), data, isEditMode, isManager);
+                renderStatsSection(document.getElementById('statsSection'), data, calculatedStats, isEditMode, isManager);
+                renderManagementSection(document.getElementById('managementSection'), data, isEditMode, isManager);
+                renderLogsSection(document.getElementById('logsSection'), data, isEditMode, isManager);
+                
+                // 개방률 업데이트를 위해 전체 디테일 섹션 헤더만 리렌더링
+                // (간단하게는 전체 페이지를 다시 로딩할 수도 있지만, 여기서는 UI만 업데이트)
+                const newPercent = calculateDisclosurePercentage(data);
+                showMessage(`${sectionKey} 섹션 항목을 ${isPublic ? '공개' : '비공개'}로 설정했습니다. 개방률: ${newPercent}%`, 'info');
+                
+                // 개방률 표시 업데이트
+                document.querySelector('.dex-detail-wrap .gap:last-child > div').textContent = `개방률: ${newPercent}%`;
+                // 필요하다면 배경색도 업데이트하는 로직 추가 가능
+            };
+        });
     }
     
     // 댓글 이벤트 리스너 (9, 10)
@@ -2148,26 +2300,37 @@ function renderBasicInfoSection(el, data, isEditMode, isManager) {
     const discoveryLabel = d.danger === '파생' ? '파생 순서' : '발견 순서';
     
     const fields = [
-        { label: '코드명', key: 'code', type: 'text', readOnly: true },
-        { label: '명칭', key: 'name', type: 'text' },
-        { label: '위험도', key: 'danger', type: 'select', options: Object.keys(DANGER_TYPES) },
-        { label: '외형', key: 'shape', type: 'select', options: SHAPE_TYPES },
-        { label: discoveryLabel, key: discoveryKey, type: 'number', min: 1 },
-        { label: '주요 피해', key: 'majorDamage', type: 'text' },
-        { label: '사망 가능성', key: 'deathChance', type: 'text' },
-        { label: '광기 가능성', key: 'sanityChance', type: 'text' }
+        // ✅ 코드명: isPublic 체크박스 추가, readOnly: true
+        { label: '코드명', key: 'code', type: 'text', readOnly: true, hasPublicCheckbox: true }, 
+        
+        { label: '명칭', key: 'name', type: 'text', hasPublicCheckbox: true },
+        
+        // ✅ 위험도/외형/순서: 코드명 구성 요소이므로 readOnly: false로 편집은 가능하게 하되, 
+        //    isPublic 체크박스는 제거하여 코드 구성 요소 자체의 개방 여부를 강제함 (코드명 공개/비공개로 일괄 제어)
+        { label: '위험도', key: 'danger', type: 'select', options: Object.keys(DANGER_TYPES), hasPublicCheckbox: false },
+        { label: '외형', key: 'shape', type: 'select', options: SHAPE_TYPES, hasPublicCheckbox: false },
+        { label: discoveryLabel, key: discoveryKey, type: 'number', min: 1, hasPublicCheckbox: false },
+        
+        // 나머지 필드는 기존처럼 isPublic 체크박스 유지
+        { label: '주요 피해', key: 'majorDamage', type: 'text', hasPublicCheckbox: true },
+        { label: '사망 가능성', key: 'deathChance', type: 'text', hasPublicCheckbox: true },
+        { label: '광기 가능성', key: 'sanityChance', type: 'text', hasPublicCheckbox: true }
     ];
 
-    let tableHtml = '<table class="info-table" style="width: 100%;">';
+let tableHtml = '<table class="info-table" style="width: 100%;">';
     fields.forEach(f => {
         const value = d[f.key] || (f.type === 'number' ? 0 : '');
         const isPublic = d.isPublic[f.key] !== undefined ? d.isPublic[f.key] : false;
         const masked = !isPublic && !isManager;
 
+        // isPublic 체크박스 표시 여부 결정
+        const showCheckbox = isManager && isEditMode && f.hasPublicCheckbox;
+        
         tableHtml += `
             <tr class="${masked ? 'masked-row' : ''}">
                 <td style="width: 30%; font-weight: bold;">
-                    ${isManager && isEditMode && !f.readOnly ? `<input type="checkbox" data-key="${f.key}" data-section="${section}-isPublic" ${isPublic ? 'checked' : ''} style="margin-right: 5px;">` : ''}
+                    ${showCheckbox ? 
+                        `<input type="checkbox" data-key="${f.key}" data-section="${section}-isPublic" ${isPublic ? 'checked' : ''} style="margin-right: 5px;">` : ''}
                     ${f.label}
                 </td>
                 <td>
@@ -2181,7 +2344,14 @@ function renderBasicInfoSection(el, data, isEditMode, isManager) {
     el.innerHTML = `
         <h3>기본 정보</h3>
         <div style="display: flex; gap: 20px;">
-            <div style="flex: 0 0 200px; max-width: 200px;">${imgHtml}</div>
+            <div style="flex: 0 0 200px; max-width: 200px;">
+                ${
+                    // 이미지 공개 체크박스 별도 처리
+                    isManager && isEditMode ? 
+                        `<input type="checkbox" data-key="image" data-section="${section}-isPublic" ${d.isPublic.image ? 'checked' : ''} style="margin-right: 5px; margin-bottom: 5px;"> 이미지 공개` : ''
+                }
+                ${imgHtml}
+            </div>
             <div style="flex: 1;">${tableHtml}</div>
         </div>
     `;
