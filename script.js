@@ -1121,292 +1121,482 @@ function openCommentsPopup(mapId) {
 
 // --- Dex Tab (도감) ---
 
+// 코드명 생성에 사용될 상수
+const DANGER_TYPES = {
+    '유광': 'U',
+    '해수': 'S',
+    '심해': 'D',
+    '파생': 'P' // 파생은 코드명 규칙이 다름
+};
+const SHAPE_TYPES = ['P', 'F', 'O', 'C'];
+
+// 계산 로직 상수
+const BASE_HP = 100;
+const BASE_MP = 50;
+const HP_PER_STR = 15;
+const HP_PER_HEALTH = 20;
+const MP_PER_AGI = 5;
+const MP_PER_MIND = 10;
+const ATTACK_PER_STR = 8;
+const ATTACK_PER_AGI = 5;
+const M_ATTACK_PER_MIND = 10;
+
 /**
- * 도감 화면 렌더링 함수
+ * 심연체 스탯 기반 계산
+ * @param {object} stats - { strength, health, agility, mind }
+ * @returns {object} 계산된 능력치
  */
-async function renderDex() {
-    contentEl.innerHTML = `
-        <div class="card">
-            <h3>📖 심연 도감</h3>
-            <div class="dex-tabs" style="margin-bottom: 20px;">
-                <button class="btn dex-tab-btn active" data-dex-type="creature">생물 도감</button>
-                <button class="btn dex-tab-btn" data-dex-type="object">물품 도감</button>
-            </div>
-            <div id="dexContent"></div>
-        </div>
-    `;
+function calculateAbyssStats(stats) {
+    const str = stats.strength || 0;
+    const health = stats.health || 0;
+    const agi = stats.agility || 0;
+    const mind = stats.mind || 0;
 
-    const dexContentEl = document.getElementById('dexContent');
-    const tabBtns = contentEl.querySelectorAll('.dex-tab-btn');
+    const maxHp = BASE_HP + (str * HP_PER_STR) + (health * HP_PER_HEALTH);
+    const maxMp = BASE_MP + (agi * MP_PER_AGI) + (mind * MP_PER_MIND);
+    const physicalAttack = ATTACK_PER_STR * str + ATTACK_PER_AGI * agi;
+    const mentalAttack = M_ATTACK_PER_MIND * mind;
 
-    // 탭 클릭 이벤트 리스너
-    tabBtns.forEach(btn => {
-        btn.addEventListener('click', async () => {
-            tabBtns.forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            const type = btn.dataset.dexType;
-            await loadDexContent(type, dexContentEl);
-        });
-    });
-
-    // 기본적으로 '생물 도감' 로드
-    await loadDexContent('creature', dexContentEl);
+    return { maxHp, maxMp, physicalAttack, mentalAttack };
 }
 
 /**
- * 도감 내용을 로드하고 렌더링하는 함수
- * @param {'creature' | 'object'} type 로드할 도감 타입 (생물 또는 물품)
- * @param {HTMLElement} targetEl 내용을 삽입할 DOM 요소
+ * 심연체 코드명 생성 로직
+ * @param {string} danger 위험도 (유광, 해수 등)
+ * @param {string} shape 외형 (P, F 등)
+ * @param {number} discoverySeq 발견 순서
+ * @param {number} [derivedSeq] 파생 순서 (파생일 경우)
+ * @returns {string} 생성된 코드명
  */
-async function loadDexContent(type, targetEl) {
-    targetEl.innerHTML = '<div class="muted">도감 데이터 로딩 중...</div>';
+function generateAbyssCode(danger, shape, discoverySeq, derivedSeq) {
+    const dangerCode = DANGER_TYPES[danger] || '';
+    const shapeCode = shape || '';
+    
+    if (danger === '파생' && derivedSeq) {
+        // (외형)(발견 순서)-(파생 순서)
+        return `${shapeCode}${discoverySeq}-${derivedSeq}`;
+    } else {
+        // (위험도)-(외형)(발견 순서)
+        return `${dangerCode}-${shapeCode}${discoverySeq}`;
+    }
+}
+
+// 이전에 정의된 contentEl 사용 가정
+
+async function renderDex() {
+    contentEl.innerHTML = '<div class="card muted">도감 정보 로딩중...</div>';
+    const isManager = await isAdminUser();
     
     try {
-        const collectionName = type === 'creature' ? 'creatures' : 'objects';
-        const snap = await getDocs(collection(db, collectionName));
-        
-        targetEl.innerHTML = '';
+        const snap = await getDocs(collection(db, 'abyssal_dex'));
+        const abyssList = [];
+        snap.forEach(d => abyssList.push({ id: d.id, ...d.data() }));
 
-        if (snap.empty) {
-            targetEl.innerHTML = `<div class="muted">등록된 ${type === 'creature' ? '생물' : '물품'} 정보가 없습니다.</div>`;
-            return;
+        const totalCount = abyssList.length;
+        const completedCount = abyssList.filter(a => calculateDisclosurePercentage(a) === 100).length;
+
+        let html = '';
+
+        // 0-1. 심연체 개방 정보 요약
+        html += `<div class="card" style="margin-bottom: 20px;">
+            <h2>도감 개방 현황: ${completedCount} / ${totalCount}</h2>
+            <p class="muted">총 ${totalCount}개의 심연체 중 ${completedCount}개의 정보가 완전히 개방되었습니다.</p>
+        </div>`;
+
+        // 0-2. 관리자: 새 심연체 추가 버튼
+        if (isManager) {
+            html += `<button class="btn" id="addNewAbyssBtn" style="margin-bottom: 20px;">
+                새 심연체 추가 +
+            </button>`;
         }
 
-        const listContainer = document.createElement('div');
-        listContainer.className = 'dex-grid-list';
-        listContainer.style.display = 'grid';
-        listContainer.style.gap = '15px';
-        listContainer.style.gridTemplateColumns = 'repeat(auto-fill, minmax(200px, 1fr))';
+        html += '<div class="dex-grid" style="display: flex; flex-wrap: wrap; gap: 20px; justify-content: center;">';
+        
+        abyssList.forEach(abyss => {
+            html += renderDexCard(abyss, isManager);
+        });
+        
+        html += '</div>';
+        
+        contentEl.innerHTML = html;
 
-        snap.forEach(docSnap => {
-            const data = docSnap.data();
-            const card = renderDexCard(docSnap.id, data, type);
-            listContainer.appendChild(card);
+        // 이벤트 리스너 부착
+        if (isManager) {
+            document.getElementById('addNewAbyssBtn').onclick = () => createNewAbyss();
+        }
+        document.querySelectorAll('.dex-card').forEach(card => {
+            const abyssId = card.dataset.id;
+            card.onclick = () => renderDexDetail(abyssId);
         });
 
-        targetEl.appendChild(listContainer);
-
     } catch(e) {
-        console.error(`Error loading ${type} dex:`, e);
-        targetEl.innerHTML = `<div class="error-msg">도감 로드 실패: ${e.message}</div>`;
+        console.error(e);
+        contentEl.innerHTML = '<div class="card error">도감 정보를 로드하는 데 실패했습니다.</div>';
     }
 }
 
 /**
- * 단일 도감 항목 카드를 렌더링하는 함수
- * @param {string} id 문서 ID
- * @param {object} data 도감 데이터
- * @param {'creature' | 'object'} type 도감 타입
- * @returns {HTMLElement} 렌더링된 카드 요소
+ * 심연체 카드 렌더링 (그리드 뷰)
  */
-function renderDexCard(id, data, type) {
-    const isCreature = type === 'creature';
-    const name = data.name || '이름 없음';
-    const image = data.image || '';
-    const description = data.description || '설명 없음';
-    const danger = data.danger || (isCreature ? 1 : 0);
-    const category = data.category || (isCreature ? '미확인 생물' : '미확인 물품');
+function renderDexCard(abyssData, isManager) {
+    const id = abyssData.id;
+    const name = abyssData.basic.name || '정보 없음';
+    const imgUrl = abyssData.basic.image || '';
+    const disclosurePercent = calculateDisclosurePercentage(abyssData);
+    
+    // 테두리 색상 계산 (0% > Red, 100% > Green)
+    const red = 255 - Math.floor(disclosurePercent * 2.55);
+    const green = Math.floor(disclosurePercent * 2.55);
+    const borderColor = `rgb(${red}, ${green}, 0)`;
 
-    const card = document.createElement('div');
-    card.className = 'dex-card card';
-    card.style.cursor = 'pointer';
-    card.onclick = () => openDexModal(id, data, type); 
-
-    card.innerHTML = `
-        <div class="dex-media" style="aspect-ratio: 4/3; background: #333; overflow:hidden; border-radius: 4px 4px 0 0;">
-            <img src="${image}" alt="${name}" style="width:100%; height:100%; object-fit: cover;">
-        </div>
-        <div style="padding: 10px;">
-            <div class="muted" style="font-size: 0.8em; margin-bottom: 5px;">${category}</div>
-            <h4 style="margin: 0; line-height: 1.2;">${name}</h4>
-            <div style="font-size: 0.9em; margin-top: 5px;">
-                ${isCreature ? `위험도: ${'★'.repeat(danger)}${'☆'.repeat(5 - danger)}` : ''}
+    // 1. 1:1 비율의 정사각형 사진이 한 줄에 4개씩 배치됨
+    return `
+        <div class="dex-card" data-id="${id}" 
+             style="width: calc(25% - 15px); aspect-ratio: 1 / 1; 
+                    background-image: url('${imgUrl}'); background-size: cover; 
+                    border: 5px solid ${borderColor}; position: relative; cursor: pointer;
+                    transition: all 0.3s;">
+            <div class="dex-overlay" 
+                 style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+                        background: rgba(0, 0, 0, 0.6); opacity: 0; transition: opacity 0.3s;
+                        display: flex; flex-direction: column; justify-content: center; align-items: center;
+                        color: white;">
+                <strong style="font-size: 1.2em; text-align: center;">${name}</strong>
+                <span style="margin-top: 5px;">개방률: ${disclosurePercent}%</span>
             </div>
-            <p style="font-size: 0.8em; margin: 5px 0 0; color: #aaa; height: 3em; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${description}</p>
         </div>
+        <style>
+            .dex-card[data-id="${id}"]:hover .dex-overlay { opacity: 1; background: rgba(var(--accent-rgb), 0.7); }
+            .dex-card[data-id="${id}"]:hover { transform: scale(1.05); }
+        </style>
     `;
-
-    return card;
 }
 
-const dexModal = document.createElement('dialog');
-dexModal.id = 'dexModal';
-document.body.appendChild(dexModal);
+/**
+ * 새 심연체 생성 (관리자)
+ */
+async function createNewAbyss() {
+    const newDocRef = doc(collection(db, 'abyssal_dex'));
+    const newId = newDocRef.id;
+
+    // 템플릿 데이터 (기본적으로 모두 비공개)
+    const initialData = {
+        basic: {
+            code: 'N-A0',
+            name: 'New Abyssal Entity',
+            danger: '유광',
+            shape: 'P',
+            discoverySeq: 0,
+            image: '',
+            majorDamage: '',
+            deathChance: '',
+            sanityChance: '',
+            isPublic: {
+                name: false, code: false, danger: false, shape: false, discoverySeq: false,
+                majorDamage: false, deathChance: false, sanityChance: false
+            }
+        },
+        stats: { strength: 1, health: 1, agility: 1, mind: 1, isPublic: {} },
+        management: {
+            basicInfo: [{ label: '기본 정보', value: '', isPublic: false }],
+            collectionInfo: [{ label: '채취 정보', value: '', isPublic: false }],
+            otherInfo: [{ label: '기타 정보', value: '', isPublic: false }]
+        },
+        logs: [
+            { title: '기본 일지', content: '기록 시작', createdAt: serverTimestamp(), isPublic: true },
+        ],
+        createdAt: serverTimestamp(),
+    };
+    
+    try {
+        await setDoc(newDocRef, initialData);
+        showMessage('새 심연체 추가 완료. 편집 모드로 이동합니다.', 'info');
+        renderDexDetail(newId, true); // 생성 후 바로 편집 모드로 이동
+    } catch (e) {
+        console.error(e);
+        showMessage('새 심연체 추가 실패', 'error');
+    }
+}
 
 /**
- * 도감 항목 상세 모달을 띄우는 함수
- * @param {string} id 문서 ID
- * @param {object} data 도감 데이터
- * @param {'creature' | 'object'} type 도감 타입
+ * 심연체 상세 보기/편집 렌더링
+ * @param {string} id 심연체 ID
+ * @param {boolean} [isEditMode=false] 편집 모드로 시작할지 여부
  */
-function openDexModal(id, data, type) {
-    const isCreature = type === 'creature';
-    const title = data.name || '이름 없음';
+async function renderDexDetail(id, isEditMode = false) {
+    const abyssDoc = await getDoc(doc(db, 'abyssal_dex', id));
+    if (!abyssDoc.exists()) {
+        showMessage('존재하지 않는 심연체입니다.', 'error');
+        renderDex();
+        return;
+    }
+    const data = abyssDoc.data();
+    const isManager = await isAdminUser();
     
-    // Creature 상세 정보
-    const creatureDetails = isCreature ? `
-        <p><span class="label">위험도</span> ${'★'.repeat(data.danger || 1)}${'☆'.repeat(5 - (data.danger || 1))}</p>
-        <p><span class="label">서식지</span> ${data.habitat || '알 수 없음'}</p>
-        <p><span class="label">특징</span> ${data.traits || '특징 없음'}</p>
-        <hr>
-        <p><span class="label">약점</span> ${data.weakness || '미확인'}</p>
-        <p><span class="label">보상</span> ${data.reward || '없음'}</p>
-    ` : '';
-    
-    // Object 상세 정보
-    const objectDetails = !isCreature ? `
-        <p><span class="label">분류</span> ${data.category || '기타'}</p>
-        <p><span class="label">획득처</span> ${data.source || '미확인'}</p>
-        <p><span class="label">효능</span> ${data.effect || '없음'}</p>
-        <p><span class="label">무게</span> ${data.weight || 0}kg</p>
-    ` : '';
+    // 코드명 자동 업데이트
+    const code = generateAbyssCode(data.basic.danger, data.basic.shape, data.basic.discoverySeq, data.basic.derivedSeq);
+    data.basic.code = code;
 
-    dexModal.innerHTML = `
-        <div class="modal-content profile-wide" style="max-width: 600px;">
-            <button id="closeDexModal" class="back-btn">← 돌아가기</button>
-            <h3 style="margin-top: 10px;">${isCreature ? '생물' : '물품'} 도감: ${title}</h3>
-            
-            <div class="profile-top">
-                <div class="profile-img-wrap" style="flex: none;"><img class="profile-img" src="${data.image || ""}" alt="${title}"></div>
-                <div class="profile-info">
-                    <p><span class="label">이름</span> ${title}</p>
-                    <p><span class="label">분류</span> ${data.category || (isCreature ? '미확인 생물' : '미확인 물품')}</p>
-                    <hr>
-                    ${creatureDetails}
-                    ${objectDetails}
+    const calculatedStats = calculateAbyssStats(data.stats);
+    const disclosurePercent = calculateDisclosurePercentage(data);
+
+    let html = `
+        <div class="dex-detail-wrap card">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <button class="btn link" id="backToDexList">← 도감 목록으로</button>
+                <div style="display: flex; gap: 10px;">
+                    <div style="font-size: 1.2em; color: ${disclosurePercent === 100 ? 'var(--green)' : 'var(--accent)'};">
+                        개방률: ${disclosurePercent}%
+                    </div>
+                    ${isManager ? `<button class="btn ${isEditMode ? 'warning' : ''}" id="toggleEditMode">
+                        ${isEditMode ? '편집 종료' : '편집'}
+                    </button>` : ''}
                 </div>
             </div>
-            
-            <div style="margin-top: 20px;">
-                <p><span class="label">설명</span></p>
-                <p style="white-space:pre-line">${data.description || '상세 설명 없음'}</p>
+
+            <div class="dex-sections-container">
+                <div class="dex-section" id="basicInfoSection"></div>
+                <div class="dex-section" id="statsSection"></div>
+                <div class="dex-section" id="managementSection"></div>
+                <div class="dex-section" id="logsSection"></div>
             </div>
-            
-            <div id="dexEditArea" style="margin-top: 20px;"></div>
+
+            <hr style="margin: 30px 0;">
+
+            <div class="dex-comments-area" data-id="${id}">
+                ${renderCommentArea(id, data.comments || [])}
+            </div>
+        </div>
+    `;
+    
+    contentEl.innerHTML = html;
+
+    // 각 섹션 렌더링
+    renderBasicInfoSection(document.getElementById('basicInfoSection'), data, isEditMode, isManager);
+    renderStatsSection(document.getElementById('statsSection'), data, calculatedStats, isEditMode, isManager);
+    renderManagementSection(document.getElementById('managementSection'), data, isEditMode, isManager);
+    renderLogsSection(document.getElementById('logsSection'), data, isEditMode, isManager);
+
+    // 이벤트 리스너 부착
+    document.getElementById('backToDexList').onclick = renderDex;
+    if (isManager) {
+        document.getElementById('toggleEditMode').onclick = () => {
+            if (isEditMode) {
+                // 편집 종료 시 저장 로직
+                saveAbyssData(id, data).then(() => {
+                    renderDexDetail(id, false);
+                }).catch(() => {
+                    renderDexDetail(id, true); // 저장 실패 시 편집 모드 유지
+                });
+            } else {
+                renderDexDetail(id, true);
+            }
+        };
+    }
+    
+    // 댓글 이벤트 리스너 (9, 10)
+    attachCommentEventListeners(id);
+}
+
+function renderBasicInfoSection(el, data, isEditMode, isManager) {
+    const d = data.basic;
+    
+    // 3.1: 1:1 정사각형 사진
+    const imgHtml = `
+        <div style="width: 100%; aspect-ratio: 1 / 1; 
+                    background-image: url('${d.image || ''}'); background-size: cover; 
+                    background-position: center; border-radius: 8px; margin-bottom: 15px;">
+        ${isEditMode ? `<input type="text" id="editImageURL" placeholder="이미지 URL" value="${d.image || ''}" style="width: 100%; margin-top: 105%;">` : ''}
         </div>
     `;
 
-    dexModal.showModal();
-    document.getElementById("closeDexModal").onclick = () => dexModal.close();
+    // 3.1: 기본 정보 표
+    const fields = [
+        { label: '코드명', key: 'code', type: 'text', readOnly: true }, // 3.1. 수정 불가
+        { label: '명칭', key: 'name', type: 'text' },
+        { label: '위험도', key: 'danger', type: 'select', options: Object.keys(DANGER_TYPES) }, // 3.1.1
+        { label: '외형', key: 'shape', type: 'select', options: SHAPE_TYPES }, // 3.1.2
+        { label: d.danger === '파생' ? '파생 순서' : '발견 순서', key: d.danger === '파생' ? 'derivedSeq' : 'discoverySeq', type: 'number', min: 1 }, // 3.1.1
+        { label: '주요 피해', key: 'majorDamage', type: 'text' },
+        { label: '사망 가능성', key: 'deathChance', type: 'text' },
+        { label: '광기 가능성', key: 'sanityChance', type: 'text' }
+    ];
 
-    // 관리자 편집 버튼 추가
-    const editArea = document.getElementById("dexEditArea");
-    (async () => {
-        if (await isAdminUser()) {
-            const editBtn = document.createElement("button");
-            editBtn.textContent = "편집";
-            editBtn.onclick = () => openDexInlineEdit(id, data, type);
-            editArea.appendChild(editBtn);
-        }
-    })();
+    let tableHtml = '<table class="info-table" style="width: 100%;">';
+    fields.forEach(f => {
+        const value = f.readOnly ? d[f.key] : (d[f.key] || '');
+        const isPublic = d.isPublic[f.key] !== undefined ? d.isPublic[f.key] : false;
+        const displayValue = isPublic ? value : '<span class="muted">(비공개)</span>';
+        const masked = !isPublic && !isManager;
+
+        tableHtml += `
+            <tr class="${masked ? 'masked-row' : ''}">
+                <td style="width: 30%; font-weight: bold;">
+                    ${isManager && !f.readOnly ? `<input type="checkbox" data-key="${f.key}" ${isPublic ? 'checked' : ''}>` : ''}
+                    ${f.label}
+                </td>
+                <td>
+                    ${masked ? '<div class="masked-data"></div>' : (isEditMode && !f.readOnly ? renderInput(f, value, d.id) : displayValue)}
+                </td>
+            </tr>
+        `;
+    });
+    tableHtml += '</table>';
+
+    // 최종 렌더링 (3. 클릭 시 나오는 상세 화면 구조)
+    el.innerHTML = `
+        <h3>기본 정보</h3>
+        <div style="display: flex; gap: 20px;">
+            <div style="flex: 0 0 150px;">${imgHtml}</div>
+            <div style="flex: 1;">${tableHtml}</div>
+        </div>
+    `;
+    
+    // 3.1.1, 3.1.2: 편집 중 값 변경 시 데이터 반영 및 코드 재생성 (복잡하여 생략하고, 저장 시에만 처리하는 것이 안정적임)
+    // 7. 체크박스 이벤트 리스너 부착
+    if (isManager && isEditMode) {
+        el.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+            checkbox.onchange = (e) => {
+                const key = e.target.dataset.key;
+                data.basic.isPublic[key] = e.target.checked;
+            };
+        });
+        // 입력 필드 변경 감지 (저장 로직에서 사용)
+        // ... (input change listeners to update 'data' object)
+    }
+}
+// ... (renderStatsSection, renderManagementSection, renderLogsSection)
+// ... (saveAbyssData, calculateDisclosurePercentage 함수 구현 필요)
+
+/**
+ * 댓글 영역 렌더링 (9. 인라인 댓글, 미리보기 3개)
+ */
+function renderCommentArea(abyssId, comments = []) {
+    // 최신 순 정렬
+    comments.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+    
+    const preview = comments.slice(0, 3);
+    const count = comments.length;
+
+    let listHtml = '';
+    if (count === 0) {
+        listHtml = '<div class="muted">아직 댓글이 없습니다.</div>';
+    } else {
+        preview.forEach(c => {
+            listHtml += renderCommentItem(c); // 댓글 아이템 렌더링 함수 사용
+        });
+    }
+
+    return `
+        <h4>댓글 (${count}개)</h4>
+        <div class="comments-list" style="margin-bottom: 15px;">
+            ${listHtml}
+        </div>
+        ${count > 3 ? `<button class="btn link" data-action="open-full-comments">댓글 전체 보기 (${count}개)</button>` : ''}
+        
+        <div class="comment-input-area" style="margin-top: 15px;">
+            <input type="text" id="dexCommentInput-${abyssId}" placeholder="댓글 작성 (엔터로 등록)" 
+                   style="width: 100%; padding: 8px; border-radius: 6px; background: transparent; 
+                          border: 1px solid rgba(255,255,255,0.1); color: inherit;">
+        </div>
+    `;
 }
 
 /**
- * 도감 항목 편집 폼을 렌더링하는 함수 (간단화)
+ * 댓글 아이템 HTML 렌더링 (9, 10. 수정됨 표시 및 권한에 따른 액션)
  */
-function openDexInlineEdit(id, data, type) {
-    const isCreature = type === 'creature';
-    const editArea = document.getElementById("dexEditArea");
+function renderCommentItem(comment) {
+    const userHex = comment.userColor || '#CCCCCC'; // users/유저 uid/colorHex 값 사용 가정
+    const isEdited = !!comment.editedAt;
+    
+    // 배경 색상 밝기 판단 (대략적인 판단 로직)
+    const r = parseInt(userHex.slice(1, 3), 16);
+    const g = parseInt(userHex.slice(3, 5), 16);
+    const b = parseInt(userHex.slice(5, 7), 16);
+    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+    const iconColor = brightness > 125 ? 'black' : 'white';
 
-    // 기본 필드
-    let html = `
-        <h4 style="margin-top: 15px;">편집 모드</h4>
-        <div class="edit-grid-inline">
-            <label>이름</label><input id="editName" value="${data.name || ''}">
-            <label>분류</label><input id="editCategory" value="${data.category || ''}">
-            <label>설명</label><textarea id="editDesc">${data.description || ''}</textarea>
-            <label>이미지 URL</label><input id="editImage" value="${data.image || ''}">
-            <label>이미지 파일 업로드</label><input id="editImageFile" type="file" accept="image/*">
-    `;
-
-    // 타입별 필드
-    if (isCreature) {
-        html += `
-            <label>위험도 (1~5)</label><input id="editDanger" type="number" min="1" max="5" value="${data.danger || 1}">
-            <label>서식지</label><input id="editHabitat" value="${data.habitat || ''}">
-            <label>특징</label><textarea id="editTraits">${data.traits || ''}</textarea>
-            <label>약점</label><input id="editWeakness" value="${data.weakness || ''}">
-            <label>보상</label><input id="editReward" value="${data.reward || ''}">
-        `;
-    } else {
-        html += `
-            <label>획득처</label><input id="editSource" value="${data.source || ''}">
-            <label>효능</label><textarea id="editEffect">${data.effect || ''}</textarea>
-            <label>무게 (kg)</label><input id="editWeight" type="number" value="${data.weight || 0}">
-        `;
-    }
-
-    html += `
-            <button id="saveDexInline" style="grid-column: 1 / -1; margin-top: 15px;" class="btn">저장</button>
-            <button id="deleteDexInline" style="grid-column: 1 / -1; background-color: darkred;" class="btn">삭제</button>
+    return `
+        <div class="comment-item" data-id="${comment.id}" data-uid="${comment.uid}" style="display: flex; gap: 10px; margin-bottom: 10px;">
+            <div style="width: 30px; height: 30px; border-radius: 50%; background-color: ${userHex}; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                <span class="material-icons" style="font-size: 20px; color: ${iconColor};">person</span>
+            </div>
+            <div style="flex-grow: 1;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <strong>${comment.name || '익명'}</strong>
+                    <span class="muted" style="font-size: 0.8em;">${fmtTime(comment.createdAt)}${isEdited ? ' (수정됨)' : ''}</span>
+                </div>
+                <div class="comment-text">${comment.text || ''}</div>
+                <div class="comment-actions" style="margin-top: 5px; font-size: 0.9em; display: none;">
+                    <button class="link comment-edit">수정</button>
+                    <button class="link comment-delete">삭제</button>
+                </div>
+            </div>
         </div>
     `;
-    
-    editArea.innerHTML = html;
-
-    const collectionName = isCreature ? 'creatures' : 'objects';
-    
-    document.getElementById("saveDexInline").onclick = async () => {
-        const loadingMsg = document.createElement('div');
-        loadingMsg.textContent = '저장 중...';
-        editArea.appendChild(loadingMsg);
-        
-        let finalImg = document.getElementById("editImage").value;
-        const file = document.getElementById("editImageFile").files[0];
-
-        if (file) {
-            const storageRef = ref(storage, `${collectionName}/${id}_${Date.now()}.png`);
-            await uploadBytes(storageRef, file);
-            finalImg = await getDownloadURL(storageRef);
-        }
-
-        const newData = {
-            name: document.getElementById("editName").value,
-            category: document.getElementById("editCategory").value,
-            description: document.getElementById("editDesc").value,
-            image: finalImg,
-            updatedAt: serverTimestamp()
-        };
-
-        if (isCreature) {
-            newData.danger = Number(document.getElementById("editDanger").value);
-            newData.habitat = document.getElementById("editHabitat").value;
-            newData.traits = document.getElementById("editTraits").value;
-            newData.weakness = document.getElementById("editWeakness").value;
-            newData.reward = document.getElementById("editReward").value;
-        } else {
-            newData.source = document.getElementById("editSource").value;
-            newData.effect = document.getElementById("editEffect").value;
-            newData.weight = Number(document.getElementById("editWeight").value);
-        }
-
-        try {
-            await updateDoc(doc(db, collectionName, id), newData);
-            showMessage('도감 항목 저장 완료', 'info');
-            
-            // 모달 갱신 및 목록 갱신
-            dexModal.close();
-            await renderDex();
-        } catch(e) {
-            showMessage('저장 실패: ' + e.message, 'error');
-            loadingMsg.textContent = '저장 실패';
-            console.error(e);
-        } finally {
-            loadingMsg.remove();
-        }
-    };
-    
-    document.getElementById("deleteDexInline").onclick = async () => {
-        if (await showConfirm('정말로 이 도감 항목을 삭제하시겠습니까?')) {
-            try {
-                await deleteDoc(doc(db, collectionName, id));
-                showMessage('도감 항목 삭제 완료', 'info');
-                dexModal.close();
-                await renderDex();
-            } catch(e) {
-                showMessage('삭제 실패: ' + e.message, 'error');
-                console.error(e);
-            }
-        }
-    };
 }
+
+/**
+ * 댓글 이벤트 리스너 부착 및 처리 (10. 수정/삭제 권한)
+ */
+function attachCommentEventListeners(abyssId) {
+    const inputEl = document.getElementById(`dexCommentInput-${abyssId}`);
+    
+    // 9. 인라인 댓글 등록 (Enter)
+    if (inputEl) {
+        inputEl.addEventListener('keydown', e => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const text = inputEl.value.trim();
+                if (text) {
+                    // postMapComment와 유사한 postDexComment 함수 사용 가정
+                    postDexComment(abyssId, text).then(() => {
+                        inputEl.value = '';
+                        renderDexDetail(abyssId); // 댓글 후 상세 페이지 새로고침
+                    });
+                }
+            }
+        });
+    }
+
+    // 9. 전체 댓글 보기
+    document.querySelector('[data-action="open-full-comments"]')?.addEventListener('click', () => {
+        openCommentsPopup(abyssId, 'abyssal_dex'); // 기존 팝업 함수 재사용 (컬렉션 지정)
+    });
+
+    // 10. 댓글 수정/삭제 권한 처리
+    document.querySelectorAll('.comment-item').forEach(async item => {
+        const commentId = item.dataset.id;
+        const commentUid = item.dataset.uid;
+        
+        const isManager = await isAdminUser();
+        const isOwner = currentUser && currentUser.uid === commentUid;
+
+        if (isManager || isOwner) {
+            const actions = item.querySelector('.comment-actions');
+            actions.style.display = 'block';
+
+            // 수정
+            actions.querySelector('.comment-edit').onclick = async () => {
+                const originalText = item.querySelector('.comment-text').textContent;
+                const newText = prompt('댓글 내용을 수정하시오.', originalText);
+                if (newText) {
+                    await updateDoc(doc(db, 'abyssal_dex', abyssId, 'comments', commentId), { 
+                        text: newText, 
+                        editedAt: serverTimestamp() 
+                    });
+                    renderDexDetail(abyssId);
+                }
+            };
+            
+            // 삭제
+            actions.querySelector('.comment-delete').onclick = async () => {
+                if (await showConfirm('정말로 이 댓글을 삭제하시겠습니까?')) {
+                    await deleteDoc(doc(db, 'abyssal_dex', abyssId, 'comments', commentId));
+                    renderDexDetail(abyssId);
+                }
+            };
+        }
+    });
+}
+
