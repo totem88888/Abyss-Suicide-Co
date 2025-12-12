@@ -2310,15 +2310,6 @@ async function fetchItemDescription(itemName) {
     return "설명 없음 (DB 로드 실패)";
 }
 
-// 인벤토리 설명은 데이터베이스에서 별도로 가져와야 한다는 가정을 처리하는 가상 함수
-async function fetchItemDescription(itemName) {
-    // 실제 로직: 아이템 DB에서 설명을 가져옴
-    if (itemName === "표준형 권총") return "표준형 9mm 권총.";
-    if (itemName === "응급 키트") return "경미한 부상을 치료할 수 있는 키트.";
-    if (itemName === "정화 앰플") return "오염도 일부 제거.";
-    return "설명 없음";
-}
-
 // 부상도/오염도에 따른 텍스트 구절 반환
 function getStatusText(injuryPercent, contaminationPercent) {
     let injuryText = "";
