@@ -1682,15 +1682,6 @@ async function renderDex() {
     }
 }
 
-/**
- * 관리 정보 섹션 렌더링 (동적 추가/삭제, 인라인 편집 적용)
- */
-/**
- * 관리 정보 섹션 렌더링 (동적 추가/삭제, 인라인 편집 적용)
- */
-/**
- * 관리 정보 섹션 렌더링 (동적 추가/삭제, 인라인 편집 적용)
- */
 function renderManagementSection(el, data, isEditMode, isManager) {
     const d = data.management;
     const section = 'management';
@@ -1731,7 +1722,6 @@ function renderManagementSection(el, data, isEditMode, isManager) {
                         ${itemLabel}
                         
                         ${isManager && isEditMode && !isProtectedBasicInfo ? 
-                            // basicInfo[0]이 배열의 마지막 항목이거나 (삭제 시 빈 배열), collectionInfo, otherInfo일 경우 삭제 버튼 표시
                             `<button class="btn-xs danger" data-action="delete" data-key="${key}" data-index="${index}" style="margin-left: 5px;">-</button>` : ''}
                     </td>
                     <td>
@@ -1741,13 +1731,11 @@ function renderManagementSection(el, data, isEditMode, isManager) {
             `;
         });
         
-        // 2. 항목이 비어있고, emptyMessage가 설정된 경우 (otherInfo 또는 collectionInfo가 비어있는 경우)
         if (!hasVisibleRows && emptyMessage) {
             html += `<tr><td colspan="2" class="muted" style="text-align: center;">
                 ${emptyMessage}
             </td></tr>`;
         } else if (!hasVisibleRows && key === 'basicInfo' && items.length === 0) {
-            // 기본 정보가 아예 없는 경우 (매우 드문 경우)
             html += `<tr><td colspan="2" class="muted" style="text-align: center;">
                 관리 정보가 존재하지 않습니다.
             </td></tr>`;
@@ -1770,7 +1758,6 @@ function renderManagementSection(el, data, isEditMode, isManager) {
     `;
 
     if (isEditMode) {
-        // 인라인 편집 및 체크박스 이벤트 리스너 (기존과 동일)
         el.querySelectorAll('.inline-edit-field').forEach(field => {
             field.onchange = (e) => {
                 handleEditFieldChange(data, e.target.dataset.section, e.target.dataset.key, e.target.value);
@@ -1783,7 +1770,6 @@ function renderManagementSection(el, data, isEditMode, isManager) {
             };
         });
 
-        // 동적 배열 관리 버튼 이벤트 리스너 수정
         el.querySelectorAll('button[data-action]').forEach(button => {
             button.onclick = (e) => {
                 const action = e.target.dataset.action;
@@ -1804,24 +1790,18 @@ function renderManagementSection(el, data, isEditMode, isManager) {
                          return;
                     }
                     
-                    // 그 외 모든 경우 (collectionInfo, otherInfo의 모든 항목 및 basicInfo[0]이 마지막 항목인 경우) 삭제 진행
                     currentArray.splice(index, 1);
                 }
-                // 변경 후 섹션 리렌더링
                 renderManagementSection(el, data, isEditMode, isManager);
             };
         });
     }
 }
 
-/**
- * 연구 일지 섹션 렌더링
- */
 function renderLogsSection(el, data, isEditMode, isManager) {
     const logsData = data.logs || []; // logsData로 변수명 변경 (d 대신)
     const section = 'logs';
 
-    // ✅ 공개 여부와 관계없이 logs 배열 자체가 비어있으면 안내 문구 출력
     if (logsData.length === 0) {
          el.innerHTML = `
             <h3>연구 일지</h3>
@@ -1832,7 +1812,6 @@ function renderLogsSection(el, data, isEditMode, isManager) {
                 `<button class="btn primary" id="addLogBtn" style="margin-top: 15px;">+ 연구 일지 추가</button>` : ''}
          `;
          
-         // 일지 추가 버튼 이벤트 리스너
          document.getElementById('addLogBtn')?.addEventListener('click', () => {
              logsData.push({ title: '새 일지', content: '내용 없음', createdAt: new Date(), isPublic: false }); 
              renderLogsSection(el, data, isEditMode, isManager);
@@ -1846,7 +1825,6 @@ function renderLogsSection(el, data, isEditMode, isManager) {
         const isPublic = log.isPublic || false; // 기본 일지는 isPublic이 없으면 false로 처리
         const masked = !isPublic && !isManager;
 
-        // ✅ 요청 반영: 기본 일지 (index 0)도 관리자가 삭제할 수 있도록 허용 (logsData.length가 1이 될 때까지)
         const canDelete = isManager && isEditMode && logsData.length > 0;
 
         return `
@@ -1883,7 +1861,6 @@ function renderLogsSection(el, data, isEditMode, isManager) {
     `;
 
     if (isEditMode) {
-        // 인라인 편집 및 체크박스 이벤트 리스너 (Logs의 isPublic용)
         el.querySelectorAll('.inline-edit-field').forEach(field => {
             field.onchange = (e) => {
                 handleEditFieldChange(data, e.target.dataset.section, e.target.dataset.key, e.target.value);
@@ -1908,15 +1885,12 @@ function renderLogsSection(el, data, isEditMode, isManager) {
         el.querySelectorAll('button[data-action="delete"]').forEach(button => {
             button.onclick = (e) => {
                 const index = parseInt(e.target.dataset.index);
-                // ✅ 삭제 시, logsData 배열에서 해당 인덱스 항목을 제거
                 logsData.splice(index, 1);
                 renderLogsSection(el, data, isEditMode, isManager);
             };
         });
     }
 }
-
-// Firestore 임포트 가정: import { doc, deleteDoc, db } from 'firebase/firestore';
 
 /**
  * DB에서 심연체 데이터를 삭제하는 함수 (Firestore deleteDoc 사용)
@@ -1939,9 +1913,6 @@ async function deleteAbyssData(id) {
         throw error;
     }
 }
-
-// Chart.js 임포트 가정: <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-// 전역 변수: let currentChart = null; // Chart.js 인스턴스를 저장하여 중복 생성을 방지
 
 /**
  * 심연체 스탯을 방사형 그래프(레이더 차트)로 렌더링
@@ -2026,27 +1997,22 @@ function renderRadarChart(stats, calculatedStats) {
  * @param {object} abyssData - 심연체 데이터 객체
  * @param {boolean} isManager - 관리자 여부
  */
+
 function renderDexCard(abyssData, isManager) {
     const id = abyssData.id;
     const basic = abyssData.basic || {};
     const disclosurePercent = calculateDisclosurePercentage(abyssData);
     
-    // --- 공개 여부 확인 ---
-    // 사진 공개 여부
     const isImagePublic = basic.isPublic?.image || false;
     const showImage = isImagePublic || isManager;
-    const imgUrl = showImage ? (basic.image || DEFAULT_PROFILE_IMAGE) : ''; // 비공개 시 URL을 비웁니다.
+    const imgUrl = showImage ? (basic.image || DEFAULT_PROFILE_IMAGE) : '';
 
-    // 코드명/이름 공개 여부
     const isCodePublic = basic.isPublic?.code || false;
     const isNamePublic = basic.isPublic?.name || false;
     
-    // 표시할 이름과 코드명 결정
     const displayName = (isNamePublic || isManager) ? (basic.name || '정보 없음') : '???';
     const displayCode = (isCodePublic || isManager) ? (basic.code || '???') : '???';
     
-    // 관리자가 아닐 경우, 세 가지 주요 필드(사진, 코드, 이름)가 모두 비공개이면 카드를 숨깁니다.
-    // (이 로직은 renderDex에서 필터링하는 것이 더 효율적이지만, 현재 함수 내에서 시각적으로 처리합니다.)
     const isCompletelyHidden = !isManager && !isImagePublic && !isCodePublic && !isNamePublic;
 
     // 테두리 색상 계산 (0% > Red, 100% > Green)
@@ -2060,11 +2026,9 @@ function renderDexCard(abyssData, isManager) {
         : `background-color: #555;`; // 이미지가 없거나 비공개일 경우 회색 배경
 
     if (isCompletelyHidden) {
-        // 관리자가 아니면서 주요 정보가 모두 비공개일 경우, 빈 문자열 반환 (목록에서 제외)
         return '';
     }
 
-    // 1. 1:1 비율의 정사각형 사진이 한 줄에 4개씩 배치됨
     return `
         <div class="dex-card" data-id="${id}" 
              style="width: calc(25% - 15px); aspect-ratio: 1 / 1; 
@@ -2099,9 +2063,6 @@ function renderDexCard(abyssData, isManager) {
     `;
 }
 
-/**
- * 새 심연체 생성 (관리자)
- */
 async function createNewAbyss() {
     showMessage('새 심연체 순서를 계산하고 있습니다...', 'info');
 
@@ -2112,7 +2073,6 @@ async function createNewAbyss() {
     let nextDiscoverySeq = 1;
 
     try {
-        // 1. 모든 심연체 데이터 조회
         const snap = await getDocs(abyssCollectionRef);
         let maxSeq = 0;
         
@@ -2120,27 +2080,22 @@ async function createNewAbyss() {
             const data = d.data();
             const danger = data.basic?.danger;
             const seq = data.basic?.discoverySeq || 0;
-            
-            // 2. '파생'이 아닌 심연체의 discoverySeq만 확인하여 최대값을 찾음
+
             if (danger !== '파생' && seq > maxSeq) {
                 maxSeq = seq;
             }
         });
         
-        // 3. 다음 순서는 최대값 + 1
         nextDiscoverySeq = maxSeq + 1;
         
     } catch(e) {
         console.error("최대 discoverySeq 조회 실패:", e);
-        // 조회 실패 시 기본값 1 사용
         showMessage('순서 조회 중 오류 발생. 기본값 1을 사용합니다.', 'warning');
     }
 
-    // 템플릿 데이터 (기본값 설정)
     const initialData = {
         id: newId, 
         basic: {
-            // 조회된 nextDiscoverySeq 적용
             discoverySeq: nextDiscoverySeq, 
             danger: '유광', // 기본 위험도
             shape: 'P',
@@ -2229,13 +2184,51 @@ async function renderDexDetail(id, isEditMode = false, preloadedData = null) {
     // ... (데이터 로딩 및 초기 설정 기존과 동일) ...
     let data; 
     // ...
+
+    // 1. 데이터 로딩 로직 (⭐ 이 부분이 누락되었을 가능성이 높습니다)
+    if (preloadedData) {
+        data = preloadedData;
+    } else {
+        // Firebase Firestore에서 ID로 문서를 가져옵니다.
+        contentEl.innerHTML = '<div class="card muted">상세 정보 로딩중...</div>'; // 로딩 메시지
+        try {
+            // 이 줄이 실행되려면 `getDoc`, `doc`, `db` 등의 Firebase 변수가 스코프 내에 정의되어 있어야 합니다.
+            const docSnap = await getDoc(doc(db, 'abyssal_dex', id)); 
+            
+            if (docSnap.exists()) {
+                data = docSnap.data();
+            } else {
+                showMessage('심연체 정보를 찾을 수 없습니다.', 'error');
+                renderDex(); // 목록으로 복귀
+                return;
+            }
+        } catch (e) {
+            console.error("데이터 로딩 실패:", e);
+            showMessage('데이터 로딩 중 심각한 오류가 발생했습니다.', 'error');
+            return;
+        }
+    }
+    
+    // 2. 유효성 검사 (오류 방지)
+    // 데이터 로드에 실패했거나, 로드된 데이터에 'basic' 필드가 없을 경우 처리
+    if (!data || !data.basic) {
+        console.error("Abyss data or 'basic' section is missing after load attempt:", data);
+        showMessage('심연체 데이터 구조 오류: 기본 정보를 찾을 수 없습니다.', 'error');
+        renderDex(); 
+        return;
+    }
+
     const isManager = await isAdminUser();
     
-    // ... (코드명 자동 업데이트 및 스탯 계산 기존과 동일) ...
-    const code = generateAbyssCode(data.basic.danger, data.basic.shape, data.basic.discoverySeq, data.basic.derivedSeq);
+    const code = generateAbyssCode(
+        data.basic.danger, 
+        data.basic.shape, 
+        data.basic.discoverySeq, 
+        data.basic.derivedSeq
+    );
     data.basic.code = code;
-
-    const calculatedStats = calculateAbyssStats(data.stats);
+    
+    const calculatedStats = calculateAbyssStats(data.stats); // (이 함수는 전체 코드에 정의되어 있다고 가정)
     const disclosurePercent = calculateDisclosurePercentage(data);
 
     // 섹션 프리셋 버튼 HTML 생성
@@ -2360,9 +2353,6 @@ async function renderDexDetail(id, isEditMode = false, preloadedData = null) {
     attachCommentEventListeners(id);
 }
 
-/**
- * 입력/선택 필드를 렌더링하거나, 일반 텍스트를 렌더링합니다.
- */
 function renderInlineField(f, currentValue, isEditMode, section, index = null, subKey = null) {
     // 배열 필드의 키 생성 (e.g., 'basicInfo[1].value')
     const key = index !== null ? `${f.key}[${index}].${subKey}` : f.key;
@@ -2396,11 +2386,6 @@ function renderInlineField(f, currentValue, isEditMode, section, index = null, s
     return currentValue; // 읽기 모드
 }
 
-// --- 섹션 렌더링 함수 ---
-
-/**
- * 기본 정보 섹션 렌더링 (인라인 편집 적용)
- */
 function renderBasicInfoSection(el, data, isEditMode, isManager) {
     const d = data.basic;
     const section = 'basic';
@@ -2418,7 +2403,6 @@ function renderBasicInfoSection(el, data, isEditMode, isManager) {
         ` : ''}
     `;
 
-    // 3.1: 기본 정보 표
     const discoveryKey = d.danger === '파생' ? 'derivedSeq' : 'discoverySeq';
     const discoveryLabel = d.danger === '파생' ? '파생 순서' : '발견 순서';
     
@@ -2591,9 +2575,6 @@ function renderStatsSection(el, data, calculatedStats, isEditMode, isManager) {
             };
         });
     }
-
-    // 그래프 그리기 (Chart.js 등의 라이브러리가 필요함)
-    // drawRadarChart(document.getElementById(`radarChart-${data.id}`), d); 
 }
 
 /**
