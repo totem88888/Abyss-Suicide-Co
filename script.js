@@ -1441,18 +1441,82 @@ function generateAbyssCode(danger, shape, discoverySeq, derivedSeq) {
 }
 
 /**
- * 공개 여부 퍼센티지를 계산하는 스텁 함수 (실제 로직 구현 필요)
+ * 공개 여부 퍼센티지를 계산하는 함수
+ *
+ * 이 함수는 '기본 정보(management.basicInfo[0])'와 
+ * '기본 일지(logs[0])'를 전체 개방 항목 수와 공개된 항목 수 카운트에서 제외합니다.
+ * @param {object} abyssData - 전체 심연체 데이터 객체
+ * @returns {number} 0에서 100 사이의 개방률 퍼센티지
  */
 function calculateDisclosurePercentage(abyssData) {
-    // 임시 로직: 기본 정보의 공개 필드 갯수를 세어 임시 퍼센티지 반환
-    const totalFields = 8 + 4; // Basic (8) + Stats (4)
+    let totalFields = 0;
     let publicCount = 0;
     
-    Object.values(abyssData.basic.isPublic || {}).forEach(isP => { if (isP) publicCount++; });
-    Object.values(abyssData.stats.isPublic || {}).forEach(isP => { if (isP) publicCount++; });
+    const basicIsPublic = abyssData.basic?.isPublic || {};
+    const statsIsPublic = abyssData.stats?.isPublic || {};
+    const management = abyssData.management || {};
+    const logs = abyssData.logs || [];
     
-    // 관리 정보와 로그의 isPublic 필드도 계산해야 함. 여기서는 임시로 50% 반환
-    return Math.min(100, Math.floor((publicCount / totalFields) * 50) + 50);
+    // 1. Basic Fields (기본 정보 항목 카운트 - isPublic 객체 내 모든 키)
+    // 이 섹션의 모든 isPublic 필드는 카운트에 포함됩니다.
+    const basicKeys = Object.keys(basicIsPublic);
+    totalFields += basicKeys.length;
+    basicKeys.forEach(key => {
+        if (basicIsPublic[key]) {
+            publicCount++;
+        }
+    });
+
+    // 2. Stats Fields (스탯 항목 카운트 - isPublic 객체 내 모든 키)
+    const statsKeys = Object.keys(statsIsPublic);
+    totalFields += statsKeys.length;
+    statsKeys.forEach(key => {
+        if (statsIsPublic[key]) {
+            publicCount++;
+        }
+    });
+    
+    // 3. Management Fields (관리 정보)
+    const managementKeys = ['basicInfo', 'collectionInfo', 'otherInfo'];
+    
+    managementKeys.forEach(key => {
+        const items = management[key] || [];
+        
+        items.forEach((item, index) => {
+            // ✅ 사용자 요구사항 반영: basicInfo 배열의 첫 번째 항목 ("기본 정보")은 제외
+            const isBasicInfoDefault = (key === 'basicInfo' && index === 0);
+            
+            if (!isBasicInfoDefault) {
+                totalFields++;
+                if (item.isPublic) {
+                    publicCount++;
+                }
+            }
+        });
+    });
+    
+    // 4. Logs Fields (연구 일지)
+    logs.forEach((log, index) => {
+        // ✅ 사용자 요구사항 반영: logs 배열의 첫 번째 항목 ("기본 일지")은 제외
+        const isDefaultLog = (index === 0);
+        
+        if (!isDefaultLog) {
+            totalFields++;
+            if (log.isPublic) {
+                publicCount++;
+            }
+        }
+    });
+
+    // 5. 최종 계산: 0%에서 시작
+    if (totalFields === 0) {
+        return 0; // 나눗셈 방지
+    }
+
+    // (공개된 필드 수 / 전체 필드 수) * 100
+    const percentage = (publicCount / totalFields) * 100;
+
+    return Math.min(100, Math.floor(percentage));
 }
 
 /**
@@ -1533,24 +1597,51 @@ async function renderDex() {
 /**
  * 관리 정보 섹션 렌더링 (동적 추가/삭제, 인라인 편집 적용)
  */
+/**
+ * 관리 정보 섹션 렌더링 (동적 추가/삭제, 인라인 편집 적용)
+ */
 function renderManagementSection(el, data, isEditMode, isManager) {
     const d = data.management;
     const section = 'management';
     
     const renderArrayInfo = (key, title, labelBase) => {
         let html = `<h4>${title}</h4><table class="info-table" style="width: 100%;">`;
+        const items = d[key] || [];
+
+        // ✅ 기타 정보가 비어있을 때 안내 문구 출력
+        if (key === 'otherInfo' && items.length === 0 && !isManager) {
+             html += `<tr><td colspan="2" class="muted" style="text-align: center;">
+                 기타 정보가 존재하지 않습니다.
+             </td></tr>`;
+        }
         
-        d[key].forEach((item, index) => {
+        // basicInfo의 첫 번째 항목은 기본값이므로, items가 1개이고 기본값인 경우에도 렌더링을 처리해야 함
+        // 여기서는 items 배열이 비어있지 않은 경우에만 테이블 행을 렌더링합니다.
+
+        let hasRenderedRows = false;
+
+        items.forEach((item, index) => {
+            // key가 'basicInfo'이고 index가 0인 경우는 기본 정보이므로, 삭제 버튼을 막기 위해 index > 0인지 확인합니다.
+            const isBasicInfoDefault = (key === 'basicInfo' && index === 0);
+            
+            // 일반 사용자에게는 공개된 항목만 표시
+            if (!isManager && !item.isPublic && !isBasicInfoDefault) return;
+
+            hasRenderedRows = true;
+
             const isPublic = item.isPublic !== undefined ? item.isPublic : false;
             const masked = !isPublic && !isManager;
-            const itemLabel = index === 0 && key === 'basicInfo' ? '기본 정보' : `${labelBase} (${index + 1})`;
+            const itemLabel = isBasicInfoDefault ? '기본 정보' : `${labelBase} (${index + 1})`;
 
             html += `
                 <tr class="${masked ? 'masked-row' : ''}">
                     <td style="width: 30%; font-weight: bold; vertical-align: top; padding-top: 8px;">
                         ${isManager && isEditMode ? `<input type="checkbox" data-key="${key}[${index}].isPublic" data-section="${section}" ${isPublic ? 'checked' : ''} style="margin-right: 5px;">` : ''}
                         ${itemLabel}
-                        ${isManager && isEditMode && index > 0 ? `<button class="btn-xs danger" data-action="delete" data-key="${key}" data-index="${index}" style="margin-left: 5px;">-</button>` : ''}
+                        
+                        ${isManager && isEditMode && (!isBasicInfoDefault || key === 'otherInfo') ? 
+                            // 기타 정보(otherInfo)는 index 0이어도 사용자가 지울 수 있어야 함. (요청 사항 반영)
+                            `<button class="btn-xs danger" data-action="delete" data-key="${key}" data-index="${index}" style="margin-left: 5px;">-</button>` : ''}
                     </td>
                     <td>
                         ${masked ? '<div class="masked-data"></div>' : renderInlineField({key, type: 'textarea', readOnly: false}, item.value, isEditMode, section, index, 'value')}
@@ -1558,6 +1649,14 @@ function renderManagementSection(el, data, isEditMode, isManager) {
                 </tr>
             `;
         });
+        
+        // 관리자 모드에서 기타 정보 섹션에 데이터가 없고, 기본 행(index 0)이 존재하지 않을 때만 안내 문구 출력
+        if (isManager && !hasRenderedRows && (key === 'otherInfo' || (key === 'basicInfo' && items.length === 0))) {
+            html += `<tr><td colspan="2" class="muted" style="text-align: center;">
+                ${key === 'otherInfo' ? '기타 정보가 존재하지 않습니다.' : '관리 정보가 존재하지 않습니다.'}
+            </td></tr>`;
+        }
+
         
         if (isManager && isEditMode) {
             html += `<tr><td colspan="2"><button class="btn-xs primary" data-action="add" data-key="${key}">+ ${title} 추가</button></td></tr>`;
@@ -1575,21 +1674,20 @@ function renderManagementSection(el, data, isEditMode, isManager) {
     `;
 
     if (isEditMode) {
-        // 인라인 편집 이벤트 리스너
+        // ... (기존 인라인 편집, 체크박스 이벤트 리스너는 그대로 유지) ...
         el.querySelectorAll('.inline-edit-field').forEach(field => {
             field.onchange = (e) => {
                 handleEditFieldChange(data, e.target.dataset.section, e.target.dataset.key, e.target.value);
             };
         });
         
-        // 체크박스 이벤트 리스너
         el.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
             checkbox.onchange = (e) => {
                 handleEditFieldChange(data, e.target.dataset.section, e.target.dataset.key, e.target.checked);
             };
         });
 
-        // 동적 배열 관리 버튼 이벤트 리스너
+        // 동적 배열 관리 버튼 이벤트 리스너 수정
         el.querySelectorAll('button[data-action]').forEach(button => {
             button.onclick = (e) => {
                 const action = e.target.dataset.action;
@@ -1597,17 +1695,23 @@ function renderManagementSection(el, data, isEditMode, isManager) {
                 const index = parseInt(e.target.dataset.index);
 
                 if (action === 'add') {
-                    if (data.management[key].length < 10) { // 임시 최대 제한
+                    if (data.management[key].length < 10) { 
                         data.management[key].push({ label: '새 정보', value: '', isPublic: false });
                     } else {
                         showMessage('더 이상 정보를 추가할 수 없습니다.', 'warning');
                     }
                 } else if (action === 'delete') {
-                    if (key === 'basicInfo' && index === 0) {
-                        showMessage('기본 관리 정보는 삭제할 수 없습니다.', 'error');
-                        return;
+                    // ✅ 기타 정보 (otherInfo)는 index 0이어도 삭제 허용.
+                    if (key === 'basicInfo' && index === 0 && data.management[key].length > 1) {
+                         showMessage('기본 관리 정보는 삭제할 수 없습니다. (최소 1개 유지 필요)', 'error');
+                         return;
                     }
-                    data.management[key].splice(index, 1);
+                    if (key === 'basicInfo' && index === 0 && data.management[key].length === 1) {
+                         // 기본 정보가 마지막 1개일 때, 삭제 대신 초기화 (안내 문구 출력을 위해)
+                         data.management[key].splice(index, 1);
+                    } else {
+                        data.management[key].splice(index, 1);
+                    }
                 }
                 // 변경 후 섹션 리렌더링
                 renderManagementSection(el, data, isEditMode, isManager);
@@ -1620,13 +1724,36 @@ function renderManagementSection(el, data, isEditMode, isManager) {
  * 연구 일지 섹션 렌더링
  */
 function renderLogsSection(el, data, isEditMode, isManager) {
-    const d = data.logs || [];
+    const logsData = data.logs || []; // logsData로 변수명 변경 (d 대신)
     const section = 'logs';
+
+    // ✅ 공개 여부와 관계없이 logs 배열 자체가 비어있으면 안내 문구 출력
+    if (logsData.length === 0) {
+         el.innerHTML = `
+            <h3>연구 일지</h3>
+            <div class="card muted" style="text-align: center; padding: 20px;">
+                연구 일지가 존재하지 않습니다.
+            </div>
+            ${isManager && isEditMode ? 
+                `<button class="btn primary" id="addLogBtn" style="margin-top: 15px;">+ 연구 일지 추가</button>` : ''}
+         `;
+         
+         // 일지 추가 버튼 이벤트 리스너
+         document.getElementById('addLogBtn')?.addEventListener('click', () => {
+             logsData.push({ title: '새 일지', content: '내용 없음', createdAt: new Date(), isPublic: false }); 
+             renderLogsSection(el, data, isEditMode, isManager);
+         });
+
+         return; // 일지가 없으면 여기서 렌더링 종료
+    }
     
-    let logsHtml = d.map((log, index) => {
+    let logsHtml = logsData.map((log, index) => {
         const logLabel = index === 0 ? '기본 일지' : `연구 일지 (${index})`;
-        const isPublic = log.isPublic || false; // 7. 기본 일지는 항상 공개
+        const isPublic = log.isPublic || false; // 기본 일지는 isPublic이 없으면 false로 처리
         const masked = !isPublic && !isManager;
+
+        // ✅ 요청 반영: 기본 일지 (index 0)도 관리자가 삭제할 수 있도록 허용 (logsData.length가 1이 될 때까지)
+        const canDelete = isManager && isEditMode && logsData.length > 0;
 
         return `
             <div class="card log-entry ${masked ? 'masked-log' : ''}" style="margin-bottom: 15px;">
@@ -1635,7 +1762,7 @@ function renderLogsSection(el, data, isEditMode, isManager) {
                     <span class="muted" style="font-size: 0.9em;">${log.createdAt ? fmtTime(log.createdAt) : '날짜 없음'}</span>
                 </div>
                 
-                ${isManager && isEditMode && index > 0 ? 
+                ${canDelete ? 
                     `<button class="btn-xs danger" data-action="delete" data-index="${index}" style="float: right;">- 삭제</button>` : ''}
                 
                 <p style="margin-top: 10px;">
@@ -1646,6 +1773,10 @@ function renderLogsSection(el, data, isEditMode, isManager) {
                     <strong>내용:</strong>
                     ${masked ? '<div class="masked-data" style="height: 50px;"></div>' : renderInlineField({key:'logs', type:'textarea'}, log.content, isEditMode, section, index, 'content')}
                 </p>
+                
+                ${isManager && isEditMode ? `<p>
+                    <input type="checkbox" data-key="${section}[${index}].isPublic" data-section="${section}" ${isPublic ? 'checked' : ''} style="margin-right: 5px;"> 공개
+                </p>` : ''}
             </div>
         `;
     }).join('');
@@ -1653,22 +1784,28 @@ function renderLogsSection(el, data, isEditMode, isManager) {
     el.innerHTML = `
         <h3>연구 일지</h3>
         <div class="log-list">${logsHtml}</div>
-        ${isManager && isEditMode && d.length < 4 ? 
+        ${isManager && isEditMode && logsData.length < 4 ? 
             `<button class="btn primary" id="addLogBtn" style="margin-top: 15px;">+ 연구 일지 추가</button>` : ''}
     `;
 
     if (isEditMode) {
-        // 인라인 편집 이벤트 리스너
+        // 인라인 편집 및 체크박스 이벤트 리스너 (Logs의 isPublic용)
         el.querySelectorAll('.inline-edit-field').forEach(field => {
             field.onchange = (e) => {
                 handleEditFieldChange(data, e.target.dataset.section, e.target.dataset.key, e.target.value);
             };
         });
+        
+        el.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+            checkbox.onchange = (e) => {
+                handleEditFieldChange(data, e.target.dataset.section, e.target.dataset.key, e.target.checked);
+            };
+        });
 
         // 일지 추가 버튼
         document.getElementById('addLogBtn')?.addEventListener('click', () => {
-            if (d.length < 4) {
-                d.push({ title: '새 일지', content: '내용 없음', createdAt: new Date(), isPublic: false }); 
+            if (logsData.length < 4) {
+                logsData.push({ title: '새 일지', content: '내용 없음', createdAt: new Date(), isPublic: false }); 
                 renderLogsSection(el, data, isEditMode, isManager);
             }
         });
@@ -1677,10 +1814,9 @@ function renderLogsSection(el, data, isEditMode, isManager) {
         el.querySelectorAll('button[data-action="delete"]').forEach(button => {
             button.onclick = (e) => {
                 const index = parseInt(e.target.dataset.index);
-                if (index > 0) { // 기본 일지는 삭제 불가 (index 0)
-                    d.splice(index, 1);
-                    renderLogsSection(el, data, isEditMode, isManager);
-                }
+                // ✅ 삭제 시, logsData 배열에서 해당 인덱스 항목을 제거
+                logsData.splice(index, 1);
+                renderLogsSection(el, data, isEditMode, isManager);
             };
         });
     }
