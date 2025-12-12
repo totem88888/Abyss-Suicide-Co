@@ -85,14 +85,20 @@ const DEFAULT_PROFILE_IMAGE = './images/default-profile.png';
 let currentUser = null;
 
 // 인증 상태 변화 감지 및 currentUser 설정
-onAuthStateChanged(auth, user => {
+onAuthStateChanged(auth, async user => { // ✅ 콜백 함수를 async로 변경
     currentUser = user;
+    
+    if (user) {
+        const nickname = user.displayName || '신규 사용자'; 
+        
+        await checkAndCreateSheet(user.uid, nickname);
+    }
+
+    renderMain();
     renderMap();
     renderStaff();
     renderDex();
-    renderMain()
     renderMe();
-
 });
 
 async function checkAndCreateSheet(uid, nickname) {
@@ -105,17 +111,6 @@ async function checkAndCreateSheet(uid, nickname) {
         console.log(`Default sheet created for user: ${uid}`);
     }
 }
-
-// [saveUserDataAndSheet 함수 내부의 3단계]
-    // 3. 'sheets' 문서가 없으면 생성
-    const sheetDocRef = doc(db, 'sheets', uid);
-    const sheetDoc = await getDoc(sheetDocRef);
-
-    if (!sheetDoc.exists()) {
-        const defaultSheetData = createDefaultSheet(uid, nickname);
-        await setDoc(sheetDocRef, defaultSheetData);
-        console.log(`Default sheet created for user: ${uid}`);
-    }
 
 // 💡 참고: 'db', 'auth', 'currentUser', 'contentEl' 등은 기존처럼 전역에 정의되어 있어야 합니다.
 
@@ -402,19 +397,21 @@ async function renderMain(){
 
         const cfgSnap = await getDoc(doc(db, 'system', 'abyssConfig'));
 
-        if (flowText && savedDate === todayKey) {
-            abyssFlowEl.textContent = '오늘 심연은 ' + flowText + '습니다.';
-        } else if (cfgSnap.exists()) {
-            const flows = cfgSnap.data().flows || [];
-            if (flows.length > 0) {
-                const picked = pickByWeight(flows);
-                await setDoc(todayRef, { flowText: picked, dateKey: todayKey, updatedAt: serverTimestamp() });
-                abyssFlowEl.textContent = '오늘 심연의 기류는 ' + picked + ' 입니다.';
+        if (abyssFlowEl) { // ✅ abyssFlowEl이 null이 아닌지 확인
+            if (flowText && savedDate === todayKey) {
+                abyssFlowEl.textContent = '오늘 심연은 ' + flowText + '습니다.';
+            } else if (cfgSnap.exists()) {
+                const flows = cfgSnap.data().flows || [];
+                if (flows.length > 0) {
+                    const picked = pickByWeight(flows);
+                    await setDoc(todayRef, { flowText: picked, dateKey: todayKey, updatedAt: serverTimestamp() });
+                    abyssFlowEl.textContent = '오늘 심연의 기류는 ' + picked + ' 입니다.';
+                } else {
+                    abyssFlowEl.textContent = '기류 데이터 없음';
+                }
             } else {
-                abyssFlowEl.textContent = '기류 데이터 없음';
+                abyssFlowEl.textContent = '기류 설정 없음';
             }
-        } else {
-            abyssFlowEl.textContent = '기류 설정 없음';
         }
 
         const usersSnap = await getDocs(collection(db, 'users'));
