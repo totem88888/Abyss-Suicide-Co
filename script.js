@@ -58,6 +58,17 @@ onAuthStateChanged(auth, user => {
     // 예: renderStaff(); 
 });
 
+// [saveUserDataAndSheet 함수 내부의 3단계]
+    // 3. 'sheets' 문서가 없으면 생성
+    const sheetDocRef = doc(db, 'sheets', uid);
+    const sheetDoc = await getDoc(sheetDocRef);
+
+    if (!sheetDoc.exists()) {
+        const defaultSheetData = createDefaultSheet(uid, nickname);
+        await setDoc(sheetDocRef, defaultSheetData);
+        console.log(`Default sheet created for user: ${uid}`);
+    }
+
 // [파일 최상단 또는 전역 변수 영역에 추가]
 const DEFAULT_MAP_IMAGE = "https://via.placeholder.com/320x200?text=No+Image";
 // 💡 참고: 'db', 'auth', 'currentUser', 'contentEl' 등은 기존처럼 전역에 정의되어 있어야 합니다.
@@ -109,18 +120,20 @@ onAuthStateChanged(auth, (user) => {
 
 // --- 유틸리티 함수 ---
 
+// [새로 추가해야 할 함수]
 /**
- * 직원 프로필 이미지를 Storage에 업로드하고 URL을 반환합니다.
- * @param {File} file 업로드할 파일 객체
- * @param {string} staffId 직원 문서 ID
- * @returns {Promise<string>} 다운로드 가능한 이미지 URL
+ * 직원 이미지를 Firebase Storage에 업로드합니다.
+ * @param {File} file - 업로드할 파일 객체
+ * @param {string} staffId - 직원 문서 ID
+ * @returns {Promise<string>} 업로드된 파일의 다운로드 URL
  */
 async function uploadStaffImage(file, staffId) {
-    // 직원 이미지는 staff/[ID]/profile.png 등으로 저장하는 것이 좋습니다.
-    const storageRef = ref(storage, `staff/${staffId}_${Date.now()}.png`);
-    await uploadBytes(storageRef, file);
-    showMessage('이미지 업로드 완료', 'info');
-    return await getDownloadURL(storageRef);
+    // 경로는 'staff_images/[staffId].[확장자]'로 지정
+    const extension = file.name.split('.').pop();
+    const storagePath = `staff_images/${staffId}.${extension}`; 
+    
+    // uploadFileToStorage 함수가 이전에 정의되어 있어야 함
+    return uploadFileToStorage(file, storagePath);
 }
 
 function randomHex(){
@@ -504,7 +517,16 @@ function drawStatChart(stats = { str:1, vit:1, agi:1, wil:1 }) {
     });
 }
 
-function openProfileModal(docId, data) {
+const sheetStats = {
+    str: sheetData.stats.muscle, 
+    vit: sheetData.stats.endurance, 
+    agi: sheetData.stats.agility, 
+    wil: sheetData.stats.spirit
+};
+
+drawStatChart(sheetStats);
+
+async function openProfileModal(docId, data) {
     profileModal.innerHTML = `
         <div class="modal-content profile-wide">
         <button id="closeProfile" class="back-btn">← 돌아가기</button>
@@ -535,12 +557,20 @@ function openProfileModal(docId, data) {
     profileModal.showModal();
     document.getElementById("closeProfile").onclick = () => profileModal.close();
 
-    const editBtn = document.createElement("button");
-    editBtn.textContent = "편집";
-    editBtn.onclick = () => openInlineEdit(docId, data);
-    document.getElementById("editArea").appendChild(editBtn);
+    // --- [수정된 편집 버튼 로직 시작] ---
+    const editArea = document.getElementById("editArea");
+    const isAdmin = await isAdminUser(); // 관리자 여부 확인 함수 호출
 
-    setTimeout(() => drawStatChart(data), 100); // 모달 렌더링 후 차트 그리기
+    if (isAdmin) {
+        const editBtn = document.createElement("button");
+        editBtn.textContent = "편집";
+        editBtn.className = "edit-btn"; // 스타일링을 위한 클래스 추가
+        editBtn.onclick = () => openInlineEdit(docId, data);
+        editArea.appendChild(editBtn);
+    }
+    // --- [수정된 편집 버튼 로직 끝] ---
+
+    setTimeout(() => drawStatChart(data), 100); 
 }
 
 function openInlineEdit(docId, data) {
@@ -670,12 +700,13 @@ async function openMapInlineEdit(mapId, data) {
 
     // 유틸리티 함수: 위험도 별 표시
     const updateDangerStars = (value) => {
-        const starsEl = document.getElementById("dangerStars");
-        if (starsEl) {
-            const danger = Math.min(5, Math.max(1, Number(value) || 1));
-            starsEl.textContent = '★'.repeat(danger) + '☆'.repeat(5 - danger);
-        }
-    };
+    // ID 대신 tempEl 안에서 찾도록 수정
+    const starsEl = tempEl.querySelector("#dangerStars"); 
+    if (starsEl) {
+        const danger = Math.min(5, Math.max(1, Number(value) || 1));
+        starsEl.textContent = '★'.repeat(danger) + '☆'.repeat(5 - danger);
+    }
+};
 
     // 초기 별 표시
     updateDangerStars(currentDanger);
@@ -975,10 +1006,24 @@ function showConfirm(msg) {
     });
 }
 
+// [개선된 uploadMapImage 함수 (mapId가 고유 ID임을 가정)]
 async function uploadMapImage(file, mapId) {
-    const storageRef = ref(storage, `maps/${mapId || 'tmp'}_${Date.now()}.png`);
-    await uploadBytes(storageRef, file);
-    return await getDownloadURL(storageRef);
+    if (!mapId) throw new Error("맵 ID가 없어 이미지를 저장할 수 없습니다.");
+    
+    // 파일 확장자 추출 (예: png, jpg)
+    const extension = file.name.split('.').pop(); 
+    
+    // 경로: maps/[mapId]/background.[확장자]
+    // 이렇게 하면 한 맵당 하나의 이미지 경로만 유지할 수 있어 관리하기 용이합니다.
+    const storageRef = ref(storage, `maps/${mapId}/background.${extension}`); 
+    
+    try {
+        await uploadBytes(storageRef, file);
+        return await getDownloadURL(storageRef);
+    } catch(e) {
+        console.error("맵 이미지 업로드 실패:", e);
+        throw e;
+    }
 }
 
 function renderMapCard(mapDoc) {
@@ -1610,7 +1655,7 @@ function renderLogsSection(el, data, isEditMode, isManager) {
         // 일지 추가 버튼
         document.getElementById('addLogBtn')?.addEventListener('click', () => {
             if (d.length < 4) {
-                d.push({ title: '새 일지', content: '내용 없음', createdAt: serverTimestamp(), isPublic: false });
+                d.push({ title: '새 일지', content: '내용 없음', createdAt: new Date(), isPublic: false }); 
                 renderLogsSection(el, data, isEditMode, isManager);
             }
         });
@@ -1772,8 +1817,8 @@ async function createNewAbyss() {
             otherInfo: [{ label: '기타 정보', value: '초기 기타 정보', isPublic: false }]
         },
         logs: [
-            { title: '기본 일지', content: '기록 시작', createdAt: serverTimestamp(), isPublic: true },
-        ],
+            { title: '기본 일지', content: '기록 시작', createdAt: new Date(), isPublic: true }, 
+    ],
         comments: [],
         createdAt: serverTimestamp(),
     };
@@ -2397,13 +2442,13 @@ async function renderMe(targetSheetId = null) {
         // 3. 스탯 섹션 렌더링
         // 스탯 섹션에는 두 개의 방사형 그래프가 포함됩니다.
         // 
-        sheetContainer.appendChild(renderMeStatsSection(sheetData.stats, isAdmin));
+       sheetContainer.appendChild(renderMeStatsSection(sheetData.stats, isAdmin, currentSheetId));
         
         // 4. 인벤토리 섹션 렌더링 (비동기 함수 사용)
-        sheetContainer.appendChild(await renderInventorySection(sheetData.inventory, isAdmin));
+        sheetContainer.appendChild(await renderInventorySection(sheetData.inventory, isAdmin, currentSheetId));
 
         // 5. 현재 상태 섹션 렌더링
-        sheetContainer.appendChild(renderStatusSection(sheetData.status, sheetData.stats.spirit, isAdmin));
+        sheetContainer.appendChild(renderStatusSection(sheetData.status, sheetData.stats.spirit, isAdmin, currentSheetId));
         
         contentEl.innerHTML = '';
         contentEl.appendChild(sheetContainer);
@@ -2451,7 +2496,7 @@ function renderPersonnelSection(p, sheetId, isAdmin) {
 }
 
 // 스탯 섹션 렌더링
-function renderMeStatsSection(s, isAdmin) {
+function renderMeStatsSection(s, isAdmin, sheetId) {
     const section = document.createElement('div');
     section.className = 'card map-card';
     section.innerHTML = `
@@ -2486,35 +2531,44 @@ function renderMeStatsSection(s, isAdmin) {
                 </div>
             </div>
         </div>
-        ${isAdmin ? `<button class="btn link admin-edit-btn" onclick="openStatsEdit(sheetId, ${JSON.stringify(s)})">스탯 편집</button>` : ''}
+        ${isAdmin ? `<button ... onclick="openStatsEdit('${sheetId}', ${JSON.stringify(s)})">스탯 편집</button>` : ''}
     `;
     return section;
 }
 
 // 인벤토리 섹션 렌더링
-async function renderInventorySection(inv, isAdmin) {
+async function renderInventorySection(inv, isAdmin, sheetId) {
     const section = document.createElement('div');
     section.className = 'card map-card';
     
-    let itemRows = '';
-    if (inv.items.length === 0) {
-        itemRows = `<tr><td colspan="5" style="text-align: center; color: #aaa;">소지한 물건이 없습니다.</td></tr>`;
-    } else {
-        for (const [index, item] of inv.items.entries()) {
-            // 4. 인벤토리 설명은 DB에서 받아와야 함을 가정
-            const desc = item.desc || await fetchItemDescription(item.name);
-            itemRows += `
-                <tr>
-                    <td>${index + 1}</td>
-                    <td>${item.name}</td>
-                    <td>${desc}</td>
-                    <td>${item.source}</td>
-                    <td>${item.count}</td>
-                </tr>
-            `;
-        }
-    }
-    
+    const itemPromises = inv.items.map(item => {
+      // 이미 설명이 있다면 DB 쿼리 없이 바로 설명을 반환 (병렬 처리 대상에서 제외)
+      if (item.desc) return Promise.resolve(item.desc); 
+      // 설명이 없다면 fetchItemDescription 호출
+      return fetchItemDescription(item.name);
+  });
+
+  // 2. 모든 Promise가 완료되기를 기다립니다. (병렬 실행)
+  const descriptions = await Promise.all(itemPromises); 
+  let itemRows = '';
+
+  if (inv.items.length === 0) {
+      itemRows = `<tr><td colspan="5" style="text-align: center; color: #aaa;">소지한 물건이 없습니다.</td></tr>`;
+  } else {
+      // 3. 병렬 처리된 결과를 사용하여 HTML 생성
+      for (const [index, item] of inv.items.entries()) {
+          const desc = item.desc || descriptions[index]; // item.desc가 있으면 그걸 사용, 없으면 병렬 결과 사용
+          itemRows += `
+              <tr>
+                  <td>${index + 1}</td>
+                  <td>${item.name}</td>
+                  <td>${desc}</td>
+                  <td>${item.source}</td>
+                  <td>${item.count}</td>
+              </tr>
+          `;
+      }
+  }
     section.innerHTML = `
         <h2>🎒 인벤토리</h2>
         <div style="margin-bottom: 15px; font-weight: bold; padding: 5px; background: rgba(255, 255, 255, 0.05);">
@@ -2542,7 +2596,7 @@ async function renderInventorySection(inv, isAdmin) {
 }
 
 // 현재 상태 섹션 렌더링
-function renderStatusSection(s, spiritStat, isAdmin) {
+function renderStatusSection(s, spiritStat, isAdmin, sheetId) {
     const section = document.createElement('div');
     section.className = 'card map-card';
     
@@ -2664,6 +2718,46 @@ function renderInjuryBlock(parts, status, mapKeyToLabel) {
     return `<div class="injury-block">${detailRows}</div>`;
 }
 
+/**
+ * 신규 사용자를 위한 기본 시트 데이터를 생성합니다.
+ * @returns {object} 기본 시트 데이터
+ */
+function createDefaultSheet(uid, nickname) {
+    const injuryPartKeys = ['head', 'neck', 'leftEye', 'rightEye', 'leftArm', 'leftHand', 'leftLeg', 'leftFoot', 'torso', 'rightArm', 'rightHand', 'rightLeg', 'rightFoot'];
+    const initialInjuryState = injuryPartKeys.reduce((acc, key) => {
+        acc[key] = 0;
+        return acc;
+    }, {});
+    
+    return {
+        // 3. 인적사항
+        personnel: {
+            name: nickname || '신규 에이전트', gender: '미상', age: 0, height: 0, weight: 0,
+            nationality: '미상', education: '미상', career: '신입 에이전트', 
+            family: '없음', contact: '없음', marriage: '미상', medical: '없음', 
+            criminal: '없음', etc: '특이사항 없음', photoUrl: '' // 스토리지에 저장된 URL 사용
+        },
+        // 3-2. 스탯 (기본 1)
+        stats: baseStats,
+        // 4. 인벤토리
+        inventory: {
+            silver: 0,
+            items: []
+        },
+        // 5. 현재 상태
+        status: {
+            currentSpirit: 60,
+            maxSpirit: (10 * 1) + 50,
+            injuries: { ...initialInjuryState },
+            contaminations: { ...initialInjuryState },
+            currentContamination: 0, 
+            currentErosion: 0,
+            stats: { deaths: 0, explorations: 0, interviews: 0, itemsCarried: 0, abyssDefeated: 0, silverCarried: 0 }
+        },
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp()
+    };
+}
 
 /**
  * 가로형 테이블 HTML을 생성합니다.
