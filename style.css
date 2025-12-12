@@ -1,22 +1,32 @@
 @import url('https://fonts.googleapis.com/css2?family=Chiron+Hei+HK:ital,wght@0,200..900;1,200..900&family=Noto+Serif+KR:wght@200..900&display=swap');
 
 :root {
-    --bg: #00011a;
-    --card: #0f1316;
-    --accent: #78e3d0;
-    --muted: #bdddde;
-    --glass: rgba(255,255,255,0.03);
+    /* 전체 팔레트 */
+    --bg: #00011a;              /* 배경 (짙은 남색 계열) */
+    --card: #0f1316;            /* 카드/요소 배경 (매우 어두운 회색) */
+    --accent: #78e3d0;          /* 강조색 (민트색 계열) */
+    --accent-rgb: 120, 227, 208; /* 강조색 RGB (투명도 사용을 위해) */
+    --muted: #bdddde;           /* 주요 텍스트 색상 (밝은 회색) */
+    --subtle: #4a545c;          /* 부차적 요소/경계선 색상 */
+    --glass: rgba(255,255,255,0.03); /* 투명 배경 */
+    --border: rgba(255,255,255,0.08); /* 경계선 */
+    --danger: #ff5252;          /* 위험/삭제 색상 */
+    --warning: #ffb74d;         /* 경고 색상 */
+    
     color-scheme: dark;
 }
 
 html, body {
     height: 100%;
     margin: 0;
-    font-family: "Chiron Hei HK", sans-serif;
+    font-family: "Chiron Hei HK", "Noto Serif KR", sans-serif;
     color: var(--muted);
     background: var(--bg);
-    letter-spacing: -1px;
+    letter-spacing: -0.5px;
+    font-size: 15px;
 }
+
+/* --- 레이아웃 및 기본 컴포넌트 --- */
 
 header {
     display: flex;
@@ -24,35 +34,36 @@ header {
     gap: 12px;
     padding: 12px 18px;
     background: var(--glass);
+    border-bottom: 1px solid rgba(255,255,255,0.02);
 }
 
 footer {
     padding: 12px;
     text-align: center;
-    color: var(--card);
-    font-size: 13px;
+    color: var(--subtle);
+    font-size: 12px;
 }
 
 .nav { display: flex; gap: 8px; margin-left: 12px; }
 
 .nav button { 
     background: transparent;
-    border: 1px solid rgba(255,255,255,0.04);
+    border: 1px solid var(--border);
     padding: 8px 12px;
     border-radius: 8px;
     color: inherit;
     cursor: pointer;
+    transition: all 0.2s ease;
 }
 
 .nav button:hover {
-    transition: background-color 0.3s ease;
-    background: var(--accent);
-    color: var(--bg);
+    border-color: var(--accent);
 }
 
 .nav button.active {
     background: var(--accent);
     color: var(--bg);
+    border-color: var(--accent);
 }
 
 .spacer { flex: 1; }
@@ -81,11 +92,219 @@ main {
 
 .card {
     background: var(--card);
-    padding: 12px;
+    padding: 18px; /* 패딩 증가 */
     border-radius: 10px;
-    margin-bottom: 12px;
+    margin-bottom: 15px;
     box-shadow: 0 4px 18px rgba(0,0,0,0.6);
+    border: 1px solid rgba(255,255,255,0.02); /* 은은한 경계선 */
 }
+
+/* --- 텍스트 및 기본 스타일 --- */
+
+.brand { font-weight: 700; color: #fff; }
+
+.muted { color: var(--subtle); font-size: 13px; }
+
+/* --- 버튼 스타일 --- */
+
+.btn {
+    display: inline-block;
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 0;
+    background: var(--accent);
+    color: var(--bg);
+    cursor: pointer;
+    font-weight: 600;
+    transition: transform 0.1s ease, background 0.2s ease;
+}
+.btn:hover { background: #8ffce9; }
+.btn:active { transform: scale(0.98); }
+
+.btn.primary { background: var(--accent); color: var(--bg); }
+.btn.warning { background: var(--warning); color: #000; }
+.btn.danger { background: var(--danger); color: #fff; }
+
+.btn.link {
+    background: transparent;
+    border: 0;
+    color: var(--accent);
+    padding: 0;
+    font-weight: normal;
+}
+.btn.link:hover { text-decoration: underline; background: none; }
+
+.btn-xs {
+    padding: 4px 6px;
+    font-size: 12px;
+    border-radius: 4px;
+}
+
+/* --- 입력 필드/인라인 편집 --- */
+
+input[type=text], input[type=email], input[type=password], 
+input[type=number], select, textarea {
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: #1a1a1a;
+    color: var(--muted);
+    transition: border-color 0.2s;
+}
+input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: #0f1316;
+}
+
+.form-control-inline {
+    padding: 4px 8px;
+    border-radius: 4px;
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.05);
+    font-size: 1em;
+    min-height: 30px;
+    box-sizing: border-box;
+}
+
+/* 인라인 편집 체크박스 */
+input[type="checkbox"] {
+    accent-color: var(--accent);
+    cursor: pointer;
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    vertical-align: middle;
+}
+
+/* --- 도감 상세 정보 테이블 --- */
+
+.info-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+.info-table td {
+    padding: 8px 0;
+    border-bottom: 1px dotted rgba(255,255,255,0.05);
+    vertical-align: top;
+}
+.info-table tr:last-child td {
+    border-bottom: none;
+}
+.info-table td:first-child {
+    color: #9aa5ae; /* 레이블 색상 조정 */
+    font-weight: 500;
+}
+
+/* --- 비공개 데이터 마스킹 --- */
+
+.masked-row {
+    opacity: 0.6;
+}
+.masked-data {
+    background-color: var(--subtle);
+    border-radius: 4px;
+    height: 14px;
+    width: 70%;
+    opacity: 0.2;
+}
+.masked-log {
+    background: repeating-linear-gradient(
+        -45deg,
+        rgba(0,0,0,0.5),
+        rgba(0,0,0,0.5) 10px,
+        rgba(0,0,0,0.6) 10px,
+        rgba(0,0,0,0.6) 20px
+    );
+    border: 1px dashed var(--subtle);
+    opacity: 0.7;
+    filter: blur(1px);
+}
+.masked-log * { color: transparent !important; user-select: none; }
+.masked-log h4 { color: var(--subtle) !important; filter: blur(0); } /* 제목만 최소한으로 노출 */
+
+/* --- Dex Card (미리보기) --- */
+
+.dex-grid {
+    display: flex;
+    flex-wrap: wrap; 
+    gap: 20px;
+    padding: 20px 0;
+    justify-content: flex-start; /* 중앙 정렬 대신 왼쪽 정렬 */
+}
+
+.dex-card {
+    /* renderDexCard 함수에서 인라인 스타일로 설정됨. 여기서 오버레이만 추가 정의 */
+    border-radius: 8px; /* 둥근 모서리 적용 */
+}
+
+/* 호버 시 나타나는 오버레이 */
+.dex-card .dex-hover-overlay {
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+/* 하단 코드명/이름 오버레이 */
+.dex-card .dex-overlay {
+    transition: all 0.3s ease;
+    background: linear-gradient(to top, rgba(0,0,0,0.9), rgba(0,0,0,0));
+    color: #fff;
+    padding: 10px 5px;
+    box-sizing: border-box;
+}
+
+.dex-card:hover .dex-hover-overlay {
+    opacity: 1;
+}
+
+/* --- Dex Detail --- */
+
+.dex-detail-wrap {
+    background: var(--card);
+}
+
+.dex-sections-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 25px;
+}
+
+.dex-section {
+    padding: 10px 0;
+}
+
+/* 기본 정보 섹션 */
+#basicInfoSection h3, #statsSection h3, #managementSection h3, #logsSection h3 {
+    border-bottom: 2px solid var(--accent);
+    padding-bottom: 5px;
+    margin-top: 0;
+    color: #fff;
+}
+
+.log-list {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+.log-entry {
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--border);
+    padding: 12px;
+    border-radius: 8px;
+}
+.log-entry h4 {
+    color: var(--accent);
+    font-size: 1.1em;
+}
+
+/* 레이더 차트 컨테이너 크기 조정 (필요하다면) */
+canvas {
+    max-width: 100%;
+    height: auto;
+}
+
+/* 나머지 기존 스타일 */
+/* (기존 CSS 내용 중 위에 정의되지 않은 부분은 그대로 유지합니다.) */
 
 .fullscreen {
     position: fixed;
@@ -114,34 +333,7 @@ main {
     margin-bottom: 10px;
 }
 
-input[type=text], input[type=email], input[type=password] {
-    padding: 10px;
-    border-radius: 8px;
-    border: 1px solid rgba(255,255,255,0.04);
-    background: transparent;
-    color: var(--muted);
-}
-
 .brand { font-weight: 700; }
-
-.muted { color: var(--muted); font-size: 13px; }
-
-.btn {
-    display: inline-block;
-    padding: 8px 12px;
-    border-radius: 8px;
-    border: 0;
-    background: var(--accent);
-    color: var(--bg);
-    cursor: pointer;
-}
-
-.link {
-    background: transparent;
-    border: 0;
-    color: var(--accent);
-    cursor: pointer;
-}
 
 #staffArea {
     display: grid;
@@ -151,12 +343,13 @@ input[type=text], input[type=email], input[type=password] {
 }
 
 .staff-item {
-    background: #2a2a2a;
+    background: var(--card);
     border-radius: 12px;
     padding: 14px;
     text-align: center;
     transition: transform 0.25s ease, box-shadow 0.25s ease;
     cursor: pointer;
+    border: 1px solid rgba(255,255,255,0.05);
 }
 
 .staff-item:hover {
@@ -170,32 +363,32 @@ input[type=text], input[type=email], input[type=password] {
     border-radius: 10px;
     background-size: cover;
     background-position: center;
-    border: 2px solid #444;
+    border: 2px solid var(--subtle);
     margin-bottom: 10px;
 }
 
 .staff-item:hover .avatar {
-    border-color: #888;
+    border-color: var(--accent);
 }
 
 .modal-content {
     padding: 20px;
-    background: #222;
-    color: #fff;
+    background: var(--card);
+    color: var(--muted);
     border-radius: 12px;
 }
 
 .back-btn {
     background: none;
     border: none;
-    color: #ccc;
+    color: var(--subtle);
     font-size: 16px;
     cursor: pointer;
     margin-bottom: 10px;
 }
 
 .back-btn:hover {
-    color: #fff;
+    color: var(--muted);
 }
 
 .staff-grid {
@@ -242,11 +435,12 @@ input[type=text], input[type=email], input[type=password] {
 
 .info-label {
     width: 90px;
-    background: #eee;
+    background: var(--subtle);
     padding: 4px 6px;
     border-radius: 4px;
     font-weight: bold;
     margin-right: 8px;
+    color: var(--bg);
 }
 
 .info-value {
@@ -312,40 +506,40 @@ input[type=text], input[type=email], input[type=password] {
 
 /* maps */
 .maps-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(560px, 1fr));
-  gap: 18px;
-  padding: 12px 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(560px, 1fr));
+    gap: 18px;
+    padding: 12px 0;
 }
 
 .map-card-inner {
-  display: flex;
-  gap: 18px;
-  align-items: flex-start;
+    display: flex;
+    gap: 18px;
+    align-items: flex-start;
 }
 
 .map-media {
-  width: 320px; /* 4:3-ish 이미지 크기 */
-  flex-shrink: 0;
+    width: 320px; /* 4:3-ish 이미지 크기 */
+    flex-shrink: 0;
 }
 .map-img {
-  width: 100%;
-  aspect-ratio: 4 / 3;
-  object-fit: cover;
-  border-radius: 8px;
-  border: 1px solid rgba(255,255,255,0.03);
+    width: 100%;
+    aspect-ratio: 4 / 3;
+    object-fit: cover;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.03);
 }
 
 .map-main { flex: 1; }
 
 .map-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
 }
 .map-name { margin: 0; font-size: 18px; color: var(--accent); }
-.map-meta { text-align: right; color: var(--muted); font-size: 13px; }
+.map-meta { text-align: right; color: var(--subtle); font-size: 13px; }
 
 .map-desc { margin: 8px 0 12px 0; color: var(--muted); white-space:pre-line; }
 
@@ -356,74 +550,17 @@ input[type=text], input[type=email], input[type=password] {
 .cm-avatar { width:36px; height:36px; border-radius:50%; object-fit:cover; background:#333; }
 .cm-left { width:44px; flex-shrink:0; }
 .cm-right { flex:1; }
-.cm-head { font-size:13px; color:var(--muted); display:flex; justify-content:space-between; align-items:center; }
+.cm-head { font-size:13px; color:var(--subtle); display:flex; justify-content:space-between; align-items:center; }
 .cm-body { color:var(--muted); margin-top:4px; }
 
 /* comments popup specific */
 .comments-popup .card { padding: 0; }
 .comments-full-list { display:flex; flex-direction:column; gap:12px; }
 
-.dex-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr); /* 한 줄에 4개 */
-    gap: 20px;
-    padding: 20px;
-    justify-content: center;
-}
 
-@media (max-width: 800px) {
-    .dex-grid { grid-template-columns: repeat(2, 1fr); }
-}
+/* 기존 dex-grid는 flex로 대체됨 */
 
-/* 도감 아이템 (카드) */
-.dex-item {
-    position: relative;
-    aspect-ratio: 1 / 1; /* 1:1 정사각형 */
-    border: 3px solid #444; /* 기본 테두리 */
-    border-radius: 8px;
-    overflow: hidden;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    background-color: #000;
-}
-
-.dex-item img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    transition: transform 0.3s ease;
-    opacity: 0.7;
-}
-
-/* 호버 효과 */
-.dex-item:hover img {
-    transform: scale(1.1); /* 이미지 확대 */
-    opacity: 0.3; /* 이미지 어둡게 */
-}
-
-.dex-item:hover {
-    box-shadow: 0 0 15px var(--accent-color, #fff); /* 강조색 빛 */
-}
-
-.dex-item .dex-name-overlay {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    color: #fff;
-    font-weight: bold;
-    font-size: 1.2rem;
-    opacity: 0;
-    transition: opacity 0.3s ease;
-    text-align: center;
-    width: 100%;
-    text-shadow: 0 2px 4px rgba(0,0,0,0.8);
-    pointer-events: none;
-}
-
-.dex-item:hover .dex-name-overlay {
-    opacity: 1;
-}
+/* 기존 .dex-item (사용 안 함. .dex-card 사용) */
 
 /* 상세 페이지 레이아웃 (4분할 느낌) */
 .dex-detail-container {
@@ -459,28 +596,36 @@ input[type=text], input[type=email], input[type=password] {
     text-align: left;
     vertical-align: middle;
 }
+
 .dex-table th { width: 100px; color: #aaa; font-weight: normal; }
 
 /* 비공개 정보 가림 처리 */
 .secret-info {
-    background-color: #2a2a2a;
+    background-color: var(--subtle);
     color: transparent;
     user-select: none;
     position: relative;
     cursor: not-allowed;
+    display: inline-block;
+    padding: 0 5px;
+    border-radius: 3px;
+    height: 1.2em;
+    width: 80%;
 }
 .secret-info::after {
     content: "기록 말소";
-    color: #555;
+    color: var(--bg);
+    opacity: 0.6;
     position: absolute;
     left: 50%; top: 50%;
     transform: translate(-50%, -50%);
     font-size: 0.8rem;
+    filter: blur(0);
 }
 
 /* 관리자용 체크박스 (비공개 제어) */
 .admin-check {
-    accent-color: #ff4444;
+    accent-color: var(--danger);
     margin-right: 6px;
     cursor: pointer;
 }
@@ -495,4 +640,150 @@ input[type=text], input[type=email], input[type=password] {
     justify-content: center;
     font-weight: bold;
     overflow: hidden;
+    background: var(--accent);
+    color: var(--bg);
+}
+
+/*
+ * 캐릭터 시트 관련 스타일 (명확히 구분)
+ */
+.char-sheet-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.map-card { 
+    padding: 20px;
+}
+
+.personnel-grid {
+    display: flex;
+    gap: 20px;
+}
+
+.photo-area {
+    flex-shrink: 0;
+    width: 150px;
+}
+
+.details-area {
+    flex-grow: 1;
+}
+
+.data-table {
+    border: 1px solid var(--border);
+}
+
+.data-table td {
+    border: 1px solid var(--border);
+}
+
+.stats-grid {
+    display: flex;
+    justify-content: space-between;
+    gap: 20px;
+}
+
+.radar-chart-wrap {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 48%;
+}
+
+.chart-container-1, .chart-container-2 {
+    width: 200px;
+    height: 200px;
+    flex-shrink: 0;
+}
+
+.injury-status-grid {
+    display: grid;
+    grid-template-columns: 1fr 200px 1fr;
+    gap: 15px;
+    align-items: start;
+}
+
+.injury-list {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+
+.injury-block {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    border: 1px solid var(--border);
+    padding: 10px;
+    border-radius: 6px;
+}
+
+.injury-row.main-part {
+    padding: 5px;
+    border-radius: 4px;
+}
+
+.injury-row.sub-part {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    border-bottom: 1px dotted rgba(255, 255, 255, 0.05);
+}
+
+.human-icon-container {
+    text-align: center;
+    position: relative;
+    width: 200px;
+    height: 350px; 
+    margin: 0 auto;
+}
+
+/* Placeholder for human icon */
+.human-icon-container img {
+    width: 100%; 
+    height: 100%;
+    background-color: #1a1a1a;
+    border: 1px solid #444;
+}
+
+/* map-card-inner와 동일한 가로 레이아웃을 편집 폼에 적용 */
+.map-edit-layout {
+    display: flex;
+    gap: 18px;
+    align-items: flex-start;
+}
+
+/* 편집 폼의 입력 요소 스타일 */
+.map-edit-layout input[type=text], 
+.map-edit-layout input[type=number],
+.map-edit-layout textarea,
+.map-edit-layout .form-control-inline {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 8px 10px;
+}
+
+/* map-edit-layout의 map-media 영역은 이미지 입력만 포함 */
+.map-edit-layout .map-media {
+    width: 320px; 
+    flex-shrink: 0;
+}
+
+/* map-edit-layout의 map-main 영역 */
+.map-edit-layout .map-main {
+    flex: 1;
+}
+
+/* danger input이 너무 길지 않도록 조절 */
+#editMapDanger, #newMapDanger {
+    width: 60px !important; 
+    display: inline-block;
+    vertical-align: middle;
+}
+
+#dangerStars {
+    color: var(--warning);
+    margin-left: 10px;
+    font-size: 1.1em;
 }

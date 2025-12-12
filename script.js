@@ -608,26 +608,105 @@ async function openMapInlineEdit(mapId, data) {
 
     // 기존 내용을 숨기고 편집 폼 렌더링
     const originalContent = cardInner.innerHTML;
+    
+    // 이미지 URL과 위험도를 미리 변수에 저장
+    const currentImage = data.image || '';
+    const currentDanger = data.danger || 1;
+    const currentTypes = Array.isArray(data.types) ? data.types.join(', ') : (data.types || '');
+
     cardInner.innerHTML = `
-        <div class="map-edit-form card-dark">
+        <div class="map-edit-form">
             <h4>맵 편집 (ID: ${mapId})</h4>
-            <div class="edit-grid-inline">
-                <label>이름</label><input id="editMapName" value="${data.name || ''}">
-                <label>위험도 (1~5)</label><input id="editMapDanger" type="number" min="1" max="5" value="${data.danger || 1}">
-                <label>출현 타입 (쉼표 구분)</label><input id="editMapTypes" value="${Array.isArray(data.types) ? data.types.join(', ') : (data.types || '')}">
-                <label>설명</label><textarea id="editMapDesc">${data.description || ''}</textarea>
-                <label>이미지 URL</label><input id="editMapImage" value="${data.image || ''}">
-                <label>이미지 파일 업로드</label><input id="editMapImageFile" type="file" accept="image/*">
-            </div>
-            <div style="margin-top: 15px; display: flex; gap: 10px;">
-                <button id="saveMapInline" class="btn">저장</button>
-                <button id="cancelMapInline" class="btn link">취소</button>
-                <button id="deleteMapInline" class="btn" style="background-color: darkred; margin-left: auto;">맵 삭제</button>
+            <div class="map-card-inner map-edit-layout">
+                <div class="map-media">
+                    <img class="map-img map-img-preview" src="${currentImage}" alt="맵 이미지 미리보기">
+                    <div style="margin-top: 10px;">
+                        <label class="muted" style="display:block; margin-bottom: 5px; font-size:13px;">이미지 URL</label>
+                        <input id="editMapImage" value="${currentImage}" placeholder="이미지 URL">
+                    </div>
+                    <div style="margin-top: 10px;">
+                        <label class="muted" style="display:block; margin-bottom: 5px; font-size:13px;">이미지 파일 업로드</label>
+                        <input id="editMapImageFile" type="file" accept="image/*">
+                    </div>
+                </div>
+                
+                <div class="map-main">
+                    <div class="map-head" style="flex-direction: column; align-items: flex-start;">
+                        <label class="muted">이름</label>
+                        <input id="editMapName" class="form-control-inline" value="${data.name || ''}" style="font-size: 1.2em; font-weight: bold; color: var(--accent); margin-bottom: 10px;">
+                        
+                        <div class="map-meta" style="text-align: left; width: 100%;">
+                            <label class="muted" style="display:block;">위험도 (1~5)</label>
+                            <input id="editMapDanger" type="number" min="1" max="5" value="${currentDanger}" class="form-control-inline" style="width: 50px;">
+                            <span class="muted" id="dangerStars"></span>
+                        </div>
+                        
+                        <div class="map-meta" style="text-align: left; width: 100%; margin-top: 10px;">
+                            <label class="muted" style="display:block;">출현 타입 (쉼표 구분)</label>
+                            <input id="editMapTypes" class="form-control-inline" value="${currentTypes}" placeholder="예: 불, 물, 풀">
+                        </div>
+                    </div>
+
+                    <div style="margin-top: 20px;">
+                        <label class="muted">설명</label>
+                        <textarea id="editMapDesc" rows="6" class="form-control-inline" style="width: 100%; height: auto; min-height: 120px; resize: vertical; margin-top: 5px;">${data.description || ''}</textarea>
+                    </div>
+
+                    <div style="margin-top: 25px; display: flex; gap: 10px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 15px;">
+                        <button id="saveMapInline" class="btn primary">저장</button>
+                        <button id="cancelMapInline" class="btn link">취소</button>
+                        <button id="deleteMapInline" class="btn danger" style="margin-left: auto;">맵 삭제</button>
+                    </div>
+                </div>
             </div>
         </div>
     `;
 
-    // 저장 로직
+    // 유틸리티 함수: 위험도 별 표시
+    const updateDangerStars = (value) => {
+        const starsEl = document.getElementById("dangerStars");
+        if (starsEl) {
+            const danger = Math.min(5, Math.max(1, Number(value) || 1));
+            starsEl.textContent = '★'.repeat(danger) + '☆'.repeat(5 - danger);
+        }
+    };
+
+    // 초기 별 표시
+    updateDangerStars(currentDanger);
+
+    // 이벤트 리스너: 이미지 미리보기 및 위험도 별표 업데이트
+    const imgPreviewEl = cardInner.querySelector('.map-img-preview');
+    const imgUrlInput = document.getElementById("editMapImage");
+    const imgFileInput = document.getElementById("editMapImageFile");
+    const dangerInput = document.getElementById("editMapDanger");
+
+    // 1. URL 입력 시 미리보기 업데이트
+    imgUrlInput.addEventListener('input', () => {
+        imgPreviewEl.src = imgUrlInput.value;
+        imgFileInput.value = ''; // URL 입력 시 파일 입력 비활성화/초기화
+    });
+
+    // 2. 파일 선택 시 미리보기 업데이트
+    imgFileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                imgPreviewEl.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+            imgUrlInput.value = ''; // 파일 입력 시 URL 입력 비활성화/초기화
+        } else if (!imgUrlInput.value) {
+             imgPreviewEl.src = ''; // 파일이 없고 URL도 없으면 미리보기 비우기
+        }
+    });
+    
+    // 3. 위험도 입력 시 별표 업데이트
+    dangerInput.addEventListener('input', (e) => {
+        updateDangerStars(e.target.value);
+    });
+
+    // 저장 로직 (기존과 동일)
     document.getElementById("saveMapInline").onclick = async () => {
         let finalImg = document.getElementById("editMapImage").value;
         const file = document.getElementById("editMapImageFile").files[0];
@@ -657,14 +736,13 @@ async function openMapInlineEdit(mapId, data) {
         }
     };
 
-    // 취소 로직
+    // 취소 로직 (기존과 동일)
     document.getElementById("cancelMapInline").onclick = () => {
         cardInner.innerHTML = originalContent; // 원래 내용으로 복구
-        // 취소 후 관리자 버튼 재활성화 등을 위해 카드만 리로드
         renderMap();
     };
     
-    // 삭제 로직
+    // 삭제 로직 (기존과 동일)
     document.getElementById("deleteMapInline").onclick = async () => {
         if (await showConfirm(`정말로 맵 '${data.name}'을 삭제하시겠습니까? (복구 불가)`)) {
             try {
@@ -710,43 +788,112 @@ async function renderMap() {
 }
 
 async function openNewMapInlineEdit() {
-     const tempId = 'new_map_' + Date.now();
-     const tempEl = document.createElement('div');
-     tempEl.className = 'map-card card';
-     tempEl.id = tempId;
-     tempEl.style.marginBottom = '20px';
-     
-     // 임시 카드를 최상단 맵 추가 버튼 바로 아래에 삽입
-     const mapAddBtn = contentEl.querySelector('.btn'); // 첫 번째 버튼(새 맵 추가)
-     contentEl.insertBefore(tempEl, mapAddBtn.nextSibling);
+    const tempId = 'new_map_' + Date.now();
+    const tempEl = document.createElement('div');
+    tempEl.className = 'map-card card';
+    tempEl.id = tempId;
+    tempEl.style.marginBottom = '20px';
+    
+    // 임시 카드를 최상단 맵 추가 버튼 바로 아래에 삽입
+    const mapAddBtn = contentEl.querySelector('.btn');
+    contentEl.insertBefore(tempEl, mapAddBtn.nextSibling);
 
-     const newMapData = {
-         name: '', danger: 1, types: '', description: '', image: ''
-     };
+    const defaultImage = ''; // 새 맵은 기본 이미지 없음
 
-     // 편집 폼 렌더링
-     tempEl.innerHTML = `
+    // 편집 폼 렌더링
+    tempEl.innerHTML = `
         <div class="map-card-inner" data-id="new">
-            <div class="map-edit-form card-dark">
+            <div class="map-edit-form">
                 <h4>새 맵 생성</h4>
-                <div class="edit-grid-inline">
-                    <label>이름</label><input id="newMapName" value="">
-                    <label>위험도 (1~5)</label><input id="newMapDanger" type="number" min="1" max="5" value="1">
-                    <label>출현 타입 (쉼표 구분)</label><input id="newMapTypes" value="">
-                    <label>설명</label><textarea id="newMapDesc"></textarea>
-                    <label>이미지 URL</label><input id="newMapImage" value="">
-                    <label>이미지 파일 업로드</label><input id="newMapImageFile" type="file" accept="image/*">
-                </div>
-                <div style="margin-top: 15px; display: flex; gap: 10px;">
-                    <button id="saveNewMapInline" class="btn">생성</button>
-                    <button id="cancelNewMapInline" class="btn link">취소</button>
+                <div class="map-card-inner map-edit-layout">
+                    <div class="map-media">
+                        <img class="map-img map-img-preview" src="${defaultImage}" alt="맵 이미지 미리보기">
+                        <div style="margin-top: 10px;">
+                            <label class="muted" style="display:block; margin-bottom: 5px; font-size:13px;">이미지 URL</label>
+                            <input id="newMapImage" value="" placeholder="이미지 URL">
+                        </div>
+                        <div style="margin-top: 10px;">
+                            <label class="muted" style="display:block; margin-bottom: 5px; font-size:13px;">이미지 파일 업로드</label>
+                            <input id="newMapImageFile" type="file" accept="image/*">
+                        </div>
+                    </div>
+                    
+                    <div class="map-main">
+                        <div class="map-head" style="flex-direction: column; align-items: flex-start;">
+                            <label class="muted">이름</label>
+                            <input id="newMapName" class="form-control-inline" value="" placeholder="맵 이름" style="font-size: 1.2em; font-weight: bold; color: var(--accent); margin-bottom: 10px;">
+                            
+                            <div class="map-meta" style="text-align: left; width: 100%;">
+                                <label class="muted" style="display:block;">위험도 (1~5)</label>
+                                <input id="newMapDanger" type="number" min="1" max="5" value="1" class="form-control-inline" style="width: 50px;">
+                                <span class="muted" id="dangerStars"></span>
+                            </div>
+                            
+                            <div class="map-meta" style="text-align: left; width: 100%; margin-top: 10px;">
+                                <label class="muted" style="display:block;">출현 타입 (쉼표 구분)</label>
+                                <input id="newMapTypes" class="form-control-inline" value="" placeholder="예: 불, 물, 풀">
+                            </div>
+                        </div>
+
+                        <div style="margin-top: 20px;">
+                            <label class="muted">설명</label>
+                            <textarea id="newMapDesc" rows="6" class="form-control-inline" style="width: 100%; height: auto; min-height: 120px; resize: vertical; margin-top: 5px;" placeholder="맵에 대한 설명을 입력하세요."></textarea>
+                        </div>
+
+                        <div style="margin-top: 25px; display: flex; gap: 10px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 15px;">
+                            <button id="saveNewMapInline" class="btn primary">생성</button>
+                            <button id="cancelNewMapInline" class="btn link">취소</button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
-     `;
-     
-     // 저장 로직
-     document.getElementById("saveNewMapInline").onclick = async () => {
+      `;
+    
+    // 유틸리티 함수: 위험도 별 표시
+    const updateDangerStars = (value) => {
+        const starsEl = tempEl.querySelector("#dangerStars");
+        if (starsEl) {
+            const danger = Math.min(5, Math.max(1, Number(value) || 1));
+            starsEl.textContent = '★'.repeat(danger) + '☆'.repeat(5 - danger);
+        }
+    };
+    updateDangerStars(1); // 초기 별 표시
+
+    // 이벤트 리스너: 이미지 미리보기 및 위험도 별표 업데이트
+    const imgPreviewEl = tempEl.querySelector('.map-img-preview');
+    const imgUrlInput = document.getElementById("newMapImage");
+    const imgFileInput = document.getElementById("newMapImageFile");
+    const dangerInput = document.getElementById("newMapDanger");
+
+    // 1. URL 입력 시 미리보기 업데이트
+    imgUrlInput.addEventListener('input', () => {
+        imgPreviewEl.src = imgUrlInput.value;
+        imgFileInput.value = ''; // URL 입력 시 파일 입력 비활성화/초기화
+    });
+
+    // 2. 파일 선택 시 미리보기 업데이트
+    imgFileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                imgPreviewEl.src = e.target.result;
+            };
+            reader.readAsDataURL(file);
+            imgUrlInput.value = ''; // 파일 입력 시 URL 입력 비활성화/초기화
+        } else if (!imgUrlInput.value) {
+             imgPreviewEl.src = ''; // 파일이 없고 URL도 없으면 미리보기 비우기
+        }
+    });
+    
+    // 3. 위험도 입력 시 별표 업데이트
+    dangerInput.addEventListener('input', (e) => {
+        updateDangerStars(e.target.value);
+    });
+
+    // 저장 로직 (기존과 동일)
+    document.getElementById("saveNewMapInline").onclick = async () => {
         let finalImg = document.getElementById("newMapImage").value;
         const file = document.getElementById("newMapImageFile").files[0];
 
@@ -784,7 +931,7 @@ async function openNewMapInlineEdit() {
         }
     };
     
-    // 취소 로직
+    // 취소 로직 (기존과 동일)
     document.getElementById("cancelNewMapInline").onclick = () => {
         tempEl.remove();
     };
@@ -1489,36 +1636,77 @@ function renderLogsSection(el, data, isEditMode, isManager) {
 
 /**
  * 심연체 카드 렌더링 (그리드 뷰)
+ * @param {object} abyssData - 심연체 데이터 객체
+ * @param {boolean} isManager - 관리자 여부
  */
 function renderDexCard(abyssData, isManager) {
     const id = abyssData.id;
-    const name = abyssData.basic.name || '정보 없음';
-    const imgUrl = abyssData.basic.image || '';
+    const basic = abyssData.basic || {};
     const disclosurePercent = calculateDisclosurePercentage(abyssData);
     
+    // --- 공개 여부 확인 ---
+    // 사진 공개 여부
+    const isImagePublic = basic.isPublic?.image || false;
+    const showImage = isImagePublic || isManager;
+    const imgUrl = showImage ? (basic.image || '') : ''; // 비공개 시 URL을 비웁니다.
+
+    // 코드명/이름 공개 여부
+    const isCodePublic = basic.isPublic?.code || false;
+    const isNamePublic = basic.isPublic?.name || false;
+    
+    // 표시할 이름과 코드명 결정
+    const displayName = (isNamePublic || isManager) ? (basic.name || '정보 없음') : '???';
+    const displayCode = (isCodePublic || isManager) ? (basic.code || '???') : '???';
+    
+    // 관리자가 아닐 경우, 세 가지 주요 필드(사진, 코드, 이름)가 모두 비공개이면 카드를 숨깁니다.
+    // (이 로직은 renderDex에서 필터링하는 것이 더 효율적이지만, 현재 함수 내에서 시각적으로 처리합니다.)
+    const isCompletelyHidden = !isManager && !isImagePublic && !isCodePublic && !isNamePublic;
+
     // 테두리 색상 계산 (0% > Red, 100% > Green)
     const red = 255 - Math.floor(disclosurePercent * 2.55);
     const green = Math.floor(disclosurePercent * 2.55);
     const borderColor = `rgb(${red}, ${green}, 0)`;
+    
+    // 비공개 시 회색 배경 처리
+    const backgroundStyle = showImage && imgUrl
+        ? `background-image: url('${imgUrl}'); background-color: #222;`
+        : `background-color: #555;`; // 이미지가 없거나 비공개일 경우 회색 배경
+
+    if (isCompletelyHidden) {
+        // 관리자가 아니면서 주요 정보가 모두 비공개일 경우, 빈 문자열 반환 (목록에서 제외)
+        return '';
+    }
 
     // 1. 1:1 비율의 정사각형 사진이 한 줄에 4개씩 배치됨
     return `
         <div class="dex-card" data-id="${id}" 
              style="width: calc(25% - 15px); aspect-ratio: 1 / 1; 
-                    background-image: url('${imgUrl}'); background-size: cover; 
-                    border: 5px solid ${borderColor}; position: relative; cursor: pointer;
+                    ${backgroundStyle} background-size: cover; 
+                    background-position: center; border: 5px solid ${borderColor}; 
+                    position: relative; cursor: pointer; overflow: hidden;
                     transition: all 0.3s;">
+            
             <div class="dex-overlay" 
+                 style="position: absolute; bottom: 0; left: 0; width: 100%; min-height: 40px;
+                        background: rgba(0, 0, 0, 0.7); padding: 5px; box-sizing: border-box; 
+                        display: flex; flex-direction: column; justify-content: center; align-items: center;
+                        color: white; text-align: center;">
+                
+                <strong style="font-size: 1.1em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;">${displayName}</strong>
+                <span style="font-size: 0.9em; margin-top: 2px; color: #ccc;">${displayCode}</span>
+            </div>
+            
+            <div class="dex-hover-overlay" 
                  style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;
                         background: rgba(0, 0, 0, 0.6); opacity: 0; transition: opacity 0.3s;
                         display: flex; flex-direction: column; justify-content: center; align-items: center;
                         color: white;">
-                <strong style="font-size: 1.2em; text-align: center;">${name}</strong>
+                <strong style="font-size: 1.2em; text-align: center;">${displayName}</strong>
                 <span style="margin-top: 5px;">개방률: ${disclosurePercent}%</span>
             </div>
         </div>
         <style>
-            .dex-card[data-id="${id}"]:hover .dex-overlay { opacity: 1; background: rgba(var(--accent-rgb), 0.7); }
+            .dex-card[data-id="${id}"]:hover .dex-hover-overlay { opacity: 1; background: rgba(var(--accent-rgb), 0.7); }
             .dex-card[data-id="${id}"]:hover { transform: scale(1.05); }
         </style>
     `;
