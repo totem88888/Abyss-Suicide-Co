@@ -18,7 +18,7 @@ import {
     query,
     where,
     updateDoc,
-    deleteDoc // [수정] 누락된 import 추가
+    deleteDoc
 } from "https://www.gstatic.com/firebasejs/10.6.0/firebase-firestore.js";
 import { 
     getStorage, 
@@ -53,17 +53,14 @@ const storage = getStorage(app);
 
 // DOM 요소 참조
 const header = document.getElementById('header');
-// const mainApp = document.getElementById('mainApp'); // 사용되지 않음
 const navEl = document.getElementById('nav');
 const contentEl = document.getElementById('content');
 const logOutEl = document.getElementById('log-out');
 const nowTimeEl = document.getElementById('nowTime');
-// const miniProfile = document.getElementById('miniProfile'); // 사용 여부 확인 필요
 const systemInfo = document.getElementById('systemInfo');
 
 const login = document.getElementById('login');
 const loginForm = document.getElementById('login-form');
-// const loginAuthForms = document.getElementById('login-auth-forms'); // 사용 여부 확인 필요
 const loginId = document.getElementById('login-id');
 const loginPassword = document.getElementById('login-password');
 const loginBth = document.getElementById('login-bth');
@@ -305,10 +302,7 @@ async function loadTab(tabId){
             contentEl.innerHTML = '<div class="card">내 정보 기능 준비중</div>';
             break;
         case 'map': await renderMap(); break;
-        case 'dex': 
-            // renderDex(); // renderDex 함수 없음
-            contentEl.innerHTML = '<div class="card">도감 기능 준비중</div>';
-            break;
+        case 'dex': await renderDex(); break; // [수정] renderDex 호출
         default: contentEl.innerHTML = '<div class="card">알 수 없는 탭</div>';
     }
 }
@@ -581,13 +575,86 @@ function openInlineEdit(docId, data) {
     editArea.innerHTML = ''; // 편집 영역 초기화
   };
 }
-// [수정] 여기에 중복되었던 saveStaffInline.onclick 코드 삭제함
+
 
 // --- Map Functionality ---
 
 // [수정] 정의되지 않은 함수 추가 (빈 함수)
-async function openMapInlineEdit(mapId) {
-    alert("맵 편집 기능은 아직 구현되지 않았습니다. (mapId: " + mapId + ")");
+async function openMapInlineEdit(mapId, data) {
+    const cardInner = document.querySelector(`.map-card-inner[data-id="${mapId}"]`);
+    if (!cardInner) return;
+
+    // 기존 내용을 숨기고 편집 폼 렌더링
+    const originalContent = cardInner.innerHTML;
+    cardInner.innerHTML = `
+        <div class="map-edit-form card-dark">
+            <h4>맵 편집 (ID: ${mapId})</h4>
+            <div class="edit-grid-inline">
+                <label>이름</label><input id="editMapName" value="${data.name || ''}">
+                <label>위험도 (1~5)</label><input id="editMapDanger" type="number" min="1" max="5" value="${data.danger || 1}">
+                <label>출현 타입 (쉼표 구분)</label><input id="editMapTypes" value="${Array.isArray(data.types) ? data.types.join(', ') : (data.types || '')}">
+                <label>설명</label><textarea id="editMapDesc">${data.description || ''}</textarea>
+                <label>이미지 URL</label><input id="editMapImage" value="${data.image || ''}">
+                <label>이미지 파일 업로드</label><input id="editMapImageFile" type="file" accept="image/*">
+            </div>
+            <div style="margin-top: 15px; display: flex; gap: 10px;">
+                <button id="saveMapInline" class="btn">저장</button>
+                <button id="cancelMapInline" class="btn link">취소</button>
+                <button id="deleteMapInline" class="btn" style="background-color: darkred; margin-left: auto;">맵 삭제</button>
+            </div>
+        </div>
+    `;
+
+    // 저장 로직
+    document.getElementById("saveMapInline").onclick = async () => {
+        let finalImg = document.getElementById("editMapImage").value;
+        const file = document.getElementById("editMapImageFile").files[0];
+
+        try {
+            if (file) {
+                finalImg = await uploadMapImage(file, mapId);
+            }
+
+            const typesArray = document.getElementById("editMapTypes").value.split(',').map(t => t.trim()).filter(t => t);
+
+            const newData = {
+                name: document.getElementById("editMapName").value,
+                danger: Number(document.getElementById("editMapDanger").value),
+                types: typesArray,
+                description: document.getElementById("editMapDesc").value,
+                image: finalImg,
+                updatedAt: serverTimestamp()
+            };
+
+            await updateDoc(doc(db, "maps", mapId), newData);
+            showMessage('맵 정보 저장 완료', 'info');
+            renderMap(); // 맵 목록 새로고침
+        } catch(e) {
+            console.error(e);
+            showMessage('맵 정보 저장 실패', 'error');
+        }
+    };
+
+    // 취소 로직
+    document.getElementById("cancelMapInline").onclick = () => {
+        cardInner.innerHTML = originalContent; // 원래 내용으로 복구
+        // 취소 후 관리자 버튼 재활성화 등을 위해 카드만 리로드
+        renderMap();
+    };
+    
+    // 삭제 로직
+    document.getElementById("deleteMapInline").onclick = async () => {
+        if (await showConfirm(`정말로 맵 '${data.name}'을 삭제하시겠습니까? (복구 불가)`)) {
+            try {
+                await deleteDoc(doc(db, "maps", mapId));
+                showMessage('맵 삭제 완료', 'info');
+                renderMap();
+            } catch(e) {
+                console.error(e);
+                showMessage('맵 삭제 실패', 'error');
+            }
+        }
+    };
 }
 
 async function renderMap() {
@@ -595,10 +662,22 @@ async function renderMap() {
     try {
         const snap = await getDocs(collection(db, 'maps'));
         contentEl.innerHTML = '';
+        
+        // 맵 추가 버튼 (관리자용)
+        if (await isAdminUser()) {
+            const addBtn = document.createElement('button');
+            addBtn.className = 'btn';
+            addBtn.textContent = '새 맵 추가';
+            addBtn.style.marginBottom = '20px';
+            addBtn.onclick = () => openNewMapInlineEdit();
+            contentEl.appendChild(addBtn);
+        }
+
         if(snap.empty){
-            contentEl.innerHTML = '<div class="card">등록된 맵이 없습니다.</div>';
+            contentEl.innerHTML += '<div class="card">등록된 맵이 없습니다.</div>';
             return;
         }
+        
         snap.forEach(d => {
             contentEl.appendChild(renderMapCard(d));
         });
@@ -606,6 +685,87 @@ async function renderMap() {
         console.error(e);
         contentEl.innerHTML = '<div class="card">맵 로드 실패</div>';
     }
+}
+
+async function openNewMapInlineEdit() {
+     const tempId = 'new_map_' + Date.now();
+     const tempEl = document.createElement('div');
+     tempEl.className = 'map-card card';
+     tempEl.id = tempId;
+     tempEl.style.marginBottom = '20px';
+     
+     // 임시 카드를 최상단 맵 추가 버튼 바로 아래에 삽입
+     const mapAddBtn = contentEl.querySelector('.btn'); // 첫 번째 버튼(새 맵 추가)
+     contentEl.insertBefore(tempEl, mapAddBtn.nextSibling);
+
+     const newMapData = {
+         name: '', danger: 1, types: '', description: '', image: ''
+     };
+
+     // 편집 폼 렌더링
+     tempEl.innerHTML = `
+        <div class="map-card-inner" data-id="new">
+            <div class="map-edit-form card-dark">
+                <h4>새 맵 생성</h4>
+                <div class="edit-grid-inline">
+                    <label>이름</label><input id="newMapName" value="">
+                    <label>위험도 (1~5)</label><input id="newMapDanger" type="number" min="1" max="5" value="1">
+                    <label>출현 타입 (쉼표 구분)</label><input id="newMapTypes" value="">
+                    <label>설명</label><textarea id="newMapDesc"></textarea>
+                    <label>이미지 URL</label><input id="newMapImage" value="">
+                    <label>이미지 파일 업로드</label><input id="newMapImageFile" type="file" accept="image/*">
+                </div>
+                <div style="margin-top: 15px; display: flex; gap: 10px;">
+                    <button id="saveNewMapInline" class="btn">생성</button>
+                    <button id="cancelNewMapInline" class="btn link">취소</button>
+                </div>
+            </div>
+        </div>
+     `;
+     
+     // 저장 로직
+     document.getElementById("saveNewMapInline").onclick = async () => {
+        let finalImg = document.getElementById("newMapImage").value;
+        const file = document.getElementById("newMapImageFile").files[0];
+
+        if (!document.getElementById("newMapName").value) {
+            showMessage('맵 이름을 입력해주세요.', 'error');
+            return;
+        }
+
+        try {
+            // 새 문서 ID를 미리 생성하여 이미지 업로드에 사용
+            const newDocRef = doc(collection(db, "maps"));
+            const newMapId = newDocRef.id;
+
+            if (file) {
+                finalImg = await uploadMapImage(file, newMapId);
+            }
+
+            const typesArray = document.getElementById("newMapTypes").value.split(',').map(t => t.trim()).filter(t => t);
+
+            const newData = {
+                name: document.getElementById("newMapName").value,
+                danger: Number(document.getElementById("newMapDanger").value),
+                types: typesArray,
+                description: document.getElementById("newMapDesc").value,
+                image: finalImg,
+                createdAt: serverTimestamp()
+            };
+
+            await setDoc(newDocRef, newData);
+            showMessage('새 맵 생성 완료', 'info');
+            renderMap(); // 맵 목록 새로고침
+        } catch(e) {
+            console.error(e);
+            showMessage('새 맵 생성 실패', 'error');
+        }
+    };
+    
+    // 취소 로직
+    document.getElementById("cancelNewMapInline").onclick = () => {
+        tempEl.remove();
+    };
 }
 
 function showMessage(msg, type='info') {
@@ -683,9 +843,14 @@ function renderMapCard(mapDoc) {
             <div class="map-desc">${desc}</div>
             <div class="map-actions">
             <button class="btn map-open-comments">댓글 보기</button>
-            <button class="btn map-add-comment">댓글 작성</button>
             <button class="btn link map-edit-btn" style="display:none">편집</button>
             </div>
+            
+            <div class="map-comment-input-area" style="margin-top: 15px;">
+                <input type="text" id="commentInput-${mapId}" placeholder="댓글 작성 (엔터로 등록)" 
+                       style="width: 100%; padding: 8px; border-radius: 6px; background: transparent; border: 1px solid rgba(255,255,255,0.1); color: inherit;">
+            </div>
+
             <div class="map-comments-preview">
             <div class="comments-count muted">댓글 0개</div>
             <div class="comments-list"></div>
@@ -696,11 +861,31 @@ function renderMapCard(mapDoc) {
         </div>
         </div>
     `;
+    
+    // [수정] 인라인 댓글 등록 이벤트 리스너 추가
+    const commentInput = el.querySelector(`#commentInput-${mapId}`);
+    if (commentInput) {
+        commentInput.addEventListener('keydown', e => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const text = commentInput.value.trim();
+                if (text) {
+                    postMapComment(mapId, text, () => {
+                        commentInput.value = ''; // 성공 후 입력창 비우기
+                        // 댓글 새로고침을 위해 맵 전체를 다시 렌더링
+                        renderMap(); 
+                    });
+                }
+            }
+        });
+    }
+
 
     el.querySelector('.map-open-comments').addEventListener('click', () => openCommentsPopup(mapId));
-    el.querySelector('.map-add-comment').addEventListener('click', () => focusCommentInput(mapId));
+    // 기존 댓글 작성 버튼(focusCommentInput) 대신 인라인 입력 필드를 사용하므로 제거
+    // el.querySelector('.map-add-comment').addEventListener('click', () => focusCommentInput(mapId)); 
     el.querySelector('.map-more-comments').addEventListener('click', () => openCommentsPopup(mapId));
-    el.querySelector('.map-edit-btn').addEventListener('click', async () => openMapInlineEdit(mapId));
+    el.querySelector('.map-edit-btn').addEventListener('click', async () => openMapInlineEdit(mapId, data));
 
     (async () => {
         if (await isAdminUser()) {
@@ -742,30 +927,37 @@ function renderMapCard(mapDoc) {
                         </div>
                     `;
 
+                    // ... (관리자 편집/삭제 로직, 세부 댓글창과 동일)
                     (async () => {
                         if (await isAdminUser()) {
                             const btnWrap = item.querySelector('.cm-admin');
                             btnWrap.style.display = 'flex';
+                            
+                            // 수정
                             btnWrap.querySelector('.cm-edit').onclick = async () => {
                                 const newText = prompt('댓글 내용을 수정하시오.', c.text||'');
                                 if (!newText) return;
                                 try {
                                     await updateDoc(doc(db, 'maps', mapId, 'comments', c.id), { text: newText, editedAt: serverTimestamp() });
-                                    renderMap();
+                                    renderMap(); // 목록 갱신
                                     showMessage('댓글 수정 완료', 'info');
                                 } catch(e) {
                                     console.error(e);
                                     showMessage('댓글 수정 실패', 'error');
                                 }
                             };
+                            
+                            // 삭제
                             btnWrap.querySelector('.cm-del').onclick = async () => {
-                                try {
-                                    await deleteDoc(doc(db, 'maps', mapId, 'comments', c.id));
-                                    renderMap();
-                                    showMessage('댓글 삭제 완료', 'info');
-                                } catch(e) {
-                                    console.error(e);
-                                    showMessage('댓글 삭제 실패', 'error');
+                                if (await showConfirm('정말 이 댓글을 삭제하시겠습니까?')) {
+                                    try {
+                                        await deleteDoc(doc(db, 'maps', mapId, 'comments', c.id));
+                                        renderMap(); // 목록 갱신
+                                        showMessage('댓글 삭제 완료', 'info');
+                                    } catch(e) {
+                                        console.error(e);
+                                        showMessage('댓글 삭제 실패', 'error');
+                                    }
                                 }
                             };
                         }
@@ -777,21 +969,20 @@ function renderMapCard(mapDoc) {
             if (arr.length > 3 && moreWrap) moreWrap.style.display = 'block';
         } catch(e) {
             console.error('load comments preview err', e);
-            // showMessage('댓글 로드 실패', 'error');
         }
     })();
 
     return el;
 }
 
-function focusCommentInput(mapId) {
+/**
+ * 맵 댓글 등록 함수 (콜백 추가)
+ * @param {string} mapId 맵 ID
+ * @param {string} text 댓글 내용
+ * @param {function} onSuccess 성공 시 실행할 콜백 함수
+ */
+async function postMapComment(mapId, text, onSuccess) {
     if (!currentUser) { showMessage('로그인이 필요합니다.', 'error'); return; }
-    const text = prompt('댓글을 작성하시오 (최대 500자):');
-    if (!text?.trim()) return;
-    postMapComment(mapId, text.trim());
-}
-
-async function postMapComment(mapId, text) {
     try {
         const userSnap = await getDoc(doc(db, 'users', currentUser.uid));
         const me = userSnap.exists() ? userSnap.data() : {};
@@ -803,8 +994,8 @@ async function postMapComment(mapId, text) {
             text,
             createdAt: serverTimestamp()
         });
-        renderMap();
         showMessage('댓글 등록 완료', 'info');
+        if (onSuccess) onSuccess();
     } catch(e) {
         console.error('postMapComment err', e);
         showMessage('댓글 등록 실패', 'error');
@@ -824,7 +1015,7 @@ function openCommentsPopup(mapId) {
             <div class="comments-full-list"></div>
         </div>
         <div style="padding:12px; border-top:1px solid rgba(255,255,255,0.02); display:flex; gap:8px;">
-            <input id="commentsInput" placeholder="댓글을 입력하세요" style="flex:1; padding:8px; border-radius:6px; background:transparent; border:1px solid rgba(255,255,255,0.04); color:inherit;">
+            <input id="commentsInput" placeholder="댓글을 입력하세요 (엔터로 등록)" style="flex:1; padding:8px; border-radius:6px; background:transparent; border:1px solid rgba(255,255,255,0.04); color:inherit;">
             <button class="btn post-comment">등록</button>
         </div>
         </div>
@@ -837,14 +1028,27 @@ function openCommentsPopup(mapId) {
     const inputEl = popup.querySelector('#commentsInput');
 
     closeBtn.onclick = () => popup.remove();
-    postBtn.onclick = async () => {
+    
+    // [수정] 세부 댓글창의 '등록' 버튼 및 엔터 키 이벤트 리스너
+    const postCommentAction = async () => {
         if (!currentUser) { showMessage('로그인이 필요합니다.', 'error'); return; }
         const v = inputEl.value.trim();
         if (!v) return;
-        await postMapComment(mapId, v);
-        popup.remove();
-        openCommentsPopup(mapId);
+        await postMapComment(mapId, v, () => {
+            // 성공 후 팝업 갱신
+            popup.remove();
+            openCommentsPopup(mapId);
+            renderMap(); // 메인 맵 목록의 댓글 수도 갱신
+        });
     };
+    
+    postBtn.onclick = postCommentAction;
+    inputEl.addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            postCommentAction();
+        }
+    });
 
     (async () => {
         try {
@@ -860,686 +1064,349 @@ function openCommentsPopup(mapId) {
                 arr.forEach(c => {
                     const item = document.createElement('div');
                     item.className = 'comment-item';
-                    item.style.marginBottom = '12px';
-                    // [수정] 짤린 코드 복구 및 div 닫기
+                    item.style = 'margin-bottom:10px; border-bottom:1px dashed rgba(255,255,255,0.1); padding-bottom:10px;';
                     item.innerHTML = `
-                        <div style="display:flex; gap:10px;">
-                            <div style="width:44px; height:44px; border-radius:50%; overflow:hidden; background:#333;">
-                                <img src="${c.photo||''}" alt="" style="width:100%; height:100%; object-fit:cover;">
-                            </div>
-                            <div>
-                                <div style="font-weight:bold;">${c.name||'익명'}</div>
-                                <div class="muted" style="font-size:0.8em;">${fmtTime(c.createdAt)}</div>
-                                <div style="margin-top:4px;">${c.text}</div>
-                            </div>
+                        <div style="display:flex; align-items:center;">
+                            <strong style="margin-right:10px;">${c.name||'익명'}</strong> 
+                            <span class="muted" style="font-size:0.8em;">${fmtTime(c.createdAt)}</span>
+                        </div>
+                        <div style="margin-top:5px;">${c.text || ''}</div>
+                        <div class="cm-admin" style="margin-top:6px; display:none; gap:8px;">
+                            <button class="link cm-edit">수정</button>
+                            <button class="link cm-del">삭제</button>
                         </div>
                     `;
+                    
+                    (async () => {
+                        if (await isAdminUser()) {
+                            const btnWrap = item.querySelector('.cm-admin');
+                            btnWrap.style.display = 'flex';
+                            btnWrap.querySelector('.cm-edit').onclick = async () => {
+                                const newText = prompt('댓글 내용을 수정하시오.', c.text||'');
+                                if (!newText) return;
+                                try {
+                                    await updateDoc(doc(db, 'maps', mapId, 'comments', c.id), { text: newText, editedAt: serverTimestamp() });
+                                    // 팝업 새로고침
+                                    popup.remove();
+                                    openCommentsPopup(mapId);
+                                    showMessage('댓글 수정 완료', 'info');
+                                } catch(e) {
+                                    showMessage('댓글 수정 실패', 'error');
+                                }
+                            };
+                            btnWrap.querySelector('.cm-del').onclick = async () => {
+                                if (await showConfirm('정말로 이 댓글을 삭제하시겠습니까?')) {
+                                    try {
+                                        await deleteDoc(doc(db, 'maps', mapId, 'comments', c.id));
+                                        // 팝업 새로고침
+                                        popup.remove();
+                                        openCommentsPopup(mapId);
+                                        showMessage('댓글 삭제 완료', 'info');
+                                    } catch(e) {
+                                        showMessage('댓글 삭제 실패', 'error');
+                                    }
+                                }
+                            };
+                        }
+                    })();
                     listEl.appendChild(item);
                 });
             }
         } catch(e) {
-            console.error(e);
-            listEl.innerHTML = '댓글 로드 중 오류';
+            console.error('load full comments err', e);
+            listEl.innerHTML = `<div class="muted">댓글 로드 실패</div>`;
         }
     })();
 }
 
-// ==========================================
-// [DEX] 도감 시스템 로직
-// ==========================================
+// --- Dex Tab (도감) ---
 
-// 유틸: 밝기에 따라 글자색 결정 (검정/하양)
-function getContrastColor(hex) {
-    if(!hex) return '#fff';
-    const r = parseInt(hex.substr(1, 2), 16);
-    const g = parseInt(hex.substr(3, 2), 16);
-    const b = parseInt(hex.substr(5, 2), 16);
-    const yiq = ((r * 299) + (g * 587) + (b * 114)) / 1000;
-    return (yiq >= 128) ? '#000' : '#fff';
+/**
+ * 도감 화면 렌더링 함수
+ */
+async function renderDex() {
+    contentEl.innerHTML = `
+        <div class="card">
+            <h3>📖 심연 도감</h3>
+            <div class="dex-tabs" style="margin-bottom: 20px;">
+                <button class="btn dex-tab-btn active" data-dex-type="creature">생물 도감</button>
+                <button class="btn dex-tab-btn" data-dex-type="object">물품 도감</button>
+            </div>
+            <div id="dexContent"></div>
+        </div>
+    `;
+
+    const dexContentEl = document.getElementById('dexContent');
+    const tabBtns = contentEl.querySelectorAll('.dex-tab-btn');
+
+    // 탭 클릭 이벤트 리스너
+    tabBtns.forEach(btn => {
+        btn.addEventListener('click', async () => {
+            tabBtns.forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            const type = btn.dataset.dexType;
+            await loadDexContent(type, dexContentEl);
+        });
+    });
+
+    // 기본적으로 '생물 도감' 로드
+    await loadDexContent('creature', dexContentEl);
 }
 
-// 1. 도감 메인 화면 (그리드)
-async function renderDex() {
-    contentEl.innerHTML = '<div class="card muted">도감 데이터 접근 중...</div>';
+/**
+ * 도감 내용을 로드하고 렌더링하는 함수
+ * @param {'creature' | 'object'} type 로드할 도감 타입 (생물 또는 물품)
+ * @param {HTMLElement} targetEl 내용을 삽입할 DOM 요소
+ */
+async function loadDexContent(type, targetEl) {
+    targetEl.innerHTML = '<div class="muted">도감 데이터 로딩 중...</div>';
     
     try {
-        const snap = await getDocs(collection(db, 'creatures'));
-        const creatures = [];
-        snap.forEach(d => creatures.push({ id: d.id, ...d.data() }));
-
-        // 정렬: 도감 번호(발견 순서) 순
-        creatures.sort((a, b) => (a.discoveryOrder || 999) - (b.discoveryOrder || 999));
-
-        const totalCount = creatures.length;
-        // 완전히 개방된(100%) 심연체 수 계산 (여기서는 예시로 unlockPercent가 DB에 있다고 가정하거나 계산)
-        const fullyUnlocked = creatures.filter(c => calculateUnlockPercent(c) >= 100).length;
-
-        contentEl.innerHTML = `
-            <div style="text-align:center; margin-bottom:20px;">
-                <h2 style="margin:0;">심연체 도감</h2>
-                <div class="muted">관측 기록: ${fullyUnlocked} / ${totalCount}</div>
-            </div>
-            ${(await isAdminUser()) ? '<button id="addCreatureBtn" class="btn" style="display:block; margin:0 auto 20px auto;">+ 새 심연체 추가</button>' : ''}
-            <div class="dex-grid" id="dexGrid"></div>
-        `;
-
-        if(await isAdminUser()) {
-            document.getElementById('addCreatureBtn').onclick = createNewCreature;
-        }
-
-        const gridEl = document.getElementById('dexGrid');
+        const collectionName = type === 'creature' ? 'creatures' : 'objects';
+        const snap = await getDocs(collection(db, collectionName));
         
-        if (creatures.length === 0) {
-            gridEl.innerHTML = '<div class="muted" style="grid-column: 1/-1; text-align:center;">데이터 없음</div>';
+        targetEl.innerHTML = '';
+
+        if (snap.empty) {
+            targetEl.innerHTML = `<div class="muted">등록된 ${type === 'creature' ? '생물' : '물품'} 정보가 없습니다.</div>`;
             return;
         }
 
-        creatures.forEach(c => {
-            const pct = calculateUnlockPercent(c);
-            // 0%(빨강) -> 100%(초록) 색상 계산
-            const r = Math.min(255, 255 * (2 * (100 - pct) / 100)); 
-            const g = Math.min(255, 255 * (2 * pct / 100));
-            const borderColor = `rgb(${r}, ${g}, 0)`;
-            
-            const item = document.createElement('div');
-            item.className = 'dex-item';
-            item.style.borderColor = borderColor;
-            // 호버 시 강조색용 변수
-            item.style.setProperty('--accent-color', borderColor);
-            
-            item.innerHTML = `
-                <img src="${c.image || 'https://via.placeholder.com/300?text=No+Image'}" alt="${c.name}">
-                <div class="dex-name-overlay">${c.name || '???'}</div>
-            `;
-            item.onclick = () => renderDexDetail(c.id);
-            gridEl.appendChild(item);
+        const listContainer = document.createElement('div');
+        listContainer.className = 'dex-grid-list';
+        listContainer.style.display = 'grid';
+        listContainer.style.gap = '15px';
+        listContainer.style.gridTemplateColumns = 'repeat(auto-fill, minmax(200px, 1fr))';
+
+        snap.forEach(docSnap => {
+            const data = docSnap.data();
+            const card = renderDexCard(docSnap.id, data, type);
+            listContainer.appendChild(card);
         });
 
+        targetEl.appendChild(listContainer);
+
     } catch(e) {
-        console.error(e);
-        contentEl.innerHTML = '<div class="card error">도감 로드 실패</div>';
+        console.error(`Error loading ${type} dex:`, e);
+        targetEl.innerHTML = `<div class="error-msg">도감 로드 실패: ${e.message}</div>`;
     }
 }
 
-// 2. 새 심연체 생성 (관리자)
-async function createNewCreature() {
-    if (!confirm('새 빈 심연체 데이터를 생성하시겠습니까?')) return;
-    try {
-        const newRef = doc(collection(db, 'creatures')); // Auto ID
-        await setDoc(newRef, {
-            name: '식별 불가',
-            codeName: '???',
-            risk: '유광', // 기본값
-            appearance: 'O', // 기본값
-            discoveryOrder: 0,
-            image: '',
-            status: 'alive',
-            // 스탯
-            str: 1, vit: 1, agi: 1, wil: 1,
-            // 관리 정보 배열
-            managementInfo: [
-                { id: Date.now(), title: '기본 정보', content: '정보 없음', isPublic: false }
-            ],
-            // 연구 일지 배열
-            researchLogs: [
-                { id: Date.now(), title: '기본 일지', content: '기록 없음' }
-            ], 
-            createdAt: serverTimestamp()
-        });
-        renderDex(); // 새로고침
-        showMessage('새 개체가 생성되었습니다.', 'info');
-    } catch(e) {
-        console.error(e);
-        showMessage('생성 실패', 'error');
-    }
+/**
+ * 단일 도감 항목 카드를 렌더링하는 함수
+ * @param {string} id 문서 ID
+ * @param {object} data 도감 데이터
+ * @param {'creature' | 'object'} type 도감 타입
+ * @returns {HTMLElement} 렌더링된 카드 요소
+ */
+function renderDexCard(id, data, type) {
+    const isCreature = type === 'creature';
+    const name = data.name || '이름 없음';
+    const image = data.image || '';
+    const description = data.description || '설명 없음';
+    const danger = data.danger || (isCreature ? 1 : 0);
+    const category = data.category || (isCreature ? '미확인 생물' : '미확인 물품');
+
+    const card = document.createElement('div');
+    card.className = 'dex-card card';
+    card.style.cursor = 'pointer';
+    card.onclick = () => openDexModal(id, data, type); 
+
+    card.innerHTML = `
+        <div class="dex-media" style="aspect-ratio: 4/3; background: #333; overflow:hidden; border-radius: 4px 4px 0 0;">
+            <img src="${image}" alt="${name}" style="width:100%; height:100%; object-fit: cover;">
+        </div>
+        <div style="padding: 10px;">
+            <div class="muted" style="font-size: 0.8em; margin-bottom: 5px;">${category}</div>
+            <h4 style="margin: 0; line-height: 1.2;">${name}</h4>
+            <div style="font-size: 0.9em; margin-top: 5px;">
+                ${isCreature ? `위험도: ${'★'.repeat(danger)}${'☆'.repeat(5 - danger)}` : ''}
+            </div>
+            <p style="font-size: 0.8em; margin: 5px 0 0; color: #aaa; height: 3em; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;">${description}</p>
+        </div>
+    `;
+
+    return card;
 }
 
-// 3. 퍼센트 계산 로직
-function calculateUnlockPercent(data) {
-    // 로직: (공개된 관리정보 수 + 연구일지 수) / (전체 항목 수) * 100 
-    // 예시로 간단하게 구현. 실제로는 항목별 가중치를 둘 수 있음.
-    if (!data.managementInfo) return 0;
+const dexModal = document.createElement('dialog');
+dexModal.id = 'dexModal';
+document.body.appendChild(dexModal);
+
+/**
+ * 도감 항목 상세 모달을 띄우는 함수
+ * @param {string} id 문서 ID
+ * @param {object} data 도감 데이터
+ * @param {'creature' | 'object'} type 도감 타입
+ */
+function openDexModal(id, data, type) {
+    const isCreature = type === 'creature';
+    const title = data.name || '이름 없음';
     
-    let total = 0;
-    let unlocked = 0;
-
-    // 관리 정보 (체크박스 여부)
-    data.managementInfo.forEach(info => {
-        total++;
-        if (info.isPublic) unlocked++;
-    });
+    // Creature 상세 정보
+    const creatureDetails = isCreature ? `
+        <p><span class="label">위험도</span> ${'★'.repeat(data.danger || 1)}${'☆'.repeat(5 - (data.danger || 1))}</p>
+        <p><span class="label">서식지</span> ${data.habitat || '알 수 없음'}</p>
+        <p><span class="label">특징</span> ${data.traits || '특징 없음'}</p>
+        <hr>
+        <p><span class="label">약점</span> ${data.weakness || '미확인'}</p>
+        <p><span class="label">보상</span> ${data.reward || '없음'}</p>
+    ` : '';
     
-    // 연구 일지 (항상 1개는 기본 공개이므로 +1 보정 하거나, 규칙에 따름)
-    // 여기서는 단순히 관리 정보의 공개율을 기준으로 전체 퍼센트를 잡음
-    if (total === 0) return 0;
-    return Math.floor((unlocked / total) * 100);
-}
+    // Object 상세 정보
+    const objectDetails = !isCreature ? `
+        <p><span class="label">분류</span> ${data.category || '기타'}</p>
+        <p><span class="label">획득처</span> ${data.source || '미확인'}</p>
+        <p><span class="label">효능</span> ${data.effect || '없음'}</p>
+        <p><span class="label">무게</span> ${data.weight || 0}kg</p>
+    ` : '';
 
-// 4. 상세 페이지 렌더링
-async function renderDexDetail(docId) {
-    contentEl.innerHTML = '<div class="card muted">데이터 로드 중...</div>';
-    
-    try {
-        const snap = await getDoc(doc(db, 'creatures', docId));
-        if (!snap.exists()) throw new Error("No Data");
-        const data = snap.data();
-        const isAdmin = await isAdminUser();
-        const unlockPct = calculateUnlockPercent(data);
-
-        // --- 계산 로직 ---
-        const hp = (data.vit * 10) + (data.str * 2);
-        const sp = (data.wil * 10) + (data.agi * 2);
-        const physAtk = (data.str * 5) + (data.agi * 1);
-        const menAtk = (data.wil * 5) + (data.vit * 1);
-
-        // UI 구성
-        contentEl.innerHTML = `
-            <div class="dex-detail-container">
-                <button class="back-btn" onclick="renderDex()">← 도감 목록으로</button>
-                
-                <div class="dex-section-row">
-                    <div class="dex-section-col" style="display:flex; gap:15px; align-items:flex-start;">
-                        <div style="flex:0 0 150px;">
-                            <img id="detailImg" src="${data.image || ''}" style="width:150px; height:150px; object-fit:cover; border:1px solid #555; background:#000;">
-                            ${isAdmin ? `<input type="file" id="editImgFile" style="display:none;" accept="image/*"><button class="btn" style="width:100%; margin-top:5px;" onclick="document.getElementById('editImgFile').click()">사진 변경</button>` : ''}
-                        </div>
-                        <div style="flex:1;">
-                            <table class="dex-table">
-                                <tr><th>코드명</th><td id="d-code">${data.codeName || '-'}</td></tr>
-                                <tr><th>명칭</th><td>${inp(isAdmin, 'name', data.name)}</td></tr>
-                                <tr><th>위험도</th><td>${sel(isAdmin, 'risk', ['유광','해수','심해','파생'], data.risk)}</td></tr>
-                                <tr><th>외형</th><td>${sel(isAdmin, 'appearance', ['P','F','O','C'], data.appearance)}</td></tr>
-                                <tr><th>발견 순서</th><td>${inp(isAdmin, 'discoveryOrder', data.discoveryOrder, 'number')} ${data.risk === '파생' ? '- 파생:' + inp(isAdmin, 'variantOrder', data.variantOrder || 1, 'number') : ''}</td></tr>
-                                <tr><th>주요 피해</th><td>${inp(isAdmin, 'mainDamage', data.mainDamage || 'Unknown')}</td></tr>
-                                <tr><th>사망/광기</th><td>${inp(isAdmin, 'probabilities', data.probabilities || '- / -')}</td></tr>
-                            </table>
-                        </div>
-                    </div>
-
-                    <div class="dex-section-col" style="display:flex; gap:15px;">
-                        <div style="flex:1;">
-                            <div class="muted" style="margin-bottom:10px;">스테이터스</div>
-                            <table class="dex-table">
-                                <tr><th>근력</th><td>${inp(isAdmin, 'str', data.str, 'number')}</td></tr>
-                                <tr><th>건강</th><td>${inp(isAdmin, 'vit', data.vit, 'number')}</td></tr>
-                                <tr><th>민첩</th><td>${inp(isAdmin, 'agi', data.agi, 'number')}</td></tr>
-                                <tr><th>정신력</th><td>${inp(isAdmin, 'wil', data.wil, 'number')}</td></tr>
-                            </table>
-                            <div style="margin-top:10px; font-size:0.9rem;">
-                                <div>최대 체력: <span class="val">${hp}</span></div>
-                                <div>최대 정신: <span class="val">${sp}</span></div>
-                                <div>물리 공격: <span class="val">${physAtk}</span></div>
-                                <div>정신 공격: <span class="val">${menAtk}</span></div>
-                            </div>
-                        </div>
-                        <div style="width:200px; height:200px;">
-                            <canvas id="dexRadar"></canvas>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="dex-section-row">
-                    <div class="dex-section-col">
-                        <div style="display:flex; justify-content:space-between;">
-                            <h3>관리 정보</h3>
-                            ${isAdmin ? '<button class="btn" onclick="addMgmtInfo()">+ 항목 추가</button>' : ''}
-                        </div>
-                        <div id="mgmtList" style="display:flex; flex-direction:column; gap:10px; margin-top:10px;">
-                            </div>
-                    </div>
-
-                    <div class="dex-section-col">
-                        <div style="display:flex; justify-content:space-between;">
-                            <h3>연구 일지</h3>
-                            ${isAdmin ? '<button class="btn" onclick="addLogInfo()">+ 일지 추가</button>' : ''}
-                        </div>
-                        <div id="logList" style="display:flex; flex-direction:column; gap:10px; margin-top:10px;">
-                            </div>
-                    </div>
-                </div>
-
-                <div class="card" style="margin-top:20px;">
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <div>
-                            정보 개방도: <strong style="color:${unlockPct===100?'#4f4':'#f44'}">${unlockPct}%</strong>
-                            <div style="width:200px; height:6px; background:#333; margin-top:5px; border-radius:3px; overflow:hidden;">
-                                <div style="width:${unlockPct}%; height:100%; background:${unlockPct===100?'#4f4':'#f44'};"></div>
-                            </div>
-                        </div>
-                        ${isAdmin ? `<button class="btn" style="background:var(--primary);" onclick="saveDexData('${docId}')">변경사항 저장</button>` : ''}
-                    </div>
-                </div>
-
-                <div class="card" style="margin-top:20px;">
-                    <h3 id="commentHeader">댓글</h3>
-                    <div id="dexCommentsList"></div>
-                    <button id="dexMoreComments" class="link" style="display:none; margin-top:10px;">댓글 더보기</button>
-                    <div style="margin-top:15px; display:flex; gap:10px;">
-                        <input id="dexCommentInput" class="input" placeholder="관측 기록에 대한 코멘트를 남기세요." style="flex:1;">
-                        <button class="btn" onclick="postDexComment('${docId}')">등록</button>
-                    </div>
+    dexModal.innerHTML = `
+        <div class="modal-content profile-wide" style="max-width: 600px;">
+            <button id="closeDexModal" class="back-btn">← 돌아가기</button>
+            <h3 style="margin-top: 10px;">${isCreature ? '생물' : '물품'} 도감: ${title}</h3>
+            
+            <div class="profile-top">
+                <div class="profile-img-wrap" style="flex: none;"><img class="profile-img" src="${data.image || ""}" alt="${title}"></div>
+                <div class="profile-info">
+                    <p><span class="label">이름</span> ${title}</p>
+                    <p><span class="label">분류</span> ${data.category || (isCreature ? '미확인 생물' : '미확인 물품')}</p>
+                    <hr>
+                    ${creatureDetails}
+                    ${objectDetails}
                 </div>
             </div>
+            
+            <div style="margin-top: 20px;">
+                <p><span class="label">설명</span></p>
+                <p style="white-space:pre-line">${data.description || '상세 설명 없음'}</p>
+            </div>
+            
+            <div id="dexEditArea" style="margin-top: 20px;"></div>
+        </div>
+    `;
+
+    dexModal.showModal();
+    document.getElementById("closeDexModal").onclick = () => dexModal.close();
+
+    // 관리자 편집 버튼 추가
+    const editArea = document.getElementById("dexEditArea");
+    (async () => {
+        if (await isAdminUser()) {
+            const editBtn = document.createElement("button");
+            editBtn.textContent = "편집";
+            editBtn.onclick = () => openDexInlineEdit(id, data, type);
+            editArea.appendChild(editBtn);
+        }
+    })();
+}
+
+/**
+ * 도감 항목 편집 폼을 렌더링하는 함수 (간단화)
+ */
+function openDexInlineEdit(id, data, type) {
+    const isCreature = type === 'creature';
+    const editArea = document.getElementById("dexEditArea");
+
+    // 기본 필드
+    let html = `
+        <h4 style="margin-top: 15px;">편집 모드</h4>
+        <div class="edit-grid-inline">
+            <label>이름</label><input id="editName" value="${data.name || ''}">
+            <label>분류</label><input id="editCategory" value="${data.category || ''}">
+            <label>설명</label><textarea id="editDesc">${data.description || ''}</textarea>
+            <label>이미지 URL</label><input id="editImage" value="${data.image || ''}">
+            <label>이미지 파일 업로드</label><input id="editImageFile" type="file" accept="image/*">
+    `;
+
+    // 타입별 필드
+    if (isCreature) {
+        html += `
+            <label>위험도 (1~5)</label><input id="editDanger" type="number" min="1" max="5" value="${data.danger || 1}">
+            <label>서식지</label><input id="editHabitat" value="${data.habitat || ''}">
+            <label>특징</label><textarea id="editTraits">${data.traits || ''}</textarea>
+            <label>약점</label><input id="editWeakness" value="${data.weakness || ''}">
+            <label>보상</label><input id="editReward" value="${data.reward || ''}">
         `;
-
-        // --- JS 렌더링 후 처리 ---
-
-        // 1. 차트 그리기
-        drawDexChart(data);
-
-        // 2. 관리 정보 리스트 렌더링
-        const mgmtContainer = document.getElementById('mgmtList');
-        (data.managementInfo || []).forEach((info, idx) => {
-            const isVisible = isAdmin || info.isPublic;
-            const div = document.createElement('div');
-            div.className = 'card';
-            div.style.padding = '10px';
-            
-            // 제목 결정 (기본 정보 vs 추가 정보)
-            let displayTitle = idx === 0 ? '기본 정보' : `추가 정보 ${idx}`;
-            // DB에 저장된 타이틀이 있다면 사용 (필요시)
-            
-            let html = `
-                <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                    <strong class="muted">${displayTitle}</strong>
-                    ${isAdmin ? `<label><input type="checkbox" class="admin-check mgmt-public-chk" ${info.isPublic?'checked':''}>공개</label> <button class="link mgmt-del-btn" style="color:#f44; font-size:0.8rem;">삭제</button>` : ''}
-                </div>
-            `;
-
-            if (isAdmin) {
-                html += `<textarea class="input mgmt-content" rows="3" style="width:100%;">${info.content}</textarea>`;
-            } else {
-                if (isVisible) {
-                    html += `<div style="white-space:pre-wrap;">${info.content}</div>`;
-                } else {
-                    html += `<div class="secret-info" style="height:60px;"></div>`;
-                }
-            }
-            div.innerHTML = html;
-            
-            if(isAdmin) {
-                div.querySelector('.mgmt-del-btn').onclick = () => div.remove();
-            }
-            mgmtContainer.appendChild(div);
-        });
-
-        // 3. 연구 일지 리스트 렌더링
-        // 규칙: 기본 일지(0번)는 무조건 공개. 나머지는 (전체 일지 수 - 1)개 중 개방도%에 따라 순차 공개
-        // 예: 일지 4개. 기본 공개. 나머지 3개는 33%, 66%, 99% 달성 시 공개? -> 기획상 "존재하는 연구 일지 수에 따라 배분"
-        const logContainer = document.getElementById('logList');
-        const logs = data.researchLogs || [];
-        const logCount = logs.length;
-        
-        logs.forEach((log, idx) => {
-            // 공개 조건 계산
-            let isOpen = false;
-            if (idx === 0) isOpen = true; // 기본 일지
-            else {
-                // 남은 일지들에 대해 퍼센트 구간 할당
-                const step = 100 / (logCount); // 단순하게 전체 n등분
-                if (unlockPct >= step * idx) isOpen = true;
-            }
-
-            const canSee = isAdmin || isOpen;
-            const div = document.createElement('div');
-            div.className = 'card';
-            div.style.padding = '10px';
-            
-            let title = idx === 0 ? '기본 일지' : `연구 일지 ${idx}`;
-
-            let html = `
-                <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-                    <strong class="muted">${title}</strong>
-                    ${isAdmin ? `<button class="link log-del-btn" style="color:#f44; font-size:0.8rem;">삭제</button>` : ''}
-                </div>
-            `;
-            
-            if (isAdmin) {
-                html += `<textarea class="input log-content" rows="4" style="width:100%;">${log.content}</textarea>`;
-            } else {
-                if (canSee) {
-                    html += `<div style="white-space:pre-wrap;">${log.content}</div>`;
-                } else {
-                    html += `<div class="secret-info" style="height:80px;"></div>`;
-                }
-            }
-            div.innerHTML = html;
-            if(isAdmin) div.querySelector('.log-del-btn').onclick = () => div.remove();
-            logContainer.appendChild(div);
-        });
-
-        // 4. 기능 바인딩 (관리자)
-        if (isAdmin) {
-            // 이미지 변경
-            document.getElementById('editImgFile').onchange = async (e) => {
-                const f = e.target.files[0];
-                if(f) {
-                    const url = await uploadStaffImage(f, 'creature_' + docId); // 기존 업로드 함수 재사용
-                    document.getElementById('detailImg').src = url;
-                }
-            };
-
-            // 코드명 실시간 미리보기 (위험도/외형/순서 변경 시)
-            const calcInputs = ['input-risk', 'input-appearance', 'input-discoveryOrder', 'input-variantOrder'];
-            calcInputs.forEach(id => {
-                const el = document.getElementById(id);
-                if(el) el.addEventListener('input', updateCodeNamePreview);
-            });
-            updateCodeNamePreview(); // 초기 실행
-        }
-
-        // 5. 댓글 로드
-        loadDexComments(docId);
-
-    } catch(e) {
-        console.error(e);
-        contentEl.innerHTML = '<div class="card error">상세 정보를 불러오지 못했습니다.</div>';
-    }
-}
-
-// 5. 헬퍼: input/select 생성기 (관리자 모드용)
-function inp(isAdmin, id, val, type='text') {
-    if (!isAdmin) return val;
-    return `<input id="input-${id}" class="input" type="${type}" value="${val}" style="width:100%; padding:4px;">`;
-}
-function sel(isAdmin, id, opts, val) {
-    if (!isAdmin) return val;
-    return `<select id="input-${id}" class="input" style="width:100%; padding:4px;">
-        ${opts.map(o => `<option value="${o}" ${o===val?'selected':''}>${o}</option>`).join('')}
-    </select>`;
-}
-
-// 6. 관리자 기능: 항목 추가
-window.addMgmtInfo = () => {
-    const c = document.getElementById('mgmtList');
-    const idx = c.children.length; // 현재 갯수
-    if (idx >= 10) return alert('너무 많습니다.');
-    
-    const div = document.createElement('div');
-    div.className = 'card';
-    div.style.padding = '10px';
-    div.innerHTML = `
-        <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-            <strong class="muted">${idx===0?'기본 정보':'추가 정보 '+idx}</strong>
-            <label><input type="checkbox" class="admin-check mgmt-public-chk">공개</label> 
-            <button class="link mgmt-del-btn" style="color:#f44; font-size:0.8rem;">삭제</button>
-        </div>
-        <textarea class="input mgmt-content" rows="3" style="width:100%;"></textarea>
-    `;
-    div.querySelector('.mgmt-del-btn').onclick = () => div.remove();
-    c.appendChild(div);
-}
-
-window.addLogInfo = () => {
-    const c = document.getElementById('logList');
-    const idx = c.children.length;
-    if (idx >= 4) return alert('연구 일지는 최대 4개까지입니다.');
-    
-    const div = document.createElement('div');
-    div.className = 'card';
-    div.style.padding = '10px';
-    div.innerHTML = `
-        <div style="display:flex; justify-content:space-between; margin-bottom:5px;">
-            <strong class="muted">연구 일지 ${idx}</strong>
-            <button class="link log-del-btn" style="color:#f44; font-size:0.8rem;">삭제</button>
-        </div>
-        <textarea class="input log-content" rows="4" style="width:100%;"></textarea>
-    `;
-    div.querySelector('.log-del-btn').onclick = () => div.remove();
-    c.appendChild(div);
-}
-
-// 7. 코드명 계산 로직
-function updateCodeNamePreview() {
-    const risk = document.getElementById('input-risk').value;
-    const app = document.getElementById('input-appearance').value;
-    const order = document.getElementById('input-discoveryOrder').value.padStart(2, '0');
-    
-    let code = '';
-    
-    // 위험도 매핑 (앞글자만 따거나 맵핑)
-    // 유광, 해수, 심해, 파생
-    let riskCode = '';
-    if (risk === '유광') riskCode = 'PL'; // Polished
-    else if (risk === '해수') riskCode = 'SW'; // Seawater
-    else if (risk === '심해') riskCode = 'DS'; // Deep Sea
-    else riskCode = 'VA'; // Variant
-
-    if (risk === '파생') {
-        const vOrder = document.getElementById('input-variantOrder').value.padStart(2, '0');
-        code = `${app}${order}-${vOrder}`;
     } else {
-        code = `${riskCode}-${app}${order}`;
-    }
-    
-    document.getElementById('d-code').textContent = code;
-}
-
-// 8. 저장 로직
-async function saveDexData(docId) {
-    if (!confirm('변경사항을 저장하시겠습니까?')) return;
-
-    // 코드명 재생성
-    updateCodeNamePreview();
-    const finalCode = document.getElementById('d-code').textContent;
-    const order = Number(document.getElementById('input-discoveryOrder').value);
-    
-    // 발견 순서 중복 체크 (자신 제외)
-    const q = query(collection(db, 'creatures'), where('discoveryOrder', '==', order));
-    const snap = await getDocs(q);
-    let duplicate = false;
-    snap.forEach(d => { if(d.id !== docId) duplicate = true; });
-
-    if (duplicate) {
-        alert(`발견 순서 ${order}번은 이미 다른 심연체가 사용 중입니다.`);
-        return;
+        html += `
+            <label>획득처</label><input id="editSource" value="${data.source || ''}">
+            <label>효능</label><textarea id="editEffect">${data.effect || ''}</textarea>
+            <label>무게 (kg)</label><input id="editWeight" type="number" value="${data.weight || 0}">
+        `;
     }
 
-    // 관리 정보 수집
-    const mgmtArr = [];
-    document.querySelectorAll('#mgmtList > div').forEach((div, i) => {
-        mgmtArr.push({
-            id: i,
-            title: i===0?'기본 정보':`추가 정보 ${i}`,
-            content: div.querySelector('.mgmt-content').value,
-            isPublic: div.querySelector('.mgmt-public-chk').checked
-        });
-    });
+    html += `
+            <button id="saveDexInline" style="grid-column: 1 / -1; margin-top: 15px;" class="btn">저장</button>
+            <button id="deleteDexInline" style="grid-column: 1 / -1; background-color: darkred;" class="btn">삭제</button>
+        </div>
+    `;
+    
+    editArea.innerHTML = html;
 
-    // 연구 일지 수집
-    const logArr = [];
-    document.querySelectorAll('#logList > div').forEach((div, i) => {
-        logArr.push({
-            id: i,
-            title: i===0?'기본 일지':`연구 일지 ${i}`,
-            content: div.querySelector('.log-content').value
-        });
-    });
-
-    const newData = {
-        image: document.getElementById('detailImg').src,
-        codeName: finalCode,
-        name: document.getElementById('input-name').value,
-        risk: document.getElementById('input-risk').value,
-        appearance: document.getElementById('input-appearance').value,
-        discoveryOrder: order,
-        variantOrder: Number(document.getElementById('input-variantOrder')?.value || 0),
-        mainDamage: document.getElementById('input-mainDamage').value,
-        probabilities: document.getElementById('input-probabilities').value,
+    const collectionName = isCreature ? 'creatures' : 'objects';
+    
+    document.getElementById("saveDexInline").onclick = async () => {
+        const loadingMsg = document.createElement('div');
+        loadingMsg.textContent = '저장 중...';
+        editArea.appendChild(loadingMsg);
         
-        str: Number(document.getElementById('input-str').value),
-        vit: Number(document.getElementById('input-vit').value),
-        agi: Number(document.getElementById('input-agi').value),
-        wil: Number(document.getElementById('input-wil').value),
-        
-        managementInfo: mgmtArr,
-        researchLogs: logArr,
-        updatedAt: serverTimestamp()
-    };
+        let finalImg = document.getElementById("editImage").value;
+        const file = document.getElementById("editImageFile").files[0];
 
-    try {
-        await updateDoc(doc(db, 'creatures', docId), newData);
-        showMessage('저장되었습니다.');
-        renderDexDetail(docId); // 화면 갱신
-    } catch(e) {
-        console.error(e);
-        alert('저장 실패: ' + e.message);
-    }
-}
-
-// 9. 차트 그리기 (직원 차트 재활용)
-function drawDexChart(data) {
-    const ctx = document.getElementById("dexRadar");
-    if (!ctx) return;
-    
-    // 기존 차트 인스턴스가 있으면 파괴 (Chart.js 특성)
-    if (window.dexChartInstance) window.dexChartInstance.destroy();
-
-    const clamp = v => Math.max(1, Math.min(5, Number(v)));
-    
-    window.dexChartInstance = new Chart(ctx, {
-        type: 'radar',
-        data: {
-            labels: ["근력", "건강", "민첩", "정신력"],
-            datasets: [{
-                label: 'Stats',
-                data: [clamp(data.str), clamp(data.vit), clamp(data.agi), clamp(data.wil)],
-                backgroundColor: "rgba(255, 0, 0, 0.2)",
-                borderColor: "#f44",
-                pointBackgroundColor: "#fff"
-            }]
-        },
-        options: {
-            scales: {
-                r: { min: 0, max: 5, ticks: { stepSize: 1, display:false }, angleLines: { color: '#555' }, grid: { color: '#555' } }
-            },
-            plugins: { legend: { display: false } }
+        if (file) {
+            const storageRef = ref(storage, `${collectionName}/${id}_${Date.now()}.png`);
+            await uploadBytes(storageRef, file);
+            finalImg = await getDownloadURL(storageRef);
         }
-    });
-}
 
-// 10. 댓글 (인라인)
-async function loadDexComments(docId) {
-    const listEl = document.getElementById('dexCommentsList');
-    const header = document.getElementById('commentHeader');
-    const moreBtn = document.getElementById('dexMoreComments');
-    
-    const snap = await getDocs(collection(db, 'creatures', docId, 'comments'));
-    const arr = [];
-    snap.forEach(d => arr.push({ id: d.id, ...d.data() }));
-    arr.sort((a,b) => (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0)); // 최신순
-
-    header.textContent = `댓글 (${arr.length})`;
-    listEl.innerHTML = '';
-
-    if (arr.length === 0) {
-        listEl.innerHTML = '<div class="muted">기록된 코멘트가 없습니다.</div>';
-        return;
-    }
-
-    // 미리보기 3개 or 전체
-    const isExpanded = listEl.dataset.expanded === 'true';
-    const displayArr = isExpanded ? arr : arr.slice(0, 3);
-
-    if (arr.length > 3 && !isExpanded) {
-        moreBtn.style.display = 'block';
-        moreBtn.onclick = () => {
-            listEl.dataset.expanded = 'true';
-            loadDexComments(docId); // 재호출하여 전체 렌더링
+        const newData = {
+            name: document.getElementById("editName").value,
+            category: document.getElementById("editCategory").value,
+            description: document.getElementById("editDesc").value,
+            image: finalImg,
+            updatedAt: serverTimestamp()
         };
-    } else {
-        moreBtn.style.display = 'none';
-    }
 
-    displayArr.forEach(c => {
-        const item = document.createElement('div');
-        item.style.marginBottom = '15px';
-        item.style.borderBottom = '1px solid #333';
-        item.style.paddingBottom = '10px';
-        
-        // 아이콘 색상 계산
-        const hex = c.colorHex || '#555555';
-        const iconColor = getContrastColor(hex);
+        if (isCreature) {
+            newData.danger = Number(document.getElementById("editDanger").value);
+            newData.habitat = document.getElementById("editHabitat").value;
+            newData.traits = document.getElementById("editTraits").value;
+            newData.weakness = document.getElementById("editWeakness").value;
+            newData.reward = document.getElementById("editReward").value;
+        } else {
+            newData.source = document.getElementById("editSource").value;
+            newData.effect = document.getElementById("editEffect").value;
+            newData.weight = Number(document.getElementById("editWeight").value);
+        }
 
-        const isMine = currentUser && currentUser.uid === c.uid;
-        const isAdmin = window.isAdmin; // isAdminUser 함수 결과값 저장 필요. 여기선 편의상 씀
-
-        item.innerHTML = `
-            <div style="display:flex; gap:10px;">
-                <div class="user-icon-circle" style="background:${hex}; color:${iconColor};">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
-                </div>
-                <div style="flex:1;">
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
-                        <strong>${c.nickname || '익명'}</strong>
-                        <span class="muted" style="font-size:0.8rem;">${fmtTime(c.createdAt)} ${c.isEdited?'(수정됨)':''}</span>
-                    </div>
-                    <div class="comment-body" style="margin-top:5px; white-space:pre-wrap;">${c.text}</div>
-                    
-                    <div class="comment-actions" style="margin-top:5px; font-size:0.8rem; display:none;">
-                        <button class="link c-edit">수정</button>
-                        <button class="link c-del" style="color:#f44;">삭제</button>
-                    </div>
-                </div>
-            </div>
-        `;
-
-        // 권한 체크 (내 댓글이거나 관리자면)
-        // isAdminUser()는 비동기라 렌더링 시점에 즉시 확인 어려우므로
-        // 상단 renderDexDetail에서 미리 체크하거나, 여기서 비동기로 체크
-        (async () => {
-             if (isMine || await isAdminUser()) {
-                 const acts = item.querySelector('.comment-actions');
-                 acts.style.display = 'flex';
-                 acts.style.gap = '10px';
-                 
-                 // 삭제
-                 acts.querySelector('.c-del').onclick = async () => {
-                     if(!confirm('삭제하시겠습니까?')) return;
-                     await deleteDoc(doc(db, 'creatures', docId, 'comments', c.id));
-                     loadDexComments(docId);
-                 };
-
-                 // 수정
-                 acts.querySelector('.c-edit').onclick = async () => {
-                     const newText = prompt('댓글 수정', c.text);
-                     if(newText === null || newText === c.text) return;
-                     await updateDoc(doc(db, 'creatures', docId, 'comments', c.id), {
-                         text: newText,
-                         isEdited: true,
-                         updatedAt: serverTimestamp()
-                     });
-                     loadDexComments(docId);
-                 };
-             }
-        })();
-
-        listEl.appendChild(item);
-    });
-}
-
-// 댓글 등록
-async function postDexComment(docId) {
-    if (!currentUser) return alert('로그인이 필요합니다.');
-    const input = document.getElementById('dexCommentInput');
-    const text = input.value.trim();
-    if (!text) return;
-
-    try {
-        const uSnap = await getDoc(doc(db, 'users', currentUser.uid));
-        const uData = uSnap.data();
-        
-        await addDoc(collection(db, 'creatures', docId, 'comments'), {
-            uid: currentUser.uid,
-            nickname: uData.nickname || 'Unknown',
-            colorHex: uData.colorHex || '#555',
-            text: text,
-            createdAt: serverTimestamp()
-        });
-        input.value = '';
-        loadDexComments(docId);
-    } catch(e) {
-        console.error(e);
-        alert('댓글 등록 실패');
-    }
+        try {
+            await updateDoc(doc(db, collectionName, id), newData);
+            showMessage('도감 항목 저장 완료', 'info');
+            
+            // 모달 갱신 및 목록 갱신
+            dexModal.close();
+            await renderDex();
+        } catch(e) {
+            showMessage('저장 실패: ' + e.message, 'error');
+            loadingMsg.textContent = '저장 실패';
+            console.error(e);
+        } finally {
+            loadingMsg.remove();
+        }
+    };
+    
+    document.getElementById("deleteDexInline").onclick = async () => {
+        if (await showConfirm('정말로 이 도감 항목을 삭제하시겠습니까?')) {
+            try {
+                await deleteDoc(doc(db, collectionName, id));
+                showMessage('도감 항목 삭제 완료', 'info');
+                dexModal.close();
+                await renderDex();
+            } catch(e) {
+                showMessage('삭제 실패: ' + e.message, 'error');
+                console.error(e);
+            }
+        }
+    };
 }
