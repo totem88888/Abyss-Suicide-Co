@@ -58,6 +58,9 @@ onAuthStateChanged(auth, user => {
     // 예: renderStaff(); 
 });
 
+// [파일 최상단 또는 전역 변수 영역에 추가]
+const DEFAULT_MAP_IMAGE = "https://via.placeholder.com/320x200?text=No+Image";
+// 💡 참고: 'db', 'auth', 'currentUser', 'contentEl' 등은 기존처럼 전역에 정의되어 있어야 합니다.
 
 // DOM 요소 참조
 const header = document.getElementById('header');
@@ -148,14 +151,17 @@ function pickByWeight(list) {
 /**
  * Firestore Timestamp를 상대적인 시간 문자열로 포맷합니다.
  * @param {object} timestamp Firestore Timestamp 객체
- * @returns {string} 포맷된 시간 문자열
+ * @returns {string} 포맷된 시간 문자열 (예: '방금 전', '2025.12.12')
  */
 function fmtTime(timestamp) {
-    if (!timestamp || !timestamp.seconds) return '';
+    // timestamp 객체가 유효하지 않으면 빈 문자열 반환 (혹은 'N/A')
+    if (!timestamp || !timestamp.seconds) return ''; 
+    
     const date = timestamp.toDate();
     const now = new Date();
     const diffSeconds = Math.floor((now - date) / 1000);
 
+    // 24시간 이내: 상대 시간 표시
     if (diffSeconds < 60) return '방금 전';
     if (diffSeconds < 3600) return `${Math.floor(diffSeconds / 60)}분 전`;
     if (diffSeconds < 86400) return `${Math.floor(diffSeconds / 3600)}시간 전`;
@@ -978,7 +984,7 @@ async function uploadMapImage(file, mapId) {
 function renderMapCard(mapDoc) {
     const mapId = mapDoc.id;
     const data = mapDoc.data ? mapDoc.data() : mapDoc;
-    const img = data.image || '';
+    const img = data.image || DEFAULT_MAP_IMAGE;
     const name = data.name || '이름 없음';
     const desc = data.description || '';
     const danger = data.danger || 1;
@@ -2304,78 +2310,6 @@ async function fetchItemDescription(itemName) {
     return "설명 없음 (DB 로드 실패)";
 }
 
-// 지도 데이터와 유사하게 시트 데이터를 가져오는 가상 함수
-async function fetchSheetData(sheetId) {
-    // 실제 로직: Firestore에서 데이터를 가져옴
-    // 여기서는 테스트 데이터 반환
-    const isAdmin = await isAdminUser();
-    
-    // 만약 관리자 모드에서 다른 시트를 보는 경우, 해당 시트 ID로 데이터를 가져옴.
-    // 여기서는 admin이 아닐 경우 항상 본인의 데이터만 가져옴.
-    
-    // 이 시트 ID로 데이터베이스에서 데이터를 가져온다고 가정
-    console.log(`Fetching data for sheet ID: ${sheetId}`);
-    
-    return {
-        // 3. 인적사항
-        personnel: {
-            name: "에이전트 707", gender: "여", age: 28, height: 172, weight: 65,
-            nationality: "한국", education: "심연 연구소 특수교육", 
-            career: "전직 용병, 현직 에이전트", family: "없음", contact: "비공개",
-            marriage: "미혼", medical: "특이사항 없음", criminal: "없음",
-            etc: "특수 능력 '공명' 보유. 주로 은닉 작전에 투입됨.",
-            photoUrl: "https://via.placeholder.com/150x200?text=Agent+Photo"
-        },
-        // 3-2. 스탯
-        stats: {
-            muscle: 3, agility: 4, endurance: 3, flexibility: 2, visual: 5, auditory: 4,
-            situation: 5, reaction: 5,
-            intellect: 4, judgment: 5, memory: 4, spirit: 5, decision: 4, stress: 3,
-        },
-        // 4. 인벤토리
-        inventory: {
-            silver: 450,
-            items: [
-                { id: 1, name: "표준형 권총", count: 1, source: "지급품", desc: "표준형 9mm 권총." },
-                { id: 2, name: "응급 키트", count: 3, source: "개인 소지", desc: "경미한 부상을 치료할 수 있는 키트." },
-                { id: 3, name: "정화 앰플", count: 1, source: "특수 지급", desc: "오염도 일부 제거." },
-            ]
-        },
-        // 5. 현재 상태
-        status: {
-            // 정신력 최대치 계산: (10 * spirit) + 50
-            currentSpirit: 75,
-            maxSpirit: (10 * 5) + 50, // stats.spirit (5) 기반
-            
-            // 부상도/오염도 (0~100)
-            injuries: {
-                head: 10, neck: 0, leftEye: 0, rightEye: 0,
-                leftArm: 5, leftHand: 0, 
-                leftLeg: 20, leftFoot: 0, 
-                torso: 15,
-                rightArm: 0, rightHand: 0, 
-                rightLeg: 0, rightFoot: 0,
-            },
-            contaminations: {
-                head: 5, neck: 0, leftEye: 0, rightEye: 0,
-                leftArm: 0, leftHand: 0, 
-                leftLeg: 10, leftFoot: 0, 
-                torso: 5,
-                rightArm: 0, rightHand: 0, 
-                rightLeg: 0, rightFoot: 0,
-            },
-            // 현재 오염도 및 침식도
-            currentContamination: 15, // 예시 값
-            currentErosion: 5, // 예시 값
-            
-            // 6. 통계
-            stats: {
-                deaths: 2, explorations: 15, interviews: 5, itemsCarried: 3, abyssDefeated: 4, silverCarried: 450
-            }
-        }
-    };
-}
-
 // 인벤토리 설명은 데이터베이스에서 별도로 가져와야 한다는 가정을 처리하는 가상 함수
 async function fetchItemDescription(itemName) {
     // 실제 로직: 아이템 DB에서 설명을 가져옴
@@ -2383,13 +2317,6 @@ async function fetchItemDescription(itemName) {
     if (itemName === "응급 키트") return "경미한 부상을 치료할 수 있는 키트.";
     if (itemName === "정화 앰플") return "오염도 일부 제거.";
     return "설명 없음";
-}
-
-// 시간 포맷 (맵 코드에 포함되어 있었을 것으로 추정)
-function fmtTime(timestamp) {
-    if (!timestamp || !timestamp.seconds) return 'N/A';
-    const date = new Date(timestamp.seconds * 1000);
-    return date.toLocaleDateString();
 }
 
 // 부상도/오염도에 따른 텍스트 구절 반환
