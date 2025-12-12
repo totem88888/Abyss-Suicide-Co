@@ -56,6 +56,8 @@ const header = document.getElementById('header');
 const navEl = document.getElementById('nav');
 const contentEl = document.getElementById('content');
 const abyssFlowEl = document.getElementById('abyssFlow');
+const staffStatusEl = document.getElementById('staffStatus');
+
 const logOutEl = document.getElementById('log-out');
 const nowTimeEl = document.getElementById('nowTime');
 const systemInfo = document.getElementById('systemInfo');
@@ -438,9 +440,11 @@ async function renderMain(){
             }
         });
 
-        document.getElementById('staffStatus').innerHTML = `
-            <div>생존: ${alive} | 실종: ${missing} | 오염: ${contaminated} | 사망: ${dead}</div>
-        `;
+        if (staffStatusEl) { // ✅ Null 체크 추가
+            staffStatusEl.innerHTML = `
+                <div>생존: ${alive} | 실종: ${missing} | 오염: ${contaminated} | 사망: ${dead}</div>
+            `;
+        }
 
         const daySnap = await getDoc(doc(db, 'system', 'day'));
         let currentDay = daySnap.exists() ? (daySnap.data().currentDay || 1) : 1;
@@ -528,14 +532,6 @@ function drawStatChart(stats = { str:1, vit:1, agi:1, wil:1 }) {
     });
 }
 
-const sheetStats = {
-    str: sheetData.stats.muscle, 
-    vit: sheetData.stats.endurance, 
-    agi: sheetData.stats.agility, 
-    wil: sheetData.stats.spirit
-};
-
-drawStatChart(sheetStats);
 
 async function openProfileModal(docId, data) {
     profileModal.innerHTML = `
@@ -2443,7 +2439,7 @@ async function renderMe(targetSheetId = null) {
     try {
         // 1. 시트 데이터를 데이터베이스에서 가져옴 (Firebase 연동)
         const sheetData = await fetchSheetData(currentSheetId);
-        
+
         const sheetContainer = document.createElement('div');
         sheetContainer.className = 'char-sheet-container';
         
