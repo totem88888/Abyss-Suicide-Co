@@ -522,55 +522,64 @@ function openProfileModal(docId, data) {
 }
 
 function openInlineEdit(docId, data) {
-    const editArea = document.getElementById("editArea");
-    editArea.innerHTML = `
-        <div class="edit-grid-inline">
-        <label>이름</label><input id="editName" value="${data.name || ''}">
-        <label>성별</label><input id="editGender" value="${data.gender || ''}">
-        <label>나이</label><input id="editAge" value="${data.age || ''}">
-        <label>키·체중</label><input id="editBody" value="${data.body || ''}">
-        <label>국적</label><input id="editNation" value="${data.nation || ''}">
-        <label>비고</label><textarea id="editNote">${data.note || ''}</textarea>
-        <label>이미지 업로드</label><input id="editImageFile" type="file" accept="image/*">
-        <label>이미지 URL</label><input id="editImage" value="${data.image || ''}">
-        <div class="edit-stats-inline">
-            <label>근력</label><input id="editStr" value="${data.str || 0}">
-            <label>건강</label><input id="editVit" value="${data.vit || 0}">
-            <label>민첩</label><input id="editAgi" value="${data.agi || 0}">
-            <label>정신력</label><input id="editWil" value="${data.wil || 0}">
-        </div>
-        <button id="saveStaffInline">저장</button>
-        </div>
-    `;
+  const editArea = document.getElementById("editArea");
 
-    document.getElementById("saveStaffInline").onclick = async () => {
-        let finalImg = document.getElementById("editImage").value;
-        const file = document.getElementById("editImageFile").files[0];
+  // 1. HTML을 먼저 생성 (버튼이 이때 생김)
+  editArea.innerHTML = `
+    <div class="edit-grid-inline">
+      <label>이름</label><input id="editName" value="${data.name || ''}">
+      <label>성별</label><input id="editGender" value="${data.gender || ''}">
+      <label>나이</label><input id="editAge" value="${data.age || ''}">
+      <label>키·체중</label><input id="editBody" value="${data.body || ''}">
+      <label>국적</label><input id="editNation" value="${data.nation || ''}">
+      <label>비고</label><textarea id="editNote">${data.note || ''}</textarea>
 
-        if (file) {
-            finalImg = await uploadStaffImage(file, docId);
-        }
+      <label>이미지 업로드</label><input id="editImageFile" type="file" accept="image/*">
+      <label>이미지 URL</label><input id="editImage" value="${data.image || ''}">
 
-        const newData = {
-            name: document.getElementById("editName").value,
-            gender: document.getElementById("editGender").value,
-            age: document.getElementById("editAge").value,
-            body: document.getElementById("editBody").value,
-            nation: document.getElementById("editNation").value,
-            note: document.getElementById("editNote").value,
-            image: finalImg,
-            str: Number(document.getElementById("editStr").value),
-            vit: Number(document.getElementById("editVit").value),
-            agi: Number(document.getElementById("editAgi").value),
-            wil: Number(document.getElementById("editWil").value),
-            updatedAt: serverTimestamp()
-        };
+      <div class="edit-stats-inline">
+        <label>근력</label><input id="editStr" value="${data.str || 0}">
+        <label>건강</label><input id="editVit" value="${data.vit || 0}">
+        <label>민첩</label><input id="editAgi" value="${data.agi || 0}">
+        <label>정신력</label><input id="editWil" value="${data.wil || 0}">
+      </div>
 
-        await updateDoc(doc(db, "staff", docId), newData);
-        openProfileModal(docId, { ...data, ...newData });
-        renderStaff();
-        editArea.innerHTML = '';
+      <button id="saveStaffInline">저장</button>
+    </div>
+  `;
+
+  // 2. HTML이 생성된 '직후'에 이벤트를 연결해야 함 (함수 내부)
+  document.getElementById("saveStaffInline").onclick = async () => {
+    let finalImg = document.getElementById("editImage").value;
+    const file = document.getElementById("editImageFile").files[0];
+
+    if (file) {
+      // 이미지 업로드 함수 호출 (uploadStaffImage가 정의되어 있어야 함)
+      finalImg = await uploadStaffImage(file, docId);
+    }
+
+    const newData = {
+      name: document.getElementById("editName").value,
+      gender: document.getElementById("editGender").value,
+      age: document.getElementById("editAge").value,
+      body: document.getElementById("editBody").value,
+      nation: document.getElementById("editNation").value,
+      note: document.getElementById("editNote").value,
+      image: finalImg,
+      str: Number(document.getElementById("editStr").value),
+      vit: Number(document.getElementById("editVit").value),
+      agi: Number(document.getElementById("editAgi").value),
+      wil: Number(document.getElementById("editWil").value),
+      updatedAt: serverTimestamp()
     };
+
+    await updateDoc(doc(db, "staff", docId), newData);
+
+    // 화면 갱신
+    openProfileModal(docId, { ...data, ...newData });
+    renderStaff();
+    editArea.innerHTML = ''; // 편집 영역 초기화
+  };
 }
 // [수정] 여기에 중복되었던 saveStaffInline.onclick 코드 삭제함
 
