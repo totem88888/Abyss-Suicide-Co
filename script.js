@@ -1171,16 +1171,6 @@ async function renderMap() {
 
 const msgEl = document.getElementById("message");     // 메시지 표시용
 
-
-/* ---------- 메시지 표시 ---------- */
-function showMessage(text, type='info') {
-  if (!msgEl) return;
-  msgEl.textContent = text;
-  msgEl.className = `msg ${type}`;
-  setTimeout(() => msgEl.textContent = '', 1800);
-}
-
-
 /* ---------- 기본 데이터 모델 ---------- */
 function blankDex() {
   return {
