@@ -1163,7 +1163,618 @@ async function renderMap() {
   }
 }
 
-function renderDex(){ contentEl.innerHTML = '<div class="card">도감 탭</div>'; }
+/* ===========================================================
+   DEX SYSTEM  — 전체 구조 골격
+   =========================================================== */
+
+/* ---------- 공용 엘리먼트 ---------- */
+
+const msgEl = document.getElementById("message");     // 메시지 표시용
+
+
+/* ---------- 메시지 표시 ---------- */
+function showMessage(text, type='info') {
+  if (!msgEl) return;
+  msgEl.textContent = text;
+  msgEl.className = `msg ${type}`;
+  setTimeout(() => msgEl.textContent = '', 1800);
+}
+
+
+/* ---------- 기본 데이터 모델 ---------- */
+function blankDex() {
+  return {
+    code: "",
+    name: "",
+    danger: "유광",
+    form: "P",
+    discoveryOrder: 1,
+    derivedOrder: 1, // 파생일 때 필요
+    image: "",
+    stats: { str:1, vit:1, agi:1, wil:1 },
+
+    derived: { maxHp:0, maxMp:0, physAtk:0, magAtk:0 },
+
+    basicPublic: {
+      name:false,
+      danger:false,
+      form:false,
+      discoveryOrder:false,
+      image:false,
+      damage:false,
+      death:false
+    },
+
+    management: [ { title: "관리 정보", text:"", public:false } ],
+    harvest:   [ { title: "채취 정보", text:"", public:false } ],
+    etc:       [ { title: "기타 정보",   text:"", public:false } ],
+
+    researchLogs: [
+      { text:"기본 일지", edited:false, public:true }
+    ],
+
+    comments: [],
+
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp()
+  };
+}
+
+
+/* ---------- 개방 퍼센트 계산 ---------- */
+function getOpenPercent(doc) {
+  let total = 0;
+  let open = 0;
+
+  // basicPublic
+  for (const k in doc.basicPublic) {
+    total++;
+    if (doc.basicPublic[k]) open++;
+  }
+
+  // management/harvest/etc
+  ["management","harvest","etc"].forEach(key=>{
+    doc[key].forEach(item=>{
+      total++;
+      if (item.public) open++;
+    });
+  });
+
+  // researchLogs
+  total += doc.researchLogs.length;
+  open += 1; // 기본 일지는 무조건 공개
+  for (let i=1;i<doc.researchLogs.length;i++){
+    if (doc.researchLogs[i].public) open++;
+  }
+
+  return total ? Math.round(open/total*100) : 0;
+}
+
+
+/* ===========================================================
+   0. 도감 메인 페이지
+   =========================================================== */
+
+async function renderDex() {
+
+  contentEl.innerHTML = `
+    <div class="dex-header card">
+      <div id="dex-status" class="status">불러오는 중…</div>
+      <div id="dex-controls"></div>
+    </div>
+
+    <div class="dex-grid-wrap">
+      <div id="dex-grid" class="dex-grid"></div>
+    </div>
+  `;
+
+  const isAdmin = await isAdminUser();
+  if (isAdmin) addNewDexButton();
+
+  const snap = await getDocs(collection(db,"dex"));
+  const list = [];
+  snap.forEach(d=> list.push({ id:d.id, ...d.data() }));
+
+  list.sort((a,b)=>(a.discoveryOrder||0)-(b.discoveryOrder||0));
+
+  const full = list.length;
+  const opened = list.filter(d=>getOpenPercent(d)===100).length;
+
+  document.getElementById("dex-status").textContent =
+    `개방 심연체 ${opened} / 전체 ${full}`;
+
+  const grid = document.getElementById("dex-grid");
+  grid.innerHTML = "";
+
+  if (list.length === 0) {
+    grid.innerHTML = `<div class="card muted">도감 데이터 없음</div>`;
+    return;
+  }
+
+  list.forEach(doc => {
+    const pct = getOpenPercent(doc);
+
+    const card = document.createElement("div");
+    card.className = "dex-card";
+    card.style.border = `3px solid ${pctColor(pct)}`;
+
+    card.innerHTML = `
+      <div class="thumb-wrap">
+        <img src="${doc.image||""}">
+        <div class="thumb-overlay">
+          <div class="name">${doc.name||doc.code||'무명'}</div>
+        </div>
+      </div>
+    `;
+
+    card.onclick = ()=> openDexDetail(doc.id);
+    grid.appendChild(card);
+  });
+
+  if (list.length < 4) {
+    grid.style.gridTemplateColumns = `repeat(${list.length}, 1fr)`;
+  } else {
+    grid.style.gridTemplateColumns = `repeat(4, 1fr)`;
+  }
+}
+
+
+/* ---------- 새 추가 버튼 ---------- */
+async function addNewDexButton() {
+  const wrap = document.getElementById("dex-controls");
+  const btn = document.createElement("button");
+  btn.className = "btn";
+  btn.textContent = "새 심연체 추가 +";
+
+  btn.onclick = async ()=>{
+    const ref = doc(collection(db,"dex"));
+    const obj = blankDex();
+    obj.code = `NEW-${ref.id.slice(0,6)}`;
+    await setDoc(ref, obj);
+    showMessage("새 심연체 생성됨","success");
+    renderDex();
+  };
+
+  wrap.appendChild(btn);
+}
+
+
+/* ---------- 퍼센트 → 색상 ---------- */
+function pctColor(pct) {
+  const p = pct/100;
+  const r = p < 0.5 ? 255 : Math.round(255-(p-0.5)*2*255);
+  const g = p < 0.5 ? Math.round(p*2*255) : 255;
+  return `rgb(${r},${g},0)`;
+}
+
+
+/* ===========================================================
+   3. 상세 페이지
+   =========================================================== */
+
+async function openDexDetail(id) {
+
+  const snap = await getDoc(doc(db,"dex",id));
+  if (!snap.exists()) {
+    showMessage("없다.","error");
+    return;
+  }
+  const data = snap.data();
+  const isAdmin = await isAdminUser();
+
+  contentEl.innerHTML = `
+    <button class="btn" id="back">← 목록으로</button>
+
+    <div class="detail-header card">
+      <div class="title">${data.name||data.code}</div>
+      <div class="pct">개방 정보 ${getOpenPercent(data)}%</div>
+      <div class="ctrl"></div>
+    </div>
+
+    <div class="detail-panels">
+      <div id="p-basic" class="panel card"></div>
+      <div id="p-stats" class="panel card"></div>
+      <div id="p-manage" class="panel card"></div>
+      <div id="p-logs" class="panel card"></div>
+    </div>
+
+    <div id="p-comments" class="panel card"></div>
+  `;
+
+  document.getElementById("back").onclick = ()=>renderDex();
+
+  let editing = false;
+
+  if (isAdmin) {
+    const ctrl = contentEl.querySelector(".ctrl");
+    const btn = document.createElement("button");
+    btn.className = "btn";
+    btn.textContent = "편집";
+    ctrl.appendChild(btn);
+
+    const save = document.createElement("button");
+    save.className = "btn";
+    save.textContent = "저장";
+    save.style.display = "none";
+    ctrl.appendChild(save);
+
+    btn.onclick = ()=>{
+      editing = !editing;
+      toggleEditing(editing);
+      save.style.display = editing ? "inline-block" : "none";
+    };
+
+    save.onclick = async ()=>{
+      const payload = collectFromDOM(data);
+      payload.updatedAt = serverTimestamp();
+      await setDoc(doc(db,"dex",id), payload);
+      openDexDetail(id);
+    };
+  }
+
+  renderBasic(data, editing);
+  renderStats(data, editing);
+  renderManage(data, editing);
+  renderLogs(data, editing);
+  renderComments(id, data, editing);
+}
+
+
+/* ===========================================================
+   PANEL 1 — 기본 정보
+   =========================================================== */
+
+function renderBasic(doc, editing) {
+  const el = document.getElementById("p-basic");
+  if (!editing) {
+    el.innerHTML = `
+      <div class="basic-wrap">
+        <img class="basic-img" src="${doc.image||""}">
+        <div class="basic-tbl">
+          <div class="row"><b>코드명</b> ${doc.code}</div>
+          <div class="row"><b>명칭</b> ${doc.name}</div>
+          <div class="row"><b>위험도</b> ${doc.danger}</div>
+          <div class="row"><b>외형</b> ${doc.form}</div>
+          <div class="row"><b>${doc.danger==="파생"?"파생 순서":"발견 순서"}</b> ${doc.discoveryOrder}</div>
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  el.innerHTML = `
+    <div class="basic-wrap">
+      <img class="basic-img" src="${doc.image||""}">
+      <div class="basic-tbl">
+
+        <div class="row"><b>명칭</b>
+          <input id="b-name" value="${doc.name}">
+        </div>
+
+        <div class="row"><b>이미지 URL</b>
+          <input id="b-image" value="${doc.image}">
+        </div>
+
+        <div class="row"><b>위험도</b>
+          <select id="b-danger">
+            <option${doc.danger==="유광"?" selected":""}>유광</option>
+            <option${doc.danger==="해수"?" selected":""}>해수</option>
+            <option${doc.danger==="심해"?" selected":""}>심해</option>
+            <option${doc.danger==="파생"?" selected":""}>파생</option>
+          </select>
+        </div>
+
+        <div class="row"><b>외형</b>
+          <select id="b-form">
+            <option${doc.form==="P"?" selected":""}>P</option>
+            <option${doc.form==="F"?" selected":""}>F</option>
+            <option${doc.form==="O"?" selected":""}>O</option>
+            <option${doc.form==="C"?" selected":""}>C</option>
+          </select>
+        </div>
+
+        <div class="row"><b>${doc.danger==="파생"?"파생 순서":"발견 순서"}</b>
+          <input type="number" id="b-discovery" value="${doc.discoveryOrder}">
+        </div>
+
+      </div>
+    </div>
+  `;
+}
+
+
+/* ===========================================================
+   PANEL 2 — 스테이터스
+   =========================================================== */
+
+function renderStats(doc, editing) {
+  const el = document.getElementById("p-stats");
+
+  if (!editing) {
+    el.innerHTML = `
+      <div class="stats-tbl">
+        <div class="row"><b>근력</b> ${doc.stats.str}</div>
+        <div class="row"><b>건강</b> ${doc.stats.vit}</div>
+        <div class="row"><b>민첩</b> ${doc.stats.agi}</div>
+        <div class="row"><b>정신력</b> ${doc.stats.wil}</div>
+      </div>
+
+      <div class="derived-tbl">
+        <div class="row"><b>최대 체력</b> ${doc.derived.maxHp}</div>
+        <div class="row"><b>최대 정신력</b> ${doc.derived.maxMp}</div>
+        <div class="row"><b>물리 공격력</b> ${doc.derived.physAtk}</div>
+        <div class="row"><b>정신 공격력</b> ${doc.derived.magAtk}</div>
+      </div>
+    `;
+    return;
+  }
+
+  el.innerHTML = `
+    <div class="stats-tbl">
+      <div class="row"><b>근력</b> <input type="number" id="s-str" value="${doc.stats.str}"></div>
+      <div class="row"><b>건강</b> <input type="number" id="s-vit" value="${doc.stats.vit}"></div>
+      <div class="row"><b>민첩</b> <input type="number" id="s-agi" value="${doc.stats.agi}"></div>
+      <div class="row"><b>정신력</b> <input type="number" id="s-wil" value="${doc.stats.wil}"></div>
+    </div>
+
+    <div class="derived-tbl muted">
+      스테이터스를 수정하면 자동 계산됨.
+    </div>
+  `;
+}
+
+
+/* ===========================================================
+   PANEL 3 — 관리/채취/기타 정보
+   =========================================================== */
+
+function renderManage(doc, editing) {
+  const el = document.getElementById("p-manage");
+
+  if (!editing) {
+    el.innerHTML = renderInfoGroup(doc, "management", "관리 정보")
+                 + renderInfoGroup(doc, "harvest", "채취 정보")
+                 + renderInfoGroup(doc, "etc", "기타 정보");
+    return;
+  }
+
+  el.innerHTML = `
+    <div class="mg-wrap">
+      ${renderInfoEditGroup(doc, "management", "관리 정보")}
+      ${renderInfoEditGroup(doc, "harvest", "채취 정보")}
+      ${renderInfoEditGroup(doc, "etc", "기타 정보")}
+    </div>
+  `;
+}
+
+
+function renderInfoGroup(doc, key, label) {
+  return `
+    <div class="info-group">
+      <h3>${label}</h3>
+      ${doc[key].map((it,i)=>`
+        <div class="info-item ${!it.public?'muted':''}">
+          <div class="title">${it.title}</div>
+          <div class="text">${it.text}</div>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+
+function renderInfoEditGroup(doc, key, label) {
+  return `
+    <div class="info-group">
+      <h3>${label}</h3>
+      ${doc[key].map((it,i)=>`
+        <div class="info-item">
+          <input class="title" id="${key}-title-${i}" value="${it.title}">
+          <textarea class="text" id="${key}-text-${i}">${it.text}</textarea>
+          <label><input type="checkbox" id="${key}-pub-${i}" ${it.public?"checked":""}> 공개</label>
+          <button class="btn del" onclick="delInfo('${key}',${i})">삭제</button>
+        </div>
+      `).join("")}
+      <button class="btn add" onclick="addInfo('${key}')">+ 추가</button>
+    </div>
+  `;
+}
+
+
+/* ---------- 정보 배열 수정용 ---------- */
+
+window.addInfo = function(key) {
+  const el = document.getElementById("p-manage");
+  dataCache[key].push({ title:`${key} 정보`, text:"", public:false });
+  openDexDetail(activeDexId);
+};
+
+window.delInfo = function(key, idx) {
+  dataCache[key].splice(idx,1);
+  openDexDetail(activeDexId);
+};
+
+
+/* ===========================================================
+   PANEL 4 — 연구 일지
+   =========================================================== */
+
+function renderLogs(doc, editing) {
+  const el = document.getElementById("p-logs");
+
+  if (!editing) {
+    el.innerHTML = `
+      <h3>연구 일지</h3>
+      ${doc.researchLogs.map((log,i)=>`
+        <div class="log-item">
+          <div class="text ${i>0&&!log.public?"muted":""}">
+            ${log.text} ${log.edited?"(수정됨)":""}
+          </div>
+        </div>
+      `).join("")}
+    `;
+    return;
+  }
+
+  el.innerHTML = `
+    <h3>연구 일지</h3>
+    ${doc.researchLogs.map((log,i)=>`
+      <div class="log-item">
+        <textarea id="log-${i}">${log.text}</textarea>
+        ${i===0?"(기본 일지)":`
+          <button class="btn del" onclick="delLog(${i})">삭제</button>
+        `}
+      </div>
+    `).join("")}
+    ${(doc.researchLogs.length < 4)?`
+      <button class="btn add" onclick="addLog()">+ 일지 추가</button>
+    `:""}
+  `;
+}
+
+window.addLog = function(){
+  dataCache.researchLogs.push({ text:"", edited:false, public:false });
+  openDexDetail(activeDexId);
+};
+
+window.delLog = function(i){
+  dataCache.researchLogs.splice(i,1);
+  openDexDetail(activeDexId);
+};
+
+
+/* ===========================================================
+   PANEL 5 — 댓글
+   =========================================================== */
+
+async function renderComments(id, doc, editing) {
+  const el = document.getElementById("p-comments");
+
+  el.innerHTML = `
+    <h3>댓글</h3>
+    <div id="c-list"></div>
+    <div id="c-input" class="c-input">
+      <textarea id="c-text" placeholder="댓글 입력"></textarea>
+      <button class="btn" id="c-send">등록</button>
+    </div>
+  `;
+
+  const listEl = el.querySelector("#c-list");
+  listEl.innerHTML = doc.comments.slice(0,4).map((c,i)=>renderCommentItem(c,i)).join("");
+
+  el.querySelector("#c-send").onclick = async ()=>{
+    const u = auth.currentUser;
+    if (!u) return;
+
+    const txt = document.getElementById("c-text").value.trim();
+    if (!txt) return;
+
+    const newComment = {
+      uid: u.uid,
+      text: txt,
+      edited: false,
+      createdAt: Date.now()
+    };
+
+    doc.comments.push(newComment);
+    await setDoc(doc(db,"dex",id), doc);
+    openDexDetail(id);
+  };
+}
+
+
+function renderCommentItem(c, i) {
+  return `
+    <div class="comment">
+      <div class="profile" style="background:${c.colorHex||"#888"}"></div>
+      <div class="body">
+        <div class="txt">${c.text} ${c.edited?"(수정됨)":""}</div>
+        <div class="time">${new Date(c.createdAt).toLocaleString()}</div>
+      </div>
+    </div>
+  `;
+}
+
+
+/* ===========================================================
+   PAYLOAD COLLECTOR
+   =========================================================== */
+
+function collectFromDOM(original) {
+  const obj = JSON.parse(JSON.stringify(original));
+
+  // basic
+  const name = document.getElementById("b-name")?.value;
+  if (name !== undefined) obj.name = name;
+
+  const img = document.getElementById("b-image")?.value;
+  if (img !== undefined) obj.image = img;
+
+  const danger = document.getElementById("b-danger")?.value;
+  if (danger) obj.danger = danger;
+
+  const form = document.getElementById("b-form")?.value;
+  if (form) obj.form = form;
+
+  const disc = document.getElementById("b-discovery")?.value;
+  if (disc) obj.discoveryOrder = Number(disc);
+
+  // stats
+  const sstr = document.getElementById("s-str")?.value;
+  if (sstr !== undefined) obj.stats.str = Number(sstr);
+
+  const svit = document.getElementById("s-vit")?.value;
+  if (svit !== undefined) obj.stats.vit = Number(svit);
+
+  const sagi = document.getElementById("s-agi")?.value;
+  if (sagi !== undefined) obj.stats.agi = Number(sagi);
+
+  const swil = document.getElementById("s-wil")?.value;
+  if (swil !== undefined) obj.stats.wil = Number(swil);
+
+  // derived 계산
+  obj.derived.maxHp   = obj.stats.vit * 10;
+  obj.derived.maxMp   = obj.stats.wil * 10;
+  obj.derived.physAtk = obj.stats.str * 2;
+  obj.derived.magAtk  = obj.stats.wil * 2;
+
+  // management/harvest/etc
+  ["management","harvest","etc"].forEach(key=>{
+    obj[key] = [];
+    let i = 0;
+    while (document.getElementById(`${key}-title-${i}`)) {
+      obj[key].push({
+        title: document.getElementById(`${key}-title-${i}`).value,
+        text:  document.getElementById(`${key}-text-${i}`).value,
+        public: document.getElementById(`${key}-pub-${i}`).checked
+      });
+      i++;
+    }
+  });
+
+  // logs
+  obj.researchLogs = [];
+  let i=0;
+  while (document.getElementById(`log-${i}`)) {
+    obj.researchLogs.push({
+      text: document.getElementById(`log-${i}`).value,
+      edited: (document.getElementById(`log-${i}`).value !== (original.researchLogs[i]?.text||"")),
+      public: i===0 ? true : false
+    });
+    i++;
+  }
+
+  return obj;
+}
+
+
+/* ===========================================================
+   EDIT MODE TOGGLER
+   =========================================================== */
+
+function toggleEditing(on) {
+  // 다시 그려주면 되므로 비워둔다.
+}
 
 onAuthStateChanged(auth, async (user)=>{
     currentUser = user;
