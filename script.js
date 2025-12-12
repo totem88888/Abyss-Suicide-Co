@@ -2397,7 +2397,7 @@ async function renderMe(targetSheetId = null) {
         // 3. 스탯 섹션 렌더링
         // 스탯 섹션에는 두 개의 방사형 그래프가 포함됩니다.
         // 
-        sheetContainer.appendChild(renderStatsSection(sheetData.stats, isAdmin));
+        sheetContainer.appendChild(renderMeStatsSection(sheetData.stats, isAdmin));
         
         // 4. 인벤토리 섹션 렌더링 (비동기 함수 사용)
         sheetContainer.appendChild(await renderInventorySection(sheetData.inventory, isAdmin));
@@ -2451,7 +2451,7 @@ function renderPersonnelSection(p, sheetId, isAdmin) {
 }
 
 // 스탯 섹션 렌더링
-function renderStatsSection(s, isAdmin) {
+function renderMeStatsSection(s, isAdmin) {
     const section = document.createElement('div');
     section.className = 'card map-card';
     section.innerHTML = `
