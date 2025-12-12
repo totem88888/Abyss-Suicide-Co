@@ -57,6 +57,7 @@ const navEl = document.getElementById('nav');
 const contentEl = document.getElementById('content');
 const abyssFlowEl = document.getElementById('abyssFlow');
 const staffStatusEl = document.getElementById('staffStatus');
+const staffScheduleEl = document.getElementById('staffSchedule');
 
 const logOutEl = document.getElementById('log-out');
 const nowTimeEl = document.getElementById('nowTime');
@@ -454,12 +455,12 @@ async function renderMain(){
             const daysData = schedSnap.data().days || {};
             const todayList = daysData[currentDay] || [];
             if (todayList.length > 0) {
-                document.getElementById('staffSchedule').innerHTML = todayList.map(t => `<div>${t}</div>`).join('');
+                staffScheduleEl.innerHTML = todayList.map(t => `<div>${t}</div>`).join('');
             } else {
-                document.getElementById('staffSchedule').textContent = `${currentDay}일차 일정 없음`;
+                staffScheduleEl.textContent = `${currentDay}일차 일정 없음`;
             }
         } else {
-            document.getElementById('staffSchedule').textContent = '스케줄 데이터 없음';
+            staffScheduleEl.textContent = '스케줄 데이터 없음';
         }
 
         document.getElementById('staffRank').innerHTML = `
