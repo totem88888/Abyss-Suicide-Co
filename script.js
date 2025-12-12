@@ -969,18 +969,6 @@ function showConfirm(msg) {
     });
 }
 
-async function isAdminUser() {
-    const user = auth.currentUser;
-    if (!user) return false;
-    try {
-        const uDoc = await getDoc(doc(db, 'users', user.uid));
-        return uDoc.exists() && uDoc.data().role === 'admin';
-    } catch(e) {
-        console.error('isAdminUser err', e);
-        return false;
-    }
-}
-
 async function uploadMapImage(file, mapId) {
     const storageRef = ref(storage, `maps/${mapId || 'tmp'}_${Date.now()}.png`);
     await uploadBytes(storageRef, file);
