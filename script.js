@@ -2304,24 +2304,6 @@ async function fetchItemDescription(itemName) {
     return "설명 없음 (DB 로드 실패)";
 }
 
-// --- 가상의 외부 의존성 및 유틸리티 함수 (실제 사용 환경에 맞게 정의 필요) ---
-// const db; // Firebase Firestore 인스턴스
-// const auth; // Firebase Auth 인스턴스
-// function isAdminUser() { ... } // 관리자 권한 확인 함수
-// function showMessage(msg, type) { ... } // 메시지 표시 함수
-// function showConfirm(msg) { ... } // 확인 팝업 함수
-
-// 현재 로그인된 사용자의 시트 ID를 가져오는 가상 함수
-async function getCurrentUserSheetId() {
-    const user = auth.currentUser;
-    if (user) {
-        // 실제 로직: Firestore의 users 컬렉션에서 sheetId를 가져옴
-        // 여기서는 임시 ID 반환
-        return user.uid; 
-    }
-    return null;
-}
-
 // 지도 데이터와 유사하게 시트 데이터를 가져오는 가상 함수
 async function fetchSheetData(sheetId) {
     // 실제 로직: Firestore에서 데이터를 가져옴
