@@ -362,3 +362,137 @@ input[type=text], input[type=email], input[type=password] {
 /* comments popup specific */
 .comments-popup .card { padding: 0; }
 .comments-full-list { display:flex; flex-direction:column; gap:12px; }
+
+.dex-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr); /* 한 줄에 4개 */
+    gap: 20px;
+    padding: 20px;
+    justify-content: center;
+}
+
+@media (max-width: 800px) {
+    .dex-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+/* 도감 아이템 (카드) */
+.dex-item {
+    position: relative;
+    aspect-ratio: 1 / 1; /* 1:1 정사각형 */
+    border: 3px solid #444; /* 기본 테두리 */
+    border-radius: 8px;
+    overflow: hidden;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    background-color: #000;
+}
+
+.dex-item img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: transform 0.3s ease;
+    opacity: 0.7;
+}
+
+/* 호버 효과 */
+.dex-item:hover img {
+    transform: scale(1.1); /* 이미지 확대 */
+    opacity: 0.3; /* 이미지 어둡게 */
+}
+
+.dex-item:hover {
+    box-shadow: 0 0 15px var(--accent-color, #fff); /* 강조색 빛 */
+}
+
+.dex-item .dex-name-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #fff;
+    font-weight: bold;
+    font-size: 1.2rem;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    text-align: center;
+    width: 100%;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+    pointer-events: none;
+}
+
+.dex-item:hover .dex-name-overlay {
+    opacity: 1;
+}
+
+/* 상세 페이지 레이아웃 (4분할 느낌) */
+.dex-detail-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.dex-section-row {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+
+.dex-section-col {
+    flex: 1;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    padding: 15px;
+    border-radius: 4px;
+    min-width: 300px;
+}
+
+/* 기본 정보 테이블 스타일 */
+.dex-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.dex-table th, .dex-table td {
+    padding: 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    text-align: left;
+    vertical-align: middle;
+}
+.dex-table th { width: 100px; color: #aaa; font-weight: normal; }
+
+/* 비공개 정보 가림 처리 */
+.secret-info {
+    background-color: #2a2a2a;
+    color: transparent;
+    user-select: none;
+    position: relative;
+    cursor: not-allowed;
+}
+.secret-info::after {
+    content: "기록 말소";
+    color: #555;
+    position: absolute;
+    left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 0.8rem;
+}
+
+/* 관리자용 체크박스 (비공개 제어) */
+.admin-check {
+    accent-color: #ff4444;
+    margin-right: 6px;
+    cursor: pointer;
+}
+
+/* 프로필 아이콘 */
+.user-icon-circle {
+    width: 40px; 
+    height: 40px; 
+    border-radius: 50%; 
+    display: flex; 
+    align-items: center; 
+    justify-content: center;
+    font-weight: bold;
+    overflow: hidden;
+}
