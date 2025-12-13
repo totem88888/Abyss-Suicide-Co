@@ -89,6 +89,9 @@ const signupBoxMsg = document.getElementById('signup-box-msg');
 
 const profileModal = document.getElementById("profileModal");
 
+const DEFAULT_MAP_IMAGE = './images/default-map.png';
+const DEFAULT_PROFILE_IMAGE = './images/default-profile.png';
+
 let currentUser = null;
 
 /* =========================================================
@@ -112,7 +115,9 @@ function mapStatKeyToLabel(key) {
         muscle: '근력', agility: '민첩', endurance: '지구력', flexibility: '유연성', 
         visual: '시각', auditory: '청각', situation: '상황 인지 능력', reaction: '반응속도', 
         intellect: '지능', judgment: '판단력', memory: '기억력', spirit: '정신력', 
-        decision: '의사 결정 능력', stress: '스트레스 내성'
+        decision: '의사 결정 능력', stress: '스트레스 내성',
+        currentHP: '현재 체력', maxHP: '최대 체력',
+        currentSpirit: '현재 정신력', maxSpirit: '최대 정신력'
     };
     return map[key] || key;
 }
@@ -1013,6 +1018,10 @@ async function loadTab(tabId){
         case 'dex': await renderDex(); break; // [수정] renderDex 호출
         default: contentEl.innerHTML = '<div class="card">알 수 없는 탭</div>';
     }
+}
+
+function setActiveNav(tabId) {
+    navEl.querySelectorAll('button').forEach( b => b.classList.toggle('active', b.dataset.tab === tabId));
 }
 
 function initNav() {
@@ -2840,8 +2849,9 @@ function renderStatusSection(s, spiritStat, isAdmin, sheetId) {
     section.className = 'card map-card';
 
     const injuryParts = [
-        'head', 'neck', 'leftEye', 'rightEye', 'leftArm', 'leftHand',
-        'leftLeg', 'leftFoot', 'torso', 'rightArm', 'rightHand', 'rightLeg', 'rightFoot'
+        'head', 'neck', 'leftEye', 'rightEye', 
+        'leftArm','leftHand','leftLeg','leftFoot',
+        'torso','rightArm','rightHand','rightLeg','rightFoot'
     ];
 
     const mapKeyToLabel = {
@@ -2850,10 +2860,8 @@ function renderStatusSection(s, spiritStat, isAdmin, sheetId) {
         torso: '상체', rightArm: '오른팔', rightHand: '오른손', rightLeg: '오른다리', rightFoot: '오른발'
     };
 
-    // 정신력 퍼센트 계산
     const spiritPercent = (s.currentSpirit / s.maxSpirit) * 100;
 
-    // 신체 상태 텍스트
     const totalInjury = injuryParts.reduce((sum, key) => sum + s.injuries[key], 0);
     const totalContamination = injuryParts.reduce((sum, key) => sum + s.contaminations[key], 0);
     let physicalStatusText = '양호';
@@ -2864,25 +2872,17 @@ function renderStatusSection(s, spiritStat, isAdmin, sheetId) {
     const humanIconHtml = renderHumanIcon(s.injuries, s.contaminations);
 
     const statusGridStyle = `
-        .injury-status-grid-revised {
-            display: flex;
-            gap: 20px;
-            align-items: stretch;
-        }
-        .injury-status-grid-revised > div {
-            flex-grow: 1;
-            flex-basis: 0;
-            min-height: 400px;
-            border: 1px solid rgba(255,255,255,0.1);
-            padding: 10px;
-        }
-        .human-icon-container {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            background: rgba(255,255,255,0.05);
-        }
+        .injury-status-grid-revised { display: flex; gap: 20px; align-items: stretch; }
+        .injury-status-grid-revised > div { flex-grow: 1; flex-basis: 0; min-height: 400px; border: 1px solid rgba(255,255,255,0.1); padding: 10px; }
+        .human-icon-container { display:flex; justify-content:center; align-items:center; background: rgba(255,255,255,0.05); }
     `;
+
+    // 부위별 라벨에 의수 표시 추가
+    const mapKeyToLabelWithProsthetics = {};
+    injuryParts.forEach(key => {
+        const prosthetic = s.status?.prosthetics?.[key] ? ' (의수)' : '';
+        mapKeyToLabelWithProsthetics[key] = mapKeyToLabel[key] + prosthetic;
+    });
 
     section.innerHTML = `
         <style>${statusGridStyle}</style>
@@ -2894,7 +2894,7 @@ function renderStatusSection(s, spiritStat, isAdmin, sheetId) {
                     현재 정신력: ${s.currentSpirit} / ${s.maxSpirit} (정신력 스탯: ${spiritStat})
                 </div>
                 <div style="background: rgba(255,255,255,0.1); height:15px; border-radius:4px; overflow:hidden;">
-                    <div style="width:${spiritPercent}%; background:${spiritPercent > 30 ? 'green':'red'}; height:100%; transition:width 0.3s;"></div>
+                    <div style="width:${spiritPercent}%; background:${spiritPercent>30?'green':'red'}; height:100%; transition:width 0.3s;"></div>
                 </div>
             </div>
             <div style="min-width:200px; text-align:right;">
@@ -2908,9 +2908,9 @@ function renderStatusSection(s, spiritStat, isAdmin, sheetId) {
 
         <div class="injury-status-grid-revised">
             <div class="injury-list left-side">
-                ${renderInjuryBlock(['head','neck','leftEye','rightEye'], s, mapKeyToLabel)}
-                ${renderInjuryBlock(['leftArm','leftHand'], s, mapKeyToLabel)}
-                ${renderInjuryBlock(['leftLeg','leftFoot'], s, mapKeyToLabel)}
+                ${renderInjuryBlock(['head','neck','leftEye','rightEye'], s, mapKeyToLabelWithProsthetics)}
+                ${renderInjuryBlock(['leftArm','leftHand'], s, mapKeyToLabelWithProsthetics)}
+                ${renderInjuryBlock(['leftLeg','leftFoot'], s, mapKeyToLabelWithProsthetics)}
             </div>
 
             <div class="human-icon-container">
@@ -2918,9 +2918,9 @@ function renderStatusSection(s, spiritStat, isAdmin, sheetId) {
             </div>
 
             <div class="injury-list right-side">
-                ${renderInjuryBlock(['torso'], s, mapKeyToLabel)}
-                ${renderInjuryBlock(['rightArm','rightHand'], s, mapKeyToLabel)}
-                ${renderInjuryBlock(['rightLeg','rightFoot'], s, mapKeyToLabel)}
+                ${renderInjuryBlock(['torso'], s, mapKeyToLabelWithProsthetics)}
+                ${renderInjuryBlock(['rightArm','rightHand'], s, mapKeyToLabelWithProsthetics)}
+                ${renderInjuryBlock(['rightLeg','rightFoot'], s, mapKeyToLabelWithProsthetics)}
             </div>
         </div>
 
@@ -2932,6 +2932,8 @@ function renderStatusSection(s, spiritStat, isAdmin, sheetId) {
             { label:'소지하고 있는 소지품 수', value: s.stats.itemsCarried },
             { label:'심연체를 제압한 횟수', value: s.stats.abyssDefeated },
             { label:'소지 은화', value: s.stats.silverCarried },
+            { label:'현재 체력', value: s.currentHP },
+            { label:'현재 정신력', value: s.currentSpirit },
         ], isAdmin, true)}
 
         ${isAdmin ? `<button class="btn link admin-edit-btn" onclick='openStatusEdit("${sheetId}", ${JSON.stringify(s)})'>상태 및 통계 편집</button>` : ''}
@@ -3063,8 +3065,17 @@ async function fetchItemDescription(itemName) {
 ========================================================= */
 
 function createDefaultSheet(uid, nickname) {
-    const injuryKeys = ['head', 'neck', 'leftEye', 'rightEye', 'leftArm', 'leftHand', 'leftLeg', 'leftFoot', 'torso', 'rightArm', 'rightHand', 'rightLeg', 'rightFoot'];
+    const injuryKeys = [
+        'head','neck','leftEye','rightEye',
+        'leftArm','leftHand','leftLeg','leftFoot',
+        'torso','rightArm','rightHand','rightLeg','rightFoot'
+    ];
     const initialInjuryState = injuryKeys.reduce((acc, key) => ({ ...acc, [key]: 0 }), {});
+
+    // 머리 제외한 부위 의수 여부 초기화
+    const prostheticsState = injuryKeys
+        .filter(k => k !== 'head')
+        .reduce((acc, key) => ({ ...acc, [key]: false }), {});
 
     return {
         personnel: {
@@ -3092,8 +3103,11 @@ function createDefaultSheet(uid, nickname) {
         status: {
             currentSpirit: 60,
             maxSpirit: (10 * (baseStats.spirit || 1)) + 50,
+            currentHP: 60,
+            maxHP: (10 * (baseStats.spirit || 1)) + 50,
             injuries: { ...initialInjuryState },
             contaminations: { ...initialInjuryState },
+            prosthetics: { ...prostheticsState },
             currentContamination: 0,
             currentErosion: 0,
             stats: { deaths: 0, explorations: 0, interviews: 0, itemsCarried: 0, abyssDefeated: 0, silverCarried: 0 }
