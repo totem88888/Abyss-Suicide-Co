@@ -3292,11 +3292,37 @@ function renderPersonnelSection(p, nickname, sheetId, isAdmin) {
 function renderMeStatsSection(s, isAdmin, sheetId) {
     const section = document.createElement('div');
     section.className = 'card map-card';
+
+    const style = `
+        .stats-grid-2x2 {
+            display: grid;
+            grid-template-columns: 1fr 1fr; /* 1/2, 1/2 너비 */
+            gap: 20px;
+        }
+        /* 각 행의 요소(테이블과 차트)의 높이를 자동으로 맞춤 */
+        .stats-grid-2x2 > div {
+            display: flex;
+            flex-direction: column;
+            /* 높이가 행에 맞춰지도록 flex-grow를 사용하며, 차트 컨테이너는 늘어날 수 있도록 height: auto */
+        }
+        /* renderHorizontalTable에서 생성되는 테이블 컨테이너에도 높이 확보를 위한 스타일 적용 */
+        .stats-table-container {
+            height: 100%; 
+            display: flex;
+            flex-direction: column;
+        }
+        /* 테이블 내부의 테이블 엘리먼트가 꽉 차도록 */
+        .stats-table-container > div:first-child { 
+             flex-grow: 1; 
+        }
+    `;
+    
     section.innerHTML = `
-        <h2>💪 스탯</h2>
-        <div class="stats-grid">
+        <style>${style}</style>
+        <h2>스탯</h2>
+        <div class="stats-grid-2x2">
             
-            <div class="radar-chart-wrap">
+            <div class="stats-table-container">
                 ${renderHorizontalTable('표 1: 신체 스탯', [
                     { label: '근력', value: s.muscle },
                     { label: '민첩', value: s.agility },
@@ -3307,11 +3333,12 @@ function renderMeStatsSection(s, isAdmin, sheetId) {
                     { label: '상황 인지 능력', value: s.situation },
                     { label: '반응속도', value: s.reaction },
                 ], isAdmin, true)}
-                <div class="chart-container-1" style="width: 100%; height: 300px; margin-top: 15px;"> 
-                    </div>
             </div>
             
-            <div class="radar-chart-wrap">
+            <div class="chart-container-1" style="width: 100%; height: auto; min-height: 300px;"> 
+            </div>
+            
+            <div class="stats-table-container">
                 ${renderHorizontalTable('표 2: 정신 스탯', [
                     { label: '지능', value: s.intellect },
                     { label: '판단력', value: s.judgment },
@@ -3320,8 +3347,9 @@ function renderMeStatsSection(s, isAdmin, sheetId) {
                     { label: '의사 결정 능력', value: s.decision },
                     { label: '스트레스 내성', value: s.stress },
                 ], isAdmin, true)}
-                <div class="chart-container-2" style="width: 100%; height: 300px; margin-top: 15px;">
-                    </div>
+            </div>
+            
+            <div class="chart-container-2" style="width: 100%; height: auto; min-height: 300px;">
             </div>
         </div>
         ${isAdmin ? `<button class="btn link admin-edit-btn" onclick="openStatsEdit('${sheetId}', ${JSON.stringify(s)})">스탯 편집</button>` : ''}
@@ -3362,7 +3390,6 @@ async function renderInventorySection(inv, isAdmin, sheetId) {
                   <td>${index + 1}</td>
                   <td>${item.name}</td>
                   <td>${desc}</td>
-                  <td>${item.source}</td>
                   <td>${item.count}</td>
               </tr>
           `;
@@ -3380,7 +3407,6 @@ async function renderInventorySection(inv, isAdmin, sheetId) {
                     <th>번호</th>
                     <th>이름</th>
                     <th>설명</th>
-                    <th>출처</th>
                     <th>수량</th>
                 </tr>
             </thead>
@@ -3418,9 +3444,31 @@ function renderStatusSection(s, spiritStat, isAdmin, sheetId) {
     if (totalInjury === 0 && totalContamination === 0) physicalStatusText = '여유로움';
 
     const humanIconHtml = renderHumanIcon(s.injuries, s.contaminations);
+
+    const statusGridStyle = `
+        .injury-status-grid-revised {
+            display: flex;
+            gap: 20px;
+            align-items: stretch; /* 높이를 동일하게 늘림 */
+        }
+        .injury-status-grid-revised > div {
+            flex-grow: 1; /* 1:1:1 비율로 너비 배분 (약 33.33%씩) */
+            flex-basis: 0;
+            min-height: 400px; /* 최소 높이 지정 (내용이 적을 때를 대비) */
+            border: 1px solid rgba(255, 255, 255, 0.1); /* 경계선 추가로 높이 확인 용이 */
+            padding: 10px;
+        }
+        .human-icon-container {
+            display: flex;
+            justify-content: center;
+            align-items: center; /* 사람 아이콘 수직 중앙 배치 */
+            background: rgba(255, 255, 255, 0.05);
+        }
+    `;
     
     section.innerHTML = `
-        <h2>⚕️ 현재 상태</h2>
+        <style>${statusGridStyle}</style>
+        <h2>현재 상태</h2>
 
         <div style="display: flex; align-items: center; gap: 20px; margin-bottom: 20px;">
             <div style="flex-grow: 1;">
@@ -3440,14 +3488,14 @@ function renderStatusSection(s, spiritStat, isAdmin, sheetId) {
             </div>
         </div>
 
-        <div class="injury-status-grid">
+        <div class="injury-status-grid-revised">
             <div class="injury-list left-side">
                 ${renderInjuryBlock(['head', 'neck', 'leftEye', 'rightEye'], s, mapKeyToLabel)}
                 ${renderInjuryBlock(['leftArm', 'leftHand'], s, mapKeyToLabel)}
                 ${renderInjuryBlock(['leftLeg', 'leftFoot'], s, mapKeyToLabel)}
             </div>
             
-            <div class="human-icon-container" style="min-width: 200px; display: flex; justify-content: center;">
+            <div class="human-icon-container">
                 ${humanIconHtml} </div>
             
             <div class="injury-list right-side">
@@ -3485,7 +3533,8 @@ function renderHumanIcon(injuries, contaminations) {
     
     // 단순화된 사람 모양 SVG
     return `
-        <svg viewBox="0 0 100 150" style="width: 200px; height: 300px;"> <path d="M 50 5 A 1 1 0 0 0 50 31 A 1 1 0 0 0 50 5 Z" fill="${colors.head}" stroke="#888" stroke-width="1"/>
+        <svg viewBox="0 0 100 150" style="width: 100%; max-width: 250px; height: auto;"> 
+            <path d="M 50 5 A 1 1 0 0 0 50 31 A 1 1 0 0 0 50 5 Z" fill="${colors.head}" stroke="#888" stroke-width="1"/>
             
             <path d="M 35 35 L 65 35 L 65 90 L 35 90 Z" fill="${colors.torso}" stroke="#888" stroke-width="1"/>
             
@@ -3496,8 +3545,6 @@ function renderHumanIcon(injuries, contaminations) {
             <path d="M 35 90 L 35 153 C 35 162 48 162 48 153 L 48 97 C 48 96 49 95 50 95 L 50 90 Z" fill="${colors.leftLeg}" stroke="#888" stroke-width="1"/>
             
             <path d="M 50 90 L 50 95 C 51 95 52 96 52 97 L 52 153 C 52 162 65 162 65 153 L 65 90 Z" fill="${colors.rightLeg}" stroke="#888" stroke-width="1"/>
-            
-            <text x="50" y="80" text-anchor="middle" fill="#ccc" font-size="10">BODY MAP</text>
         </svg>
     `;
 }
