@@ -244,8 +244,21 @@ function showConfirm(msg) {
         overlay.appendChild(card);
         document.body.appendChild(overlay);
 
-        card.querySelector('.confirm-yes').onclick = () => { resolve(true); overlay.remove(); };
-        card.querySelector('.confirm-no').onclick = () => { resolve(false); overlay.remove(); };
+        const yesBtn = card.querySelector('.confirm-yes');
+        if (yesBtn) {
+            yesBtn.addEventListener('click', () => { 
+                resolve(true); 
+                overlay.remove(); 
+            });
+        }
+
+        const noBtn = card.querySelector('.confirm-no');
+        if (noBtn) {
+            noBtn.addEventListener('click', () => { 
+                resolve(false); 
+                overlay.remove(); 
+            });
+        }
     });
 }
 
@@ -623,11 +636,13 @@ async function loadCommentPreview({ el, id, dbCollection }) {
         if (!preview.length) listEl.innerHTML = `<div class="muted">댓글이 없습니다.</div>`;
         else {
             listEl.innerHTML = '';
-            preview.forEach(c => {
+            preview.forEach(async c => {
                 const brightness = getBrightness(c.userColor || '#CCCCCC');
                 const iconColor = brightness > 125 ? 'black' : 'white';
                 const item = document.createElement('div');
                 item.className = 'comment-item';
+                item.dataset.id = c.id;
+                item.dataset.uid = c.uid;
                 item.style.display = 'flex';
                 item.style.gap = '10px';
                 item.style.marginBottom = '10px';
@@ -639,10 +654,45 @@ async function loadCommentPreview({ el, id, dbCollection }) {
                     <div style="flex-grow:1;">
                         <div style="font-weight:bold;">${c.name||'익명'}</div>
                         <div style="font-size:0.8em; color:#aaa;">${fmtTime(c.createdAt)}${c.editedAt ? ' (수정됨)' : ''}</div>
-                        <div>${c.text}</div>
+                        <div class="comment-text">${c.text}</div>
+                        <div class="comment-actions" style="display:none; margin-top:5px;">
+                            <button class="comment-edit btn small">수정</button>
+                            <button class="comment-delete btn small danger">삭제</button>
+                        </div>
                     </div>
                 `;
                 listEl.appendChild(item);
+
+                // 수정/삭제 버튼 활성화
+                const isManager = await isAdminUser();
+                const isOwner = auth.currentUser && auth.currentUser.uid === c.uid;
+
+                if (isManager || isOwner) {
+                    const actions = item.querySelector('.comment-actions');
+                    actions.style.display = 'block';
+
+                    const editBtn = actions.querySelector('.comment-edit');
+                    const deleteBtn = actions.querySelector('.comment-delete');
+
+                    editBtn.addEventListener('click', async () => {
+                        const originalText = item.querySelector('.comment-text').textContent;
+                        const newText = prompt('댓글 내용을 수정하시오.', originalText);
+                        if (newText) {
+                            await updateDoc(doc(db, dbCollection, id, 'comments', c.id), {
+                                text: newText,
+                                editedAt: serverTimestamp()
+                            });
+                            loadCommentPreview({ el, id, dbCollection });
+                        }
+                    });
+
+                    deleteBtn.addEventListener('click', async () => {
+                        if (await showConfirm('정말로 이 댓글을 삭제하시겠습니까?')) {
+                            await deleteDoc(doc(db, dbCollection, id, 'comments', c.id));
+                            loadCommentPreview({ el, id, dbCollection });
+                        }
+                    });
+                }
             });
         }
 
@@ -940,12 +990,15 @@ function openNewUserCustomization(uid, nickname) {
 
 
     // 이벤트 리스너 부착
-    document.getElementById('saveCustomSheetBtn').onclick = () => {
-        if (typeof saveCustomizedSheet === 'function') {
-            saveCustomizedSheet(uid, nickname);
-        }
-        document.getElementById('custModal')?.remove(); // 팝업 닫기
-    };
+    const saveBtn = document.getElementById('saveCustomSheetBtn');
+    if (saveBtn) {
+        saveBtn.addEventListener('click', () => {
+            if (typeof saveCustomizedSheet === 'function') {
+                saveCustomizedSheet(uid, nickname);
+            }
+            document.getElementById('custModal')?.remove(); // 팝업 닫기
+        });
+    }
     
     // 슬라이더 변경 이벤트 처리 (포인트 합계 계산)
     document.querySelectorAll('.stat-slider').forEach(slider => {
@@ -1226,10 +1279,12 @@ async function renderStaff() {
         const f = docSnap.data();
         const item = document.createElement("div");
         item.className = "staff-thumb";
-        item.onclick = () => openProfileModal(docSnap.id, f);
+
+        item.addEventListener('click', () => openProfileModal(docSnap.id, f));
+
         item.innerHTML = `
-        <div class="thumb-img" style="background-image:url('${f.image || ''}'); aspect-ratio: 3 / 4; background-size: cover; background-position: center;"></div>
-        <div class="thumb-name">${f.name}</div>
+            <div class="thumb-img" style="background-image:url('${f.image || ''}'); aspect-ratio: 3 / 4; background-size: cover; background-position: center;"></div>
+            <div class="thumb-name">${f.name}</div>
         `;
         listEl.appendChild(item);
     });
@@ -1287,18 +1342,22 @@ async function openProfileModal(docId, data) {
     `;
 
     profileModal.showModal();
-    document.getElementById("closeProfile").onclick = () => profileModal.close();
+    const closeBtn = document.getElementById("closeProfile");
+    if (closeBtn) {
+        closeBtn.addEventListener('click', () => profileModal.close());
+    }
 
     // 관리자 편집 버튼
     const editArea = document.getElementById("editArea");
     const isAdmin = await isAdminUser();
     if (isAdmin) {
-        const editBtn = document.createElement("button");
-        editBtn.textContent = "편집";
-        editBtn.className = "edit-btn";
-        editBtn.onclick = () => openInlineEdit(docId, data);
-        editArea.appendChild(editBtn);
-    }
+    const editBtn = document.createElement("button");
+    editBtn.textContent = "편집";
+    editBtn.className = "edit-btn";
+    editBtn.addEventListener('click', () => openInlineEdit(docId, data));
+    editArea.appendChild(editBtn);
+}
+
 
     // 스테이터스 차트 렌더링 (기존 스테이터스 데이터 사용)
     setTimeout(() => initStatsRadarCharts(data), 100);
@@ -1343,46 +1402,45 @@ async function openInlineEdit(docId, data) {
     `;
 
     // 2. 저장 버튼 이벤트
-    document.getElementById("saveStaffInline").onclick = async () => {
-        let finalImg = document.getElementById("editImage").value;
-        const file = document.getElementById("editImageFile").files[0];
+    const saveBtn = document.getElementById("saveStaffInline");
+    if(saveBtn) {
+        saveBtn.addEventListener('click', async () => {
+            let finalImg = document.getElementById("editImage").value;
+            const file = document.getElementById("editImageFile").files[0];
 
-        if (file) {
-            // 이미지 업로드 함수 호출 (uploadStaffImage가 정의되어 있어야 함)
-            finalImg = await uploadStaffImage(file, docId);
-        }
+            if (file) finalImg = await uploadStaffImage(file, docId);
 
-        const newData = {
-            name: document.getElementById("editName").value,
-            gender: document.getElementById("editGender").value,
-            age: document.getElementById("editAge").value,
-            height: document.getElementById("editHeight").value,
-            nationality: document.getElementById("editNationality").value,
-            image: finalImg,
-            muscle: Number(document.getElementById("editMuscle").value),
-            agility: Number(document.getElementById("editAgility").value),
-            endurance: Number(document.getElementById("editEndurance").value),
-            flexibility: Number(document.getElementById("editFlexibility").value),
-            visual: Number(document.getElementById("editVisual").value),
-            auditory: Number(document.getElementById("editAuditory").value),
-            situation: Number(document.getElementById("editSituation").value),
-            reaction: Number(document.getElementById("editReaction").value),
-            intellect: Number(document.getElementById("editIntellect").value),
-            judgment: Number(document.getElementById("editJudgment").value),
-            memory: Number(document.getElementById("editMemory").value),
-            spirit: Number(document.getElementById("editSpirit").value),
-            decision: Number(document.getElementById("editDecision").value),
-            stress: Number(document.getElementById("editStress").value),
-            updatedAt: serverTimestamp()
-        };
+            const newData = {
+                name: document.getElementById("editName").value,
+                gender: document.getElementById("editGender").value,
+                age: document.getElementById("editAge").value,
+                height: document.getElementById("editHeight").value,
+                nationality: document.getElementById("editNationality").value,
+                image: finalImg,
+                muscle: Number(document.getElementById("editMuscle").value),
+                agility: Number(document.getElementById("editAgility").value),
+                endurance: Number(document.getElementById("editEndurance").value),
+                flexibility: Number(document.getElementById("editFlexibility").value),
+                visual: Number(document.getElementById("editVisual").value),
+                auditory: Number(document.getElementById("editAuditory").value),
+                situation: Number(document.getElementById("editSituation").value),
+                reaction: Number(document.getElementById("editReaction").value),
+                intellect: Number(document.getElementById("editIntellect").value),
+                judgment: Number(document.getElementById("editJudgment").value),
+                memory: Number(document.getElementById("editMemory").value),
+                spirit: Number(document.getElementById("editSpirit").value),
+                decision: Number(document.getElementById("editDecision").value),
+                stress: Number(document.getElementById("editStress").value),
+                updatedAt: serverTimestamp()
+            };
 
-        await updateDoc(doc(db, "staff", docId), newData);
+            await updateDoc(doc(db, "staff", docId), newData);
 
-        // 화면 갱신
-        openProfileModal(docId, { ...data, ...newData });
-        renderStaff();
-        editArea.innerHTML = ''; // 편집 영역 초기화
-    };
+            openProfileModal(docId, { ...data, ...newData });
+            renderStaff();
+            editArea.innerHTML = '';
+        });
+    }
 }
 
 /* =========================================================
@@ -1451,7 +1509,8 @@ async function renderMapCard(mapDoc) {
     `;
 
     // 클릭하면 팝업 열기
-    el.onclick = () => openMapPopup(mapId, data);
+    el.addEventListener('click', () => openMapPopup(mapId, data));
+
 
     return el;
 }
@@ -1486,10 +1545,12 @@ async function openMapPopup(mapId, data) {
             editBtn.textContent = '편집';
             editBtn.className = 'btn';
             editBtn.style.marginLeft = '10px';
-            editBtn.onclick = (e) => {
-                e.stopPropagation(); // 클릭이 카드 전체 클릭 이벤트에 걸리지 않도록
+
+            editBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
                 openMapInlineEdit(mapId, data);
-            };
+            });
+
             popupTop.appendChild(editBtn);
         }
     })();
@@ -1517,36 +1578,34 @@ async function openMapPopup(mapId, data) {
     }
 
     // 탐사팀 목록
-    const visits = data.visits || [];
-    const sortedVisits = visits.sort((a,b)=>b.timestamp-a.timestamp);
-    const recentVisits = sortedVisits.slice(0,5);
-    for(const v of recentVisits){
+    for(const v of recentVisits) {
         const teamEl = document.createElement('div');
         teamEl.textContent = v.teamName;
         teamEl.style.color = v.colorHex || '#fff';
         teamEl.className = 'explore-team';
-        teamsContainer.appendChild(teamEl);
 
-        // 클릭 시 탐사원/결과 표시 + 선 애니메이션
-        teamEl.onclick = () => showTeamVisit(v, gridContainer);
+        teamEl.addEventListener('click', () => showTeamVisit(v, gridContainer));
+
+        teamsContainer.appendChild(teamEl);
     }
 
-    // 더보기 버튼
     if(visits.length > 5){
         const moreBtn = document.createElement('button');
         moreBtn.textContent = '더보기';
         moreBtn.className = 'link';
-        moreBtn.onclick = () => {
+
+        moreBtn.addEventListener('click', () => {
             teamsContainer.innerHTML = '';
             for(const v of sortedVisits){
                 const teamEl = document.createElement('div');
                 teamEl.textContent = v.teamName;
                 teamEl.style.color = v.colorHex || '#fff';
                 teamEl.className = 'explore-team';
-                teamEl.onclick = () => showTeamVisit(v, gridContainer);
+                teamEl.addEventListener('click', () => showTeamVisit(v, gridContainer));
                 teamsContainer.appendChild(teamEl);
             }
-        };
+        });
+
         teamsContainer.appendChild(moreBtn);
     }
 
@@ -1744,14 +1803,37 @@ async function openMapInlineEdit(mapId, data) {
 
     dangerInput.addEventListener('input', (e) => updateDangerStars(e.target.value));
 
-    document.getElementById("saveMapInline").onclick = async () => { await saveData(); renderMap(); };
-    document.getElementById("cancelMapInline").onclick = () => { cardInner.innerHTML = originalContent; renderMap(); };
-    document.getElementById("deleteMapInline").onclick = async () => {
-        if (await showConfirm(`정말로 맵 '${data.name}'을 삭제하시겠습니까?`)) {
-            try { await deleteDoc(doc(db, "maps", mapId)); showMessage('맵 삭제 완료', 'info'); renderMap(); }
-            catch(e){ console.error(e); showMessage('맵 삭제 실패', 'error'); }
-        }
-    };
+    const saveBtn = document.getElementById("saveMapInline");
+    if (saveBtn) {
+        saveBtn.addEventListener('click', async () => {
+            await saveData();
+            renderMap();
+        });
+    }
+
+    const cancelBtn = document.getElementById("cancelMapInline");
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', () => {
+            cardInner.innerHTML = originalContent;
+            renderMap();
+        });
+    }
+
+    const deleteBtn = document.getElementById("deleteMapInline");
+    if (deleteBtn) {
+        deleteBtn.addEventListener('click', async () => {
+            if (await showConfirm(`정말로 맵 '${data.name}'을 삭제하시겠습니까?`)) {
+                try {
+                    await deleteDoc(doc(db, "maps", mapId));
+                    showMessage('맵 삭제 완료', 'info');
+                    renderMap();
+                } catch(e) {
+                    console.error(e);
+                    showMessage('맵 삭제 실패', 'error');
+                }
+            }
+        });
+    }
 
     // 페이지 벗어날 때 자동 저장
     window.addEventListener('beforeunload', saveData);
@@ -1855,40 +1937,48 @@ async function openNewMapInlineEdit() {
     updatePreviewAndStars();
 
     // 저장
-    tempEl.querySelector('#saveNewMapInline').onclick = async () => {
-        if (!tempEl.querySelector('#newMapName').value) {
-            showMessage('맵 이름을 입력해주세요.', 'error');
-            return;
-        }
+    const saveBtn = tempEl.querySelector('#saveNewMapInline');
+    if (saveBtn) {
+        saveBtn.addEventListener('click', async () => {
+            if (!tempEl.querySelector('#newMapName').value) {
+                showMessage('맵 이름을 입력해주세요.', 'error');
+                return;
+            }
 
-        try {
-            const newDocRef = doc(collection(db, "maps"));
-            const newMapId = newDocRef.id;
-            let finalImg = imgUrlInput.value;
-            const file = imgFileInput.files[0];
-            if (file) finalImg = await uploadMapImage(file, newMapId);
+            try {
+                const newDocRef = doc(collection(db, "maps"));
+                const newMapId = newDocRef.id;
+                let finalImg = imgUrlInput.value;
+                const file = imgFileInput.files[0];
+                if (file) finalImg = await uploadMapImage(file, newMapId);
 
-            const typesArray = tempEl.querySelector('#newMapTypes').value.split(',').map(t => t.trim()).filter(t => t);
+                const typesArray = tempEl.querySelector('#newMapTypes').value
+                    .split(',')
+                    .map(t => t.trim())
+                    .filter(t => t);
 
-            await setDoc(newDocRef, {
-                name: tempEl.querySelector('#newMapName').value,
-                danger: Number(dangerInput.value),
-                types: typesArray,
-                description: tempEl.querySelector('#newMapDesc').value,
-                image: finalImg,
-                createdAt: serverTimestamp()
-            });
+                await setDoc(newDocRef, {
+                    name: tempEl.querySelector('#newMapName').value,
+                    danger: Number(dangerInput.value),
+                    types: typesArray,
+                    description: tempEl.querySelector('#newMapDesc').value,
+                    image: finalImg,
+                    createdAt: serverTimestamp()
+                });
 
-            showMessage('새 맵 생성 완료', 'info');
-            renderMap();
-        } catch(e) {
-            console.error(e);
-            showMessage('새 맵 생성 실패', 'error');
-        }
-    };
+                showMessage('새 맵 생성 완료', 'info');
+                renderMap();
+            } catch(e) {
+                console.error(e);
+                showMessage('새 맵 생성 실패', 'error');
+            }
+        });
+    }
 
-    // 취소
-    tempEl.querySelector('#cancelNewMapInline').onclick = () => tempEl.remove();
+    const cancelBtn = tempEl.querySelector('#cancelNewMapInline');
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', () => tempEl.remove());
+    }
 }
 
 /* =========================================================
@@ -1910,14 +2000,12 @@ async function renderDex() {
         contentEl.innerHTML = '';
         contentEl.appendChild(renderSummaryCard(completedCount, totalCount));
 
-        let html = '';
-
         if (isManager) {
             const addBtn = document.createElement('button');
             addBtn.className = 'btn';
             addBtn.style.marginBottom = '20px';
             addBtn.textContent = '새 심연체 추가 +';
-            addBtn.onclick = () => createNewAbyss();
+            addBtn.addEventListener('click', () => createNewAbyss());
 
             contentEl.appendChild(addBtn);
         }
@@ -1925,11 +2013,11 @@ async function renderDex() {
         const gridContainer = document.createElement('div');
         gridContainer.className = 'dex-grid';
         gridContainer.style = 'display:flex; flex-wrap:wrap; gap:20px; justify-content:center;';
-        
+
         abyssList.forEach(abyss => {
             const card = renderDexCard(abyss, isManager);
             if (card) {
-                card.onclick = () => renderDexDetail(abyss.id); // 여기서 연결
+                card.addEventListener('click', () => renderDexDetail(abyss.id));
                 gridContainer.appendChild(card);
             }
         });
@@ -2013,6 +2101,20 @@ async function createNewAbyss() {
     } catch (e) {
         console.error("새 심연체 추가 실패:", e);
         showMessage('새 심연체 추가 실패', 'error');
+    }
+}
+
+function generateAbyssCode(danger, shape, discoverySeq, derivedSeq) {
+    const dangerCode = DANGER_TYPES[danger] || ''
+    const shapeCode = shape || '';
+    
+    discoverySeq = discoverySeq || 0;
+    derivedSeq = derivedSeq || 0;
+
+    if (danger === '파생' && derivedSeq > 0) {
+        return `${shapeCode}${discoverySeq}-${derivedSeq}`;
+    } else {
+        return `${dangerCode}-${shapeCode}${discoverySeq}`;
     }
 }
 
@@ -2219,29 +2321,35 @@ async function renderDexDetail(id, isEditMode = false, preloadedData = null) {
 );
 
     // 이벤트
-    document.getElementById('backToDexList').onclick = renderDex;
+    const backBtn = document.getElementById('backToDexList');
+    if (backBtn) backBtn.addEventListener('click', renderDex);
 
     if (isManager) {
-        document.getElementById('toggleEditMode').onclick = async () => {
-            if (isEditMode) {
-                try {
-                    await saveAbyssData(id, data);
-                    renderDexDetail(id, false);
-                } catch(e) {
-                    console.error(e);
-                    showMessage('저장 중 오류 발생', 'error');
+        const toggleBtn = document.getElementById('toggleEditMode');
+        if (toggleBtn) {
+            toggleBtn.addEventListener('click', async () => {
+                if (isEditMode) {
+                    try {
+                        await saveAbyssData(id, data);
+                        renderDexDetail(id, false);
+                    } catch(e) {
+                        console.error(e);
+                        showMessage('저장 중 오류 발생', 'error');
+                    }
+                } else {
+                    renderDexDetail(id, true);
                 }
-            } else {
-                renderDexDetail(id, true);
-            }
-        };
+            });
+        }
 
-        document.getElementById('deleteAbyssBtn')?.addEventListener('click', () => deleteAbyssData(id));
+        const deleteBtn = document.getElementById('deleteAbyssBtn');
+        if (deleteBtn) deleteBtn.addEventListener('click', () => deleteAbyssData(id));
 
         attachDisclosurePresetButtons(data, isEditMode, isManager);
     }
 
-    attachCommentEventListeners(id);
+    const commentCard = renderCommentCard({ id, dbCollection: 'abyssal_dex' });
+    containerEl.appendChild(commentCard)
 }
 
 async function loadAbyssData(id, preloadedData = null) {
@@ -2266,9 +2374,9 @@ function attachDisclosurePresetButtons(data, isEditMode, isManager) {
     if (!isManager || !isEditMode) return;
 
     document.querySelectorAll('.disclosure-preset-btn').forEach(button => {
-        button.onclick = (e) => {
-            const sectionKey = e.target.dataset.section;
-            const isPublic = e.target.dataset.public === 'true';
+        button.addEventListener('click', () => {
+            const sectionKey = button.dataset.section;
+            const isPublic = button.dataset.public === 'true';
 
             setSectionDisclosure(data, sectionKey, isPublic);
 
@@ -2280,11 +2388,11 @@ function attachDisclosurePresetButtons(data, isEditMode, isManager) {
 
             const newPercent = calculateDisclosurePercentage(data);
             showMessage(`${sectionKey} 섹션을 ${isPublic ? '공개' : '비공개'}로 설정했습니다. 개방률: ${newPercent}%`, 'info');
-            
+
             // 개방률 UI 업데이트
             const percentEl = document.querySelector('.dex-detail-wrap .gap:last-child > div');
             if (percentEl) percentEl.textContent = `개방률: ${newPercent}%`;
-        };
+        });
     });
 }
 
@@ -2575,10 +2683,10 @@ function renderManagementSection(el, data, isEditMode, isManager) {
 
     // 추가/삭제 버튼
     el.querySelectorAll('button[data-action]').forEach(btn => {
-        btn.onclick = (e) => {
-            const action = e.target.dataset.action;
-            const key = e.target.dataset.key;
-            const index = parseInt(e.target.dataset.index);
+        btn.addEventListener('click', () => {
+            const action = btn.dataset.action;
+            const key = btn.dataset.key;
+            const index = parseInt(btn.dataset.index);
             const arr = data.management[key];
 
             if (action === 'add') {
@@ -2594,7 +2702,7 @@ function renderManagementSection(el, data, isEditMode, isManager) {
             }
 
             renderManagementSection(el, data, isEditMode, isManager);
-        };
+        });
     });
 }
 
@@ -2678,11 +2786,11 @@ function renderLogsSection(el, data, isEditMode, isManager) {
 
     // 삭제 버튼
     el.querySelectorAll('button[data-action="delete"]').forEach(btn => {
-        btn.onclick = (e) => {
+       btn.addEventListener('click', (e) => {
             const index = parseInt(e.target.dataset.index);
             logsData.splice(index, 1);
             renderLogsSection(el, data, isEditMode, isManager);
-        };
+        });
     });
 }
 
