@@ -1,3 +1,7 @@
+/* =========================================================
+    firebase 불러오기
+========================================================= */
+
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.6.0/firebase-app.js";
 import { 
     getAuth, 
@@ -27,6 +31,11 @@ import {
     getDownloadURL 
 } from "https://www.gstatic.com/firebasejs/10.6.0/firebase-storage.js";
 
+
+/* =========================================================
+    firebase 콘픽
+========================================================= */
+
 const firebaseConfig = {
     apiKey: "AIzaSyDGmwk9FtwnjUKcH4T6alvMWVQqbhVrqfI",
     authDomain: "abyss-suicide-co.firebaseapp.com",
@@ -36,22 +45,19 @@ const firebaseConfig = {
     appId: "1:711710259422:web:3c5ba7c93edb3d6d6baa4f"
 };
 
-// 탭 설정
-const TABS = [
-    { id: 'main', title: '메인' },
-    { id: 'staff', title: '직원' },
-    { id: 'me', title: '내 상태' },
-    { id: 'map', title: '맵' },
-    { id: 'dex', title: '도감' }
-];
+/* =========================================================
+    firebase 초기화
+========================================================= */
 
-// Firebase 초기화
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 const storage = getStorage(app);
 
-// DOM 요소 참조
+/* =========================================================
+    DOM 요소 참조/선언
+========================================================= */
+
 const header = document.getElementById('header');
 const navEl = document.getElementById('nav');
 const contentEl = document.getElementById('content');
@@ -83,173 +89,364 @@ const signupBoxMsg = document.getElementById('signup-box-msg');
 
 const profileModal = document.getElementById("profileModal");
 
-const DEFAULT_MAP_IMAGE = './images/default-map.png';
-const DEFAULT_PROFILE_IMAGE = './images/default-profile.png';
-
 let currentUser = null;
 
+/* =========================================================
+    데이터 값 선언
+========================================================= */
+
 const baseStats = {
-    // 신체 스탯 (renderMeStatsSection의 표 1 참고)
-    muscle: 1, 
-    agility: 1,
-    endurance: 1,
-    flexibility: 1,
-    visual: 1,
-    auditory: 1,
-    situation: 1,
-    reaction: 1,
-    // 정신 스탯 (renderMeStatsSection의 표 2 참고)
-    intellect: 1,
-    judgment: 1,
-    memory: 1,
-    spirit: 1,
-    decision: 1,
-    stress: 1
+    muscle: 1, agility: 1, endurance: 1,flexibility: 1, visual: 1, auditory: 1, situation: 1, reaction: 1, intellect: 1, judgment: 1, memory: 1, spirit: 1, decision: 1, stress: 1
 };
 
-// 인증 상태 변화 감지 및 currentUser 설정
-onAuthStateChanged(auth, async user => { // ✅ 콜백 함수를 async로 변경
-    currentUser = user;
-    
-    if (user) {
-        const nickname = user.displayName || '신규 사용자'; 
-        
-        await checkAndCreateSheet(user.uid, nickname);
-    }
+const TABS = [
+    { id: 'main', title: '메인' },
+    { id: 'staff', title: '직원' },
+    { id: 'me', title: '내 상태' },
+    { id: 'map', title: '맵' },
+    { id: 'dex', title: '도감' }
+];
 
-    renderMain();
-    renderMap();
-    renderStaff();
-    renderDex();
-    renderMe();
-});
-
-async function checkAndCreateSheet(uid, nickname) {
-    const sheetDocRef = doc(db, 'sheets', uid);
-    const sheetDoc = await getDoc(sheetDocRef);
-
-    if (!sheetDoc.exists()) {
-        const defaultSheetData = createDefaultSheet(uid, nickname);
-        await setDoc(sheetDocRef, defaultSheetData);
-        console.log(`Default sheet created for user: ${uid}`);
-    }
+function mapStatKeyToLabel(key) {
+    const map = {
+        muscle: '근력', agility: '민첩', endurance: '지구력', flexibility: '유연성', 
+        visual: '시각', auditory: '청각', situation: '상황 인지 능력', reaction: '반응속도', 
+        intellect: '지능', judgment: '판단력', memory: '기억력', spirit: '정신력', 
+        decision: '의사 결정 능력', stress: '스트레스 내성'
+    };
+    return map[key] || key;
 }
 
-// 💡 참고: 'db', 'auth', 'currentUser', 'contentEl' 등은 기존처럼 전역에 정의되어 있어야 합니다.
+const DANGER_TYPES = {
+    '유광': '유광',
+    '해수': '해수',
+    '심해': '심해',
+    '파생': '파생' // 파생은 코드명 규칙이 다름
+};
 
-// [수정] 로그인 상태 감지 리스너 추가 (새로고침 해도 로그인 유지)
-onAuthStateChanged(auth, (user) => {
-    if (user) {
-        currentUser = user;
-        showLoggedInUI();
-        renderAuthArea(user);
-        initNav();
-        loadTab('main'); // 로그인 시 메인 탭 로드
-        startClock();
-        subscribeSystem();
-    } else {
-        currentUser = null;
-        showLogOutUI();
-    }
-});
+const SHAPE_TYPES = ['P', 'F', 'O', 'C'];
 
-// --- 유틸리티 함수 ---
+function calculateAbyssStats(stats) {
+    const str = stats.strength || 0;
+    const health = stats.health || 0;
+    const agi = stats.agility || 0;
+    const mind = stats.mind || 0;
 
-/**
- * 특정 UID와 관련된 모든 문서들을 Firestore에서 삭제합니다.
- * (sheets 컬렉션 및 UID 필드를 사용하는 다른 모든 컬렉션 포함)
- * * @param {string} uid - 삭제할 사용자 UID
- * @returns {Promise<void>}
- */
-async function deleteUserRelatedData(uid) {
-    console.log(`[Cleanup] 사용자 데이터 삭제 시작: ${uid}`);
+    const maxHp = BASE_HP + (str * HP_PER_STR) + (health * HP_PER_HEALTH);
+    const maxMp = BASE_MP + (agi * MP_PER_AGI) + (mind * MP_PER_MIND);
+    const physicalAttack = ATTACK_PER_STR * str + ATTACK_PER_AGI * agi;
+    const mentalAttack = M_ATTACK_PER_MIND * mind;
 
-    // 1. 메인 시트 문서 삭제 (문서 ID가 UID인 경우)
-    const sheetRef = doc(db, 'sheets', uid);
+    return { maxHp, maxMp, physicalAttack, mentalAttack };
+}
+
+/* =========================================================
+    어드민 확인
+========================================================= */
+
+async function isAdminUser() {
+    const user = auth.currentUser;
+    if (!user) return false;
     try {
-        await deleteDoc(sheetRef);
-        console.log(`[Cleanup] 'sheets/${uid}' 문서 삭제 완료.`);
-    } catch (e) {
-        // 문서가 이미 없거나 삭제 권한 문제일 수 있습니다.
-        console.warn(`[Cleanup] 'sheets/${uid}' 삭제 실패 또는 문서 없음:`, e.message);
+        // 'users' 컬렉션에서 사용자 UID로 문서 조회
+        const uDoc = await getDoc(doc(db, 'users', user.uid));
+        // 사용자가 존재하고 역할(role)이 'admin'인지 확인
+        return uDoc.exists() && uDoc.data().role === 'admin';
+    } catch(e) {
+        console.error('isAdminUser check failed:', e);
+        return false;
     }
-    
-    // 2. UID 필드를 사용하는 다른 컬렉션에서 문서 삭제
-    // ⭐ 사용자의 데이터가 있을 것으로 예상되는 컬렉션 목록을 여기에 정의해야 합니다.
-    const collectionsToClean = ['users', 'staff', 'sheets']; // 예시 컬렉션
-    
-    for (const collectionName of collectionsToClean) {
-        // 해당 UID를 가진 문서들을 쿼리
-        const q = query(collection(db, collectionName), where('uid', '==', uid));
-        const snapshot = await getDocs(q);
-        
-        const deletePromises = [];
-        
-        snapshot.docs.forEach(d => {
-            // 발견된 모든 문서를 병렬로 삭제하기 위해 Promise 배열에 추가
-            deletePromises.push(deleteDoc(d.ref));
+}
+
+/* =========================================================
+    css
+========================================================= */
+
+const cardStyles = [
+    `width: calc(25% - 15px)`,
+    `aspect-ratio: 1 / 1`,
+    `background-size: cover`,
+    `background-position: center`,
+    `border: 5px solid ${borderColor}`,
+    `position: relative`,
+    `cursor: pointer`,
+    `overflow: hidden`,
+    `transition: all 0.3s`,
+    showImage && imgUrl ? `background-image: url('${imgUrl}')` : `background-color: #555`
+].filter(Boolean).join('; ');
+
+/* =========================================================
+    메세지 출력
+========================================================= */
+
+// 공통 스타일 적용 함수
+function applyStyles(el, styles) {
+    Object.assign(el.style, styles);
+}
+
+// 브라우저 상단 메시지 표시
+function showMessage(msg, type = 'info') {
+    const el = document.createElement('div');
+    el.className = `in-browser-msg ${type}`;
+    el.textContent = msg;
+
+    applyStyles(el, {
+        position: 'fixed',
+        top: '20px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        background: '#222',
+        color: '#fff',
+        padding: '10px 20px',
+        borderRadius: '6px',
+        zIndex: 9999,
+        boxShadow: '0 2px 6px rgba(0,0,0,0.4)',
+        fontFamily: 'sans-serif',
+        textAlign: 'center'
+    });
+
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 2500);
+}
+
+// 브라우저 전체 확인 팝업
+function showConfirm(msg) {
+    return new Promise(resolve => {
+        const overlay = document.createElement('div');
+        overlay.className = 'fullscreen confirm-popup';
+
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `
+            <div>${msg}</div>
+            <div style="display:flex; justify-content:center; gap:12px; margin-top:12px;">
+                <button class="btn confirm-yes">확인</button>
+                <button class="btn confirm-no">취소</button>
+            </div>
+        `;
+
+        applyStyles(overlay, {
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            background: 'rgba(0,0,0,0.5)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 10000
         });
-        
-        if (deletePromises.length > 0) {
-            console.log(`[Cleanup] '${collectionName}'에서 ${deletePromises.length}개 문서 삭제 중...`);
-            await Promise.all(deletePromises);
-            console.log(`[Cleanup] '${collectionName}' 삭제 완료.`);
-        } else {
-             console.log(`[Cleanup] '${collectionName}'에서 삭제할 문서 없음.`);
+
+        applyStyles(card, {
+            maxWidth: '400px',
+            width: '90%',
+            padding: '20px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px',
+            textAlign: 'center'
+        });
+
+        overlay.appendChild(card);
+        document.body.appendChild(overlay);
+
+        card.querySelector('.confirm-yes').onclick = () => { resolve(true); overlay.remove(); };
+        card.querySelector('.confirm-no').onclick = () => { resolve(false); overlay.remove(); };
+    });
+}
+
+/* =========================================================
+    UI 관련
+========================================================= */
+
+function renderDangerStars(level, max = 5) {
+    return '★'.repeat(level) + '☆'.repeat(max - level);
+}
+
+/* =========================================================
+    컬러 코드
+========================================================= */
+
+/**
+ * 단색 프로필 배경 밝기 계산 (대략)
+ * @param {string} hex - 16진수 색상 코드 (#RRGGBB)
+ * @returns {number} 밝기 값
+ */
+function getBrightness(hex) {
+    const r = parseInt(hex.slice(1,3),16);
+    const g = parseInt(hex.slice(3,5),16);
+    const b = parseInt(hex.slice(5,7),16);
+    return (r*299 + g*587 + b*114)/1000;
+}
+
+function calculatePartColor(injury, contamination) {
+    // 0~100 스케일을 0~1로 변환
+    const i = Math.min(100, injury) / 100;
+    const c = Math.min(100, contamination) / 100;
+
+    // R: 오염도 기반, G: 낮게 유지, B: 부상+오염 기반
+    let r = Math.round(i * 10 + c * 100);
+    let g = Math.round(i * 10 + c * 10);
+    let b = Math.round(i * 150 + c * 150);
+
+    // 부상/오염 모두 없으면 매우 옅은 색
+    if (i === 0 && c === 0) return 'rgba(255, 255, 255, 0.1)';
+
+    // 색상 포화도 보정 (최대값 제한)
+    r = Math.min(200, r + 50);
+    g = Math.min(200, g + 50);
+    b = Math.min(255, b + 50);
+
+    return `rgb(${r}, ${g}, ${b})`;
+}
+
+
+/* =========================================================
+   방사형 그래프 만들기
+========================================================= */
+
+const radarCharts = {};
+
+// 얘는 평소에 쓰이는 거
+/**
+ * 범용 레이더 차트 생성/업데이트
+ * @param {string} containerClass 차트를 그릴 div 클래스
+ * @param {string[]} labels 축 이름
+ * @param {number[]} data 값
+ * @param {number} max 최대값
+ * @param {string} bgColor 배경색
+ * @param {string} borderColor 테두리색
+ */
+function drawRadarChart(containerClass, labels, data, max = 5, bgColor = 'rgba(0,0,0,0.1)', borderColor = '#000') {
+    const container = document.querySelector(`.${containerClass}`);
+    if (!container) return;
+
+    // 기존 캔버스 제거 후 새 캔버스 생성
+    container.innerHTML = `<canvas id="${containerClass}-canvas"></canvas>`;
+    const ctx = document.getElementById(`${containerClass}-canvas`);
+    if (!ctx) return;
+
+    if (radarCharts[containerClass]) radarCharts[containerClass].destroy();
+
+    const clamp = v => Math.max(0, Number(v));
+
+    radarCharts[containerClass] = new Chart(ctx, {
+        type: 'radar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: '스탯 레벨',
+                data: data.map(clamp),
+                backgroundColor: bgColor,
+                borderColor: borderColor,
+                pointBackgroundColor: borderColor,
+                pointBorderColor: '#fff',
+                pointHoverBackgroundColor: '#fff',
+                pointHoverBorderColor: borderColor
+            }]
+        },
+        options: {
+            responsive: true,
+            aspectRatio: 1,
+            scales: {
+                r: {
+                    min: 0,
+                    max: max,
+                    ticks: {
+                        stepSize: 1,
+                        color: 'rgba(255,255,255,0.7)',
+                        backdropColor: 'rgba(0,0,0,0.5)'
+                    },
+                    pointLabels: {
+                        color: 'rgba(255,255,255,0.9)',
+                        font: { size: 11 }
+                    },
+                    grid: { color: 'rgba(255,255,255,0.1)' },
+                    angleLines: { color: 'rgba(255,255,255,0.2)' }
+                }
+            },
+            plugins: { legend: { display: false } }
         }
-    }
-    
-    console.log(`[Cleanup] 사용자 ${uid} 관련 모든 데이터 삭제 완료.`);
+    });
 }
 
-// [새로 추가해야 할 함수]
-/**
- * 직원 이미지를 Firebase Storage에 업로드합니다.
- * @param {File} file - 업로드할 파일 객체
- * @param {string} staffId - 직원 문서 ID
- * @returns {Promise<string>} 업로드된 파일의 다운로드 URL
- */
-async function uploadStaffImage(file, staffId) {
-    // 경로는 'staff_images/[staffId].[확장자]'로 지정
-    const extension = file.name.split('.').pop();
-    const storagePath = `staff_images/${staffId}.${extension}`; 
-    
-    // uploadFileToStorage 함수가 이전에 정의되어 있어야 함
-    return uploadFileToStorage(file, storagePath);
-}
-
-function randomHex(){
-    const r = Math.floor(Math.random() * 256).toString(16).padStart(2, '0');
-    const g = Math.floor(Math.random() * 256).toString(16).padStart(2, '0'); 
-    const b = Math.floor(Math.random() * 256).toString(16).padStart(2, '0');
-    return '#' + r + g + b;
-}
-
-function getTodayKey() {
-    const d = new Date();
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${y}${m}${day}`;
-}
-
-function pickByWeight(list) {
-    const total = list.reduce((sum, item) => sum + item.weight, 0);
-    let r = Math.random() * total;
-    for (const item of list) {
-        if (r < item.weight) return item.text;
-        r -= item.weight;
-    }
-    return list[list.length - 1].text;
-}
+// 세부 정보 테이블(직원 탭에 넣어야지)
 
 /**
- * Firestore Timestamp를 상대적인 시간 문자열로 포맷합니다.
- * @param {object} timestamp Firestore Timestamp 객체
- * @returns {string} 포맷된 시간 문자열 (예: '방금 전', '2025.12.12')
+ * 스탯 객체를 받아서 신체/정신 차트 그리기
+ * @param {object} stats 스탯 객체
  */
+function initStatsRadarCharts(stats) {
+    if (typeof Chart === 'undefined') return console.warn('Chart.js library not loaded');
+
+    // 신체 스탯
+    drawRadarChart(
+        'chart-container-1',
+        ['근력','민첩','지구력','유연성','시각','청각','상황 인지 능력','반응속도'],
+        [stats.muscle, stats.agility, stats.endurance, stats.flexibility, stats.visual, stats.auditory, stats.situation, stats.reaction],
+        5,
+        'rgba(255,99,132,0.2)',
+        'rgb(255,99,132)'
+    );
+
+    // 정신 스탯
+    drawRadarChart(
+        'chart-container-2',
+        ['지능','판단력','기억력','정신력','의사 결정 능력','스트레스 내성'],
+        [stats.intellect, stats.judgment, stats.memory, stats.spirit, stats.decision, stats.stress],
+        5,
+        'rgba(54,162,235,0.2)',
+        'rgb(54,162,235)'
+    );
+}
+
+/* =========================================================
+   가로형 테이블
+========================================================= */
+
+function renderHorizontalTable(title, rows, isAdmin, isStatLike = false) {
+    const rowHtml = rows.map(row => {
+        const inputId = `${isStatLike ? 'stat' : 'person'}${row.label.replace(/\s/g, '')}`;
+        const valueContent = isAdmin
+            ? (row.isLong 
+                ? `<textarea id="${inputId}" style="width:100%; min-height:60px;">${row.value}</textarea>`
+                : `<input type="${typeof row.value === 'number' ? 'number' : 'text'}" id="${inputId}" value="${row.value}" style="width:100%;">`)
+            : row.value;
+
+        return `
+            <tr class="horizontal-table-row">
+                <td class="table-label" style="font-weight: bold; padding: 8px; background: rgba(255,255,255,0.03); width: 150px;">${row.label}</td>
+                <td class="table-value" style="padding: 8px;">${valueContent}</td>
+            </tr>
+        `;
+    }).join('');
+
+    return `
+        <table class="data-table horizontal" style="width:100%; margin-top:10px; border-collapse:collapse;">
+            <tbody>${rowHtml}</tbody>
+        </table>
+    `;
+}
+
+
+/* =========================================================
+    시간 함수
+========================================================= */
+ 
+// 현재 시간 확인. 사이드 바에 띄우는 용
+function startClock() {
+    function tick() {
+        const d = new Date();
+        const options = { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' };
+        if(nowTimeEl) nowTimeEl.textContent = d.toLocaleString(undefined, options);
+    }
+    tick();
+    setInterval(tick, 1000);
+}
+
+// 메세지 표시에 사용, 몇 시간 전이었는지 표시한다
 function fmtTime(timestamp) {
-    // timestamp 객체가 유효하지 않으면 빈 문자열 반환 (혹은 'N/A')
     if (!timestamp || !timestamp.seconds) return ''; 
     
     const date = timestamp.toDate();
@@ -265,143 +462,198 @@ function fmtTime(timestamp) {
     return date.toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '.').replace(/\.$/, '');
 }
 
-// --- UI 제어 함수 ---
+/* =========================================================
+    인증 상태 변화 감지 및 유지
+========================================================= */
 
-function initNav() {
-    navEl.innerHTML = '';
-    TABS.forEach( tab => {
-        const b = document.createElement('button');
-        b.textContent = tab.title;
-        b.dataset.tab = tab.id;
-        b.addEventListener('click', () => loadTab(tab.id, true));
-        navEl.appendChild(b);
+onAuthStateChanged(auth, async (user) => {
+    currentUser = user;
+
+    if (user) {
+        const nickname = user.displayName || '신규 사용자';
+
+        await checkAndCreateSheet(user.uid, nickname);
+
+        showLoggedInUI();
+        renderAuthArea(user);
+        initNav();
+        loadTab('main');
+        startClock();
+        subscribeSystem();
+
+        await renderMain();
+        await renderMap();
+        await renderStaff();
+        await renderDex();
+        await renderMe();
+
+    } else {
+        currentUser = null;
+
+        // 로그아웃 UI
+        showLogOutUI();
+    }
+});
+
+async function getCurrentUserSheetId() {
+    if (auth.currentUser) return auth.currentUser.uid;
+
+    return new Promise(resolve => {
+        const unsubscribe = onAuthStateChanged(auth, user => {
+            unsubscribe();
+            resolve(user ? user.uid : null);
+        });
     });
 }
-    
-function setActiveNav(tabId) {
-    navEl.querySelectorAll('button').forEach( b => b.classList.toggle('active', b.dataset.tab === tabId));
+
+/* =========================================================
+    댓글
+========================================================= */
+
+// 댓글 카드. 미리보기+더보기랑 댓글 입력...
+/**
+ * 댓글 카드 생성
+ * @param {string} id - 댓글 대상 ID (맵, 덱 등)
+ * @param {string} dbCollection - 댓글이 저장될 Firestore 컬렉션 이름
+ * @returns {HTMLElement} 댓글 카드 DOM
+ */
+function renderCommentCard({ id, dbCollection = 'maps' }) {
+    const el = document.createElement('div');
+    el.className = 'comment-card card';
+    el.innerHTML = `
+        <div class="comment-card-inner" data-id="${id}">
+            <div class="comment-input-area" style="margin-bottom: 15px;">
+                <input type="text" id="commentInput-${id}" placeholder="댓글 작성 (엔터로 등록)"
+                       style="width:100%; padding:8px; border-radius:6px; background:transparent; border:1px solid rgba(255,255,255,0.1); color:inherit;">
+            </div>
+            <div class="comments-preview">
+                <div class="comments-count muted">댓글 0개</div>
+                <div class="comments-list"></div>
+                <div class="comments-more" style="display:none">
+                    <button class="link more-comments">더보기</button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    attachCommentListeners({ el, id, dbCollection });
+    return el;
 }
 
-function showLogOutUI() {
-    header.style.display = 'none';
-    login.style.display = 'flex';
-    loginForm.style.display = 'block';
-    signupForm.style.display = 'none';
-    contentEl.innerHTML = ''; // 로그아웃 시 내용 비우기
-}
+// 버튼 이벤트+미리보기 로드
+function attachCommentListeners({ el, id, dbCollection }) {
+    const inputEl = el.querySelector(`#commentInput-${id}`);
 
-function showLoggedInUI(){
-    login.style.display = 'none';
-    header.style.display = 'flex';
-}
-
-function startClock() {
-    function tick() {
-        const d = new Date();
-        const options = { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' };
-        if(nowTimeEl) nowTimeEl.textContent = d.toLocaleString(undefined, options);
+    if (inputEl) {
+        inputEl.addEventListener('keydown', async e => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const text = inputEl.value.trim();
+                if (!text) return;
+                await postComment({ id, text, dbCollection });
+                inputEl.value = '';
+                loadCommentPreview({ el, id, dbCollection });
+            }
+        });
     }
-    tick();
-    setInterval(tick, 1000);
+
+    el.querySelector('.more-comments')?.addEventListener('click', () => openCommentsPopup(id, dbCollection));
+
+    loadCommentPreview({ el, id, dbCollection });
 }
 
-function renderAuthArea(user){
-    logOutEl.innerHTML = '';
-    if (!user) return;
-    const btn = document.createElement('button');
-    btn.className = 'btn';
-    btn.textContent = '로그아웃';
-    btn.addEventListener('click', ()=> signOut(auth));
-    logOutEl.appendChild(btn);
-}
-
-async function subscribeSystem(){
-    const sysDocRef = doc(db, 'system', 'employeeStatus');
+// db에서 댓글 불러와서 미리보기 표시
+async function loadCommentPreview({ el, id, dbCollection }) {
     try {
-        const snap = await getDoc(sysDocRef);
-        if (snap.exists() && systemInfo) {
-            systemInfo.textContent = JSON.stringify(snap.data());
-        } else if (systemInfo) {
-            systemInfo.textContent = '시스템 정보 없음';
+        const snap = await getDocs(collection(db, dbCollection, id, 'comments'));
+        const arr = [];
+        snap.forEach(d => arr.push({ id: d.id, ...d.data() }));
+        arr.sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+        const preview = arr.slice(0, 3);
+
+        const listEl = el.querySelector('.comments-list');
+        const countEl = el.querySelector('.comments-count');
+        countEl.textContent = `댓글 ${arr.length}개`;
+
+        if (!preview.length) listEl.innerHTML = `<div class="muted">댓글이 없습니다.</div>`;
+        else {
+            listEl.innerHTML = '';
+            preview.forEach(c => {
+                const brightness = getBrightness(c.userColor || '#CCCCCC');
+                const iconColor = brightness > 125 ? 'black' : 'white';
+                const item = document.createElement('div');
+                item.className = 'comment-item';
+                item.style.display = 'flex';
+                item.style.gap = '10px';
+                item.style.marginBottom = '10px';
+                item.innerHTML = `
+                    <div style="width:30px; height:30px; border-radius:50%; background-color:${c.userColor||'#CCCCCC'};
+                                display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                        <span class="material-icons" style="font-size:20px; color:${iconColor}">person</span>
+                    </div>
+                    <div style="flex-grow:1;">
+                        <div style="font-weight:bold;">${c.name||'익명'}</div>
+                        <div style="font-size:0.8em; color:#aaa;">${fmtTime(c.createdAt)}${c.editedAt ? ' (수정됨)' : ''}</div>
+                        <div>${c.text}</div>
+                    </div>
+                `;
+                listEl.appendChild(item);
+            });
         }
+
+        const moreBtn = el.querySelector('.more-comments');
+        moreBtn.style.display = arr.length > 3 ? 'inline-block' : 'none';
+
     } catch(e) {
-        if(systemInfo) systemInfo.textContent = '시스템 로드 실패';
+        console.error('댓글 로드 실패', e);
     }
 }
 
-// --- 이벤트 리스너 (Auth) ---
+// 댓글 등록
+async function postComment({ id, text, dbCollection }) {
+    const user = auth.currentUser;
+    if (!user) return showMessage('로그인이 필요합니다.', 'warning');
 
-gotoSignupBth.addEventListener('click', () => {
-    loginForm.style.display = 'none';
-    signupForm.style.display = 'block';
+    const userDoc = await getDoc(doc(db, 'users', user.uid));
+    const userData = userDoc.exists() ? userDoc.data() : {};
+    await addDoc(collection(db, dbCollection, id, 'comments'), {
+        uid: user.uid,
+        name: userData.nickname || '익명',
+        userColor: userData.colorHex || '#CCCCCC',
+        text,
+        createdAt: serverTimestamp(),
+        editedAt: null
+    });
+}
+
+/* =========================================================
+    로그인
+========================================================= */
+
+// 버튼 누르면 반대로 바꿔주어요
+function switchAuthMode(mode) {
+    const isSignup = mode === 'signup';
+
+    loginForm.style.display = isSignup ? 'none' : 'block';
+    signupForm.style.display = isSignup ? 'block' : 'none';
+
     loginBoxMsg.textContent = '';
     signupBoxMsg.textContent = '';
-    document.getElementById('loginTitle').textContent = '회원가입';
+
+    document.getElementById('loginTitle').textContent =
+        isSignup ? '회원가입' : '로그인';
+}
+
+// 회원가입/로그인으로 가기 버튼
+gotoSignupBth.addEventListener('click', () => {
+    switchAuthMode('signup');
 });
 
 gotoLoginBth.addEventListener('click', () => {
-    signupForm.style.display = 'none';
-    loginForm.style.display = 'block';
-    signupBoxMsg.textContent = '';
-    loginBoxMsg.textContent = '';
-    document.getElementById('loginTitle').textContent = '로그인';
+    switchAuthMode('login');
 });
 
-signupBth.addEventListener('click', async ()=>{
-    signupBoxMsg.textContent = '';
-    const id = signupId.value;
-    const email = signupEmail.value.trim();
-    const pw = signupPassword.value;
-    const nick = signupNickname.value.trim();
-
-    if (!id) { signupBoxMsg.textContent = '아이디를 입력해 주세요.'; return; }
-    if (!nick) { signupBoxMsg.textContent = '닉네임을 입력해 주세요.'; return; }
-    if (!email || !pw) { signupBoxMsg.textContent = '이메일과 비밀번호를 입력해 주세요.'; return; }
-
-    try { 
-        const cred = await createUserWithEmailAndPassword(auth, email, pw);
-        const uid = cred.user.uid;
-        await setDoc(doc(db,'users',uid), {
-            email, id, nickname: nick, colorHex: randomHex(),
-            decorations: [], silver: 0, 
-            createdAt: serverTimestamp()
-        });
-        await setDoc(doc(db, 'staff', uid), {
-            uid, name: nick, status: 'alive', image: '', silver: 0, desc: '',
-            updatedAt: serverTimestamp()
-        });
-        signupBoxMsg.textContent = '가입 성공. 로그인 처리 중.';
-    } catch(e) {
-        signupBoxMsg.textContent = '가입 실패: ' + (e.message || e.code);
-    }
-});
-
-loginBth.addEventListener('click', async ()=> {
-    loginBoxMsg.textContent = '';
-    const id = loginId.value.trim();
-    const pw = loginPassword.value;
-
-    if (!id || !pw) { 
-        loginBoxMsg.textContent = '아이디와 비밀번호를 입력해 주세요.'; 
-        return; 
-    }
-
-    try {
-        const q = query(collection(db, 'users'), where('id', '==', id));
-        const snap = await getDocs(q);
-        if (snap.empty) {
-            loginBoxMsg.textContent = '존재하지 않는 아이디입니다.';
-            return;
-        }
-        const userDoc = snap.docs[0].data();
-        const email = userDoc.email;
-        await signInWithEmailAndPassword(auth, email, pw);
-        loginBoxMsg.textContent = '로그인 성공.';
-    } catch(e) {
-        loginBoxMsg.textContent = '로그인 실패: ' + (e.message || e.code);
-    }
-});
-
+// 엔터 누르면 자동 로그인
 loginForm.addEventListener('keydown', e => {
     if (e.key === 'Enter') { e.preventDefault(); loginBth.click(); }
 });
@@ -410,11 +662,153 @@ signupForm.addEventListener('keydown', e => {
     if (e.key === 'Enter') { e.preventDefault(); signupBth.click(); }
 });
 
-/**
- * 팝업을 열어 신규 사용자에게 인적사항과 스탯을 커스터마이징하도록 요청합니다.
- * @param {string} uid - 신규 사용자의 UID
- * @param {string} nickname - 신규 사용자의 닉네임
- */
+// 회원가입
+signupBth.addEventListener('click', async ()=> {
+    signupBoxMsg.textContent = '';
+
+    const id = signupId.value.trim();
+    const email = signupEmail.value.trim();
+    const pw = signupPassword.value;
+    const nick = signupNickname.value.trim();
+
+    if (!id) {
+        signupBoxMsg.textContent = '아이디를 입력해 주세요.';
+        return;
+    }
+    if (!nick) {
+        signupBoxMsg.textContent = '닉네임을 입력해 주세요.';
+        return;
+    }
+    if (!email || !pw) {
+        signupBoxMsg.textContent = '이메일과 비밀번호를 입력해 주세요.';
+        return;
+    }
+
+    signupBth.disabled = true;
+
+    try {
+        const idQuery = query(
+            collection(db, 'users'),
+            where('id', '==', id)
+        );
+        const idSnap = await getDocs(idQuery);
+
+        if (!idSnap.empty) {
+            signupBoxMsg.textContent = '이미 사용 중인 아이디입니다.';
+            return;
+        }
+
+        const cred = await createUserWithEmailAndPassword(auth, email, pw);
+        const user = cred.user;
+        const uid = user.uid;
+
+        await updateProfile(user, {
+            displayName: nick
+        });
+
+        await Promise.all([
+            setDoc(doc(db, 'users', uid), {
+                email,
+                id,
+                nickname: nick,
+                colorHex: randomHex(),
+                decorations: [],
+                silver: 0,
+                createdAt: serverTimestamp()
+            }),
+            setDoc(doc(db, 'staff', uid), {
+                uid,
+                name: nick,
+                status: 'alive',
+                image: '',
+                silver: 0,
+                desc: '',
+                updatedAt: serverTimestamp()
+            })
+        ]);
+
+        const defaultSheet = createDefaultSheet(uid, nick);
+        await setDoc(doc(db, 'sheets', uid), defaultSheet);
+
+        signupBoxMsg.textContent = '가입 완료. 설정을 진행합니다.';
+
+        openNewUserCustomization(uid, nick);
+
+    } catch (e) {
+        console.error(e);
+
+        let msg = '가입 중 오류가 발생했습니다.';
+        if (e.code === 'auth/email-already-in-use') {
+            msg = '이미 사용 중인 이메일입니다.';
+        } else if (e.code === 'auth/weak-password') {
+            msg = '비밀번호가 너무 약합니다.';
+        }
+
+        signupBoxMsg.textContent = msg;
+    } finally {
+        signupBth.disabled = false;
+    }
+});
+
+// 로그인
+loginBth.addEventListener('click', async () => {
+    loginBoxMsg.textContent = '';
+
+    const id = loginId.value.trim();
+    const pw = loginPassword.value;
+
+    if (!id || !pw) {
+        loginBoxMsg.textContent = '아이디와 비밀번호를 입력해 주세요.';
+        return;
+    }
+
+    loginBth.disabled = true;
+
+    try {
+        const q = query(
+            collection(db, 'users'),
+            where('id', '==', id)
+        );
+        const snap = await getDocs(q);
+
+        if (snap.empty) {
+            loginBoxMsg.textContent = '존재하지 않는 아이디입니다.';
+            return;
+        }
+
+        if (snap.size > 1) {
+            // 데이터 무결성 문제
+            console.error('Duplicate user id:', id);
+            loginBoxMsg.textContent = '계정 데이터에 문제가 있습니다.';
+            return;
+        }
+
+        const { email } = snap.docs[0].data();
+
+        await signInWithEmailAndPassword(auth, email, pw);
+
+        loginBoxMsg.textContent = '로그인 성공.';
+    } catch (e) {
+        console.error(e);
+
+        let msg = '로그인에 실패했습니다.';
+        if (e.code === 'auth/wrong-password') {
+            msg = '비밀번호가 올바르지 않습니다.';
+        } else if (e.code === 'auth/user-disabled') {
+            msg = '비활성화된 계정입니다.';
+        }
+
+        loginBoxMsg.textContent = msg;
+    } finally {
+        loginBth.disabled = false;
+    }
+});
+
+/* =========================================================
+    본인 시트 작성
+========================================================= */
+
+// 커스터마이징 팝업
 function openNewUserCustomization(uid, nickname) {
     const defaultData = createDefaultSheet(uid, nickname);
     const p = defaultData.personnel;
@@ -432,7 +826,6 @@ function openNewUserCustomization(uid, nickname) {
             <select id="custGender">
                 <option value="남성">남성</option>
                 <option value="여성">여성</option>
-                <option value="미상" ${p.gender === '미상' ? 'selected' : ''}>미상</option>
             </select>
         </div>
         <div class="form-row"><label>나이</label> <input type="number" id="custAge" value="${p.age || 20}"></div>
@@ -441,9 +834,12 @@ function openNewUserCustomization(uid, nickname) {
     `;
 
     // 스탯 입력 폼 (슬라이더 및 총 포인트 제한 로직은 프론트엔드에서 구현 필요)
-    const statsKeys = Object.keys(baseStats);
+    const statsKeys = Object.keys(baseStats || {});
     let statsForm = `<h3 style="border-bottom: 1px solid #333; padding: 10px 0;">기본 스탯 설정 (총 포인트 제한: 50)</h3>`;
-    let currentTotal = statsKeys.length; // 기본값 14개의 합계
+    let currentTotal = statsKeys.reduce(
+        (sum, key) => sum + (baseStats[key] || 1),
+        0
+    );
     statsForm += `<p style="color: yellow; margin-bottom: 15px;">현재 사용 포인트: <span id="currentPoints">${currentTotal}</span> / 50</p>`;
 
     statsKeys.forEach(key => {
@@ -476,7 +872,9 @@ function openNewUserCustomization(uid, nickname) {
 
     // 이벤트 리스너 부착
     document.getElementById('saveCustomSheetBtn').onclick = () => {
-        saveCustomizedSheet(uid, nickname);
+        if (typeof saveCustomizedSheet === 'function') {
+            saveCustomizedSheet(uid, nickname);
+        }
         document.getElementById('custModal')?.remove(); // 팝업 닫기
     };
     
@@ -488,70 +886,60 @@ function openNewUserCustomization(uid, nickname) {
     updateStatPoints(); // 초기 포인트 계산
 }
 
-// 스탯 슬라이더 변경 시 포인트 합계를 업데이트하는 헬퍼 함수
+// 포인트 계산
 function updateStatPoints() {
     let totalPoints = 0;
+
     document.querySelectorAll('.stat-slider').forEach(slider => {
-        const value = parseInt(slider.value, 10);
+        const value = parseInt(slider.value, 10) || 0;
         totalPoints += value;
-        document.getElementById(`value-${slider.id.replace('stat-', '')}`).textContent = value;
+
+        const valueEl = document.getElementById(
+            `value-${slider.id.replace('stat-', '')}`
+        );
+        if (valueEl) valueEl.textContent = value;
     });
 
     const currentPointsEl = document.getElementById('currentPoints');
-    if (currentPointsEl) {
-        currentPointsEl.textContent = totalPoints;
-        // 50 포인트 초과 시 경고 표시 (UX 개선 필요)
-        if (totalPoints > 50) {
-            currentPointsEl.style.color = 'red';
-            document.getElementById('saveCustomSheetBtn').disabled = true;
-        } else {
-            currentPointsEl.style.color = 'lime';
-            document.getElementById('saveCustomSheetBtn').disabled = false;
-        }
+    const saveBtn = document.getElementById('saveCustomSheetBtn');
+
+    if (!currentPointsEl) return;
+
+    currentPointsEl.textContent = totalPoints;
+    currentPointsEl.style.color = totalPoints > 50 ? 'red' : 'lime';
+
+    if (saveBtn) {
+        saveBtn.disabled = totalPoints > 50;
     }
 }
 
-// 스탯 키를 한글 레이블로 매핑하는 헬퍼 함수 (renderMeStatsSection의 레이블과 일치)
-function mapStatKeyToLabel(key) {
-    const map = {
-        muscle: '근력', agility: '민첩', endurance: '지구력', flexibility: '유연성', 
-        visual: '시각', auditory: '청각', situation: '상황 인지 능력', reaction: '반응속도', 
-        intellect: '지능', judgment: '판단력', memory: '기억력', spirit: '정신력', 
-        decision: '의사 결정 능력', stress: '스트레스 내성'
-    };
-    return map[key] || key;
-}
-
-/**
- * 사용자 커스터마이징 결과를 Firestore에 저장하고 시트 렌더링을 시작합니다.
- * @param {string} uid - 사용자 UID
- * @param {string} nickname - 사용자 닉네임
- */
+// 시트값 저장
 async function saveCustomizedSheet(uid, nickname) {
     const initialSheet = createDefaultSheet(uid, nickname);
     
-    // 1. 인적사항 데이터 수집
+    const $ = id => document.getElementById(id);
+
     const personnel = {
         ...initialSheet.personnel,
-        gender: document.getElementById('custGender').value,
-        age: parseInt(document.getElementById('custAge').value, 10),
-        height: parseInt(document.getElementById('custHeight').value, 10),
-        weight: parseInt(document.getElementById('custWeight').value, 10),
+        gender: $('custGender')?.value || initialSheet.personnel.gender,
+        age: parseInt($('custAge')?.value, 10) || initialSheet.personnel.age,
+        height: parseInt($('custHeight')?.value, 10) || initialSheet.personnel.height,
+        weight: parseInt($('custWeight')?.value, 10) || initialSheet.personnel.weight,
     };
     
-    // 2. 스탯 데이터 수집
-    const stats = {};
+    const stats = {
+        ...initialSheet.stats
+    };
+
     document.querySelectorAll('.stat-slider').forEach(slider => {
         const key = slider.id.replace('stat-', '');
-        stats[key] = parseInt(slider.value, 10);
+        stats[key] = parseInt(slider.value, 10) || 1;
     });
 
-    // 3. 최종 시트 데이터 구성
     const finalSheetData = {
         ...initialSheet,
         personnel: personnel,
         stats: stats,
-        // 정신력 Max 값 재계산
         status: {
             ...initialSheet.status,
             maxSpirit: (10 * (stats.spirit || 1)) + 50,
@@ -561,12 +949,10 @@ async function saveCustomizedSheet(uid, nickname) {
     };
     
     try {
-        // ⭐ Firestore에 저장: sheets 컬렉션 아래에 사용자 UID를 문서 ID로 사용
         await setDoc(doc(db, 'sheets', uid), finalSheetData); 
         showMessage('캐릭터 시트가 성공적으로 저장되었습니다.', 'success');
         
-        // 4. 시트 렌더링 시작
-        renderMe(uid); 
+        renderMe(); 
         
     } catch(e) {
         console.error("커스터마이징 시트 저장 실패:", e);
@@ -574,7 +960,9 @@ async function saveCustomizedSheet(uid, nickname) {
     }
 }
 
-// --- 탭 로드 로직 ---
+/* =========================================================
+    탭 메뉴 로드
+========================================================= */
 
 async function loadTab(tabId){
     setActiveNav(tabId);
@@ -589,11 +977,39 @@ async function loadTab(tabId){
     }
 }
 
-// --- Main Tab ---
-async function renderMain(){
+function initNav() {
+    navEl.innerHTML = '';
+    TABS.forEach( tab => {
+        const b = document.createElement('button');
+        b.textContent = tab.title;
+        b.dataset.tab = tab.id;
+        b.addEventListener('click', () => loadTab(tab.id, true));
+        navEl.appendChild(b);
+    });
+}
+
+/* =========================================================
+   매인 탭
+========================================================= */
+
+async function renderMain() {
     contentEl.innerHTML = '';
-    
-    // UI 뼈대 생성
+
+    createMainUICards();
+
+    try {
+        await updateAbyssFlow(); // 심연 기류
+        await updateStaffStatusAndSchedule(); // 일정 및 상태
+        await updateStaffRank(); // 순위
+        document.getElementById('todayEvent').textContent = '이벤트 데이터 없음'; // 임시
+    } catch(e) {
+        console.error(e);
+        contentEl.innerHTML += `<div class="card muted">데이터 로드 실패</div>`;
+    }
+}
+
+// 얜 카드만 넣어여
+function createMainUICards() {
     const flowCard = document.createElement('div');
     flowCard.className = 'card';
     flowCard.innerHTML = `<div class="muted">심연 상태</div><h3 id="abyssFlow">불러오는 중...</h3>`;
@@ -601,7 +1017,12 @@ async function renderMain(){
 
     const statusCard = document.createElement('div');
     statusCard.className = 'card';
-    statusCard.innerHTML = `<div class="muted">직원 현황</div><div id="staffStatus">불러오는 중...</div><div class="muted" style="margin-top:10px;">일정</div><div id="staffSchedule">불러오는 중...</div>`;
+    statusCard.innerHTML = `
+        <div class="muted">직원 현황</div>
+        <div id="staffStatus">불러오는 중...</div>
+        <div class="muted" style="margin-top:10px;">일정</div>
+        <div id="staffSchedule">불러오는 중...</div>
+    `;
     contentEl.appendChild(statusCard);
 
     const eventCard = document.createElement('div');
@@ -613,102 +1034,114 @@ async function renderMain(){
     rankCard.className = 'card';
     rankCard.innerHTML = `<div class="muted">직원 순위</div><div id="staffRank">불러오는 중...</div>`;
     contentEl.appendChild(rankCard);
+}
 
-    // 데이터 로드
-    try {
-        const todayKey = getTodayKey();
-        const todayRef = doc(db, 'system', 'abyssToday');
-        const todaySnap = await getDoc(todayRef);
-        let flowText = null, savedDate = null;
+// 심연 기류
+async function updateAbyssFlow() {
+    const abyssFlowEl = document.getElementById('abyssFlow');
+    if (!abyssFlowEl) return;
 
-        if (todaySnap.exists()) {
-            const data = todaySnap.data();
-            flowText = data.flowText;
-            savedDate = data.dateKey;
+    const todayKey = getTodayKey();
+    const todayRef = doc(db, 'system', 'abyssToday');
+    const todaySnap = await getDoc(todayRef);
+    let flowText = null, savedDate = null;
+
+    if (todaySnap.exists()) {
+        const data = todaySnap.data();
+        flowText = data.flowText;
+        savedDate = data.dateKey;
+    }
+
+    const cfgSnap = await getDoc(doc(db, 'system', 'abyssConfig'));
+
+    if (flowText && savedDate === todayKey) {
+        abyssFlowEl.textContent = '오늘 심연은 ' + flowText + '습니다.';
+    } else if (cfgSnap.exists()) {
+        const flows = cfgSnap.data().flows || [];
+        if (flows.length > 0) {
+            const picked = pickByWeight(flows);
+            await setDoc(todayRef, { flowText: picked, dateKey: todayKey, updatedAt: serverTimestamp() });
+            abyssFlowEl.textContent = '오늘 심연은 ' + picked + '습니다.';
+        } else {
+            abyssFlowEl.textContent = '기류 데이터 없음';
         }
-
-        const cfgSnap = await getDoc(doc(db, 'system', 'abyssConfig'));
-
-        if (abyssFlowEl) { // ✅ abyssFlowEl이 null이 아닌지 확인
-            if (flowText && savedDate === todayKey) {
-                abyssFlowEl.textContent = '오늘 심연은 ' + flowText + '습니다.';
-            } else if (cfgSnap.exists()) {
-                const flows = cfgSnap.data().flows || [];
-                if (flows.length > 0) {
-                    const picked = pickByWeight(flows);
-                    await setDoc(todayRef, { flowText: picked, dateKey: todayKey, updatedAt: serverTimestamp() });
-                    abyssFlowEl.textContent = '오늘 심연의 기류는 ' + picked + ' 입니다.';
-                } else {
-                    abyssFlowEl.textContent = '기류 데이터 없음';
-                }
-            } else {
-                abyssFlowEl.textContent = '기류 설정 없음';
-            }
-        }
-
-        const usersSnap = await getDocs(collection(db, 'users'));
-        let alive=0, missing=0, dead=0, contaminated=0;
-        let maxSilver = -1, minDeath = 999999;
-        let topSilverName = '-', topSurvivorName = '-';
-
-        usersSnap.forEach(docu => {
-            const d = docu.data();
-            const s = d.status || 'alive';
-            if (s === 'alive') alive++;
-            else if (s === 'missing') missing++;
-            else if (s === 'dead') dead++;
-            else if (s === 'contaminated') contaminated++;
-
-            if ((d.silver || 0) > maxSilver) {
-                maxSilver = d.silver || 0;
-                topSilverName = d.nickname || d.id;
-            }
-            const dc = d.achievements?.deathCount ?? 0;
-            if (dc < minDeath) {
-                minDeath = dc;
-                topSurvivorName = d.nickname || d.id;
-            }
-        });
-
-        if (staffStatusEl) { // ✅ Null 체크 추가
-            staffStatusEl.innerHTML = `
-                <div>생존: ${alive} | 실종: ${missing} | 오염: ${contaminated} | 사망: ${dead}</div>
-            `;
-        }
-
-        const daySnap = await getDoc(doc(db, 'system', 'day'));
-        let currentDay = daySnap.exists() ? (daySnap.data().currentDay || 1) : 1;
-        const schedSnap = await getDoc(doc(db, 'schedule', 'days'));
-
-        if (staffScheduleEl) { // ✅ Null 체크 추가
-          if (schedSnap.exists()) {
-              const daysData = schedSnap.data().days || {};
-              const currentDay = '월요일'; // currentDay가 정의된 곳의 값으로 대체해야 함
-              const todayList = daysData[currentDay] || []; 
-              
-              if (todayList.length > 0) {
-                  staffScheduleEl.innerHTML = todayList.map(t => `<div>${t}</div>`).join('');
-              } else {
-                  staffScheduleEl.textContent = `${currentDay}일차 일정 없음`;
-              }
-          } else {
-              staffScheduleEl.textContent = '스케줄 데이터 없음';
-          }
-      }
-
-       staffRankEl.innerHTML = `
-            <div>은화: ${topSilverName} (${maxSilver}) | 생존왕: ${topSurvivorName} (${minDeath})</div>
-        `;
-        document.getElementById('todayEvent').textContent = '이벤트 데이터 없음'; // 임시
-
-    } catch(e) {
-        console.error(e);
-        contentEl.innerHTML += `<div class="card muted">데이터 로드 실패</div>`;
+    } else {
+        abyssFlowEl.textContent = '기류 설정 없음';
     }
 }
 
-// --- Staff Tab ---
+// 일정 & 상태
+async function updateStaffStatusAndSchedule() {
+    const staffStatusEl = document.getElementById('staffStatus');
+    const staffScheduleEl = document.getElementById('staffSchedule');
 
+    const usersSnap = await getDocs(collection(db, 'users'));
+    let alive=0, missing=0, dead=0, contaminated=0;
+
+    usersSnap.forEach(docu => {
+        const d = docu.data();
+        const s = d.status || 'alive';
+        if (s === 'alive') alive++;
+        else if (s === 'missing') missing++;
+        else if (s === 'dead') dead++;
+        else if (s === 'contaminated') contaminated++;
+    });
+
+    if (staffStatusEl) {
+        staffStatusEl.innerHTML = `
+            <div>생존: ${alive} | 실종: ${missing} | 오염: ${contaminated} | 사망: ${dead}</div>
+        `;
+    }
+
+    // 일정 로드
+    const daySnap = await getDoc(doc(db, 'system', 'day'));
+    let currentDay = daySnap.exists() ? (daySnap.data().currentDay || 1) : 1;
+    const schedSnap = await getDoc(doc(db, 'schedule', 'days'));
+
+    if (staffScheduleEl) {
+        if (schedSnap.exists()) {
+            const daysData = schedSnap.data().days || {};
+            // 현재 요일 / 일차에 맞게 조정 필요
+            const todayList = daysData['월요일'] || [];
+            staffScheduleEl.innerHTML = todayList.length > 0 ? todayList.map(t => `<div>${t}</div>`).join('') : `월요일 일정 없음`;
+        } else {
+            staffScheduleEl.textContent = '스케줄 데이터 없음';
+        }
+    }
+}
+
+// 직원 순위 계산 
+async function updateStaffRank() {
+    const staffRankEl = document.getElementById('staffRank');
+    if (!staffRankEl) return;
+
+    const usersSnap = await getDocs(collection(db, 'users'));
+    let maxSilver = -1, minDeath = 999999;
+    let topSilverName = '-', topSurvivorName = '-';
+
+    usersSnap.forEach(docu => {
+        const d = docu.data();
+        if ((d.silver || 0) > maxSilver) {
+            maxSilver = d.silver || 0;
+            topSilverName = d.nickname || d.id;
+        }
+        const dc = d.achievements?.deathCount ?? 0;
+        if (dc < minDeath) {
+            minDeath = dc;
+            topSurvivorName = d.nickname || d.id;
+        }
+    });
+
+    staffRankEl.innerHTML = `
+        <div>은화: ${topSilverName} (${maxSilver}) | 생존왕: ${topSurvivorName} (${minDeath})</div>
+    `;
+}
+
+/* =========================================================
+   직원 탭
+========================================================= */
+
+// 일단 로드하다
 async function renderStaff() {
     contentEl.innerHTML = `
         <div class="card">
@@ -734,498 +1167,167 @@ async function renderStaff() {
     });
 }
 
-let radarObj = null;
-
-function drawStatChart(stats = { str:1, vit:1, agi:1, wil:1 }) {
-    const ctx = document.getElementById("statRadar");
-    if (!ctx) return;
-    if (radarObj) radarObj.destroy();
-    
-    // Chart.js가 로드되어 있다고 가정
-    if (typeof Chart === 'undefined') {
-        console.warn('Chart.js library not loaded');
-        return;
-    }
-
-    const clamp = v => Math.max(1, Math.min(5, Number(v)));
-    radarObj = new Chart(ctx, {
-        type: 'radar',
-        data: {
-        labels: ["근력", "건강", "민첩", "정신력"],
-        datasets: [{
-            data: [clamp(stats.str), clamp(stats.vit), clamp(stats.agi), clamp(stats.wil)],
-            backgroundColor: "rgba(0, 0, 0, 0.1)",
-            borderColor: "#000"
-        }]
-        },
-        options: {
-        scales: {
-            r: { min: 1, max: 5, ticks: { stepSize: 1, callback: v => v } }
-        }
-        }
-    });
-}
-
-let radarObjs = {}; // 다중 차트 관리를 위한 전역 객체
-
-function initStatsRadarCharts(s) {
-    if (typeof Chart === 'undefined') {
-        console.warn('Chart.js library not loaded or undefined.');
-        return;
-    }
-    
-    // 1. 신체 스탯 데이터
-    const physicalStats = {
-        '근력': s.muscle, '민첩': s.agility, '지구력': s.endurance, 
-        '유연성': s.flexibility, '시각': s.visual, '청각': s.auditory, 
-        '상황 인지 능력': s.situation, '반응속도': s.reaction
-    };
-    
-    // 2. 정신 스탯 데이터
-    const mentalStats = {
-        '지능': s.intellect, '판단력': s.judgment, '기억력': s.memory, 
-        '정신력': s.spirit, '의사 결정 능력': s.decision, '스트레스 내성': s.stress
-    };
-    
-    // 차트 그리기
-    const maxVal = 5; // 현재 시트 데이터는 1~5를 가정
-    
-    // chart-container-1에 신체 스탯 그래프 그리기
-    drawFlexibleRadarChart(
-        'chart-container-1', 
-        Object.keys(physicalStats), 
-        Object.values(physicalStats), 
-        maxVal, 
-        'rgba(255, 99, 132, 0.2)', 
-        'rgb(255, 99, 132)'
-    );
-
-    // chart-container-2에 정신 스탯 그래프 그리기
-    drawFlexibleRadarChart(
-        'chart-container-2', 
-        Object.keys(mentalStats), 
-        Object.values(mentalStats), 
-        maxVal, 
-        'rgba(54, 162, 235, 0.2)', 
-        'rgb(54, 162, 235)'
-    );
-}
-
-function drawFlexibleRadarChart(containerSelector, labels, data, max, bgColor, borderColor) {
-    const container = document.querySelector(`.${containerSelector}`);
-    if (!container) return;
-
-    // 기존 캔버스 제거 및 새 캔버스 생성
-    container.innerHTML = `<canvas id="${containerSelector}-canvas"></canvas>`;
-    const ctx = document.getElementById(`${containerSelector}-canvas`);
-    
-    if (radarObjs[containerSelector]) radarObjs[containerSelector].destroy();
-
-    const clamp = v => Math.max(0, Number(v)); // 음수 방지
-    
-    radarObjs[containerSelector] = new Chart(ctx, {
-        type: 'radar',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: '스탯 레벨',
-                data: data.map(clamp),
-                backgroundColor: bgColor,
-                borderColor: borderColor,
-                pointBackgroundColor: borderColor,
-                pointBorderColor: '#fff',
-                pointHoverBackgroundColor: '#fff',
-                pointHoverBorderColor: borderColor
-            }]
-        },
-        options: {
-            responsive: true,
-            aspectRatio: 1,
-            scales: {
-                r: {
-                    min: 0,
-                    max: max,
-                    ticks: {
-                        stepSize: 1, 
-                        color: 'rgba(255, 255, 255, 0.7)',
-                        backdropColor: 'rgba(0, 0, 0, 0.5)'
-                    },
-                    pointLabels: {
-                        color: 'rgba(255, 255, 255, 0.9)',
-                        font: { size: 11 }
-                    },
-                    grid: { color: 'rgba(255, 255, 255, 0.1)' },
-                    angleLines: { color: 'rgba(255, 255, 255, 0.2)' }
-                }
-            },
-            plugins: {
-                legend: { display: false }
-            }
-        }
-    });
-}
-
+// 세부적 프로필
 async function openProfileModal(docId, data) {
     profileModal.innerHTML = `
         <div class="modal-content profile-wide">
-        <button id="closeProfile" class="back-btn">← 돌아가기</button>
-        <div class="profile-top">
-            <div class="profile-img-wrap"><img class="profile-img" src="${data.image || ""}" alt=""></div>
-            <div class="profile-info">
-            <p><span class="label">이름</span> ${data.name || ""}</p>
-            <p><span class="label">성별</span> ${data.gender || ""}</p>
-            <p><span class="label">나이</span> ${data.age || ""}</p>
-            <p><span class="label">신체</span> ${data.body || ""}</p>
-            <p><span class="label">국적</span> ${data.nation || ""}</p>
-            <hr>
-            <p><span class="label">비고</span></p>
-            <p style="white-space:pre-line">${data.note || ""}</p>
+            <button id="closeProfile" class="back-btn">← 돌아가기</button>
+
+            <div class="profile-top">
+                <div class="profile-img-wrap">
+                    <img class="profile-img" src="${data.image || ''}" alt="">
+                </div>
+                <div class="profile-info">
+                    <p><span class="label">이름</span> ${data.name || ''}</p>
+                    <p><span class="label">성별</span> ${data.gender || ''}</p>
+                    <p><span class="label">나이</span> ${data.age || ''}</p>
+                    <p><span class="label">키/체중</span> ${data.height || '-'}cm / ${data.weight || '-'}kg</p>
+                    <p><span class="label">국적</span> ${data.nationality || ''}</p>
+                </div>
             </div>
-        </div>
-        <div class="stat-area-fixed">
-            <div class="stat-left">
-            <p>근력: ${data.str || 1}</p><p>건강: ${data.vit || 1}</p>
-            <p>민첩: ${data.agi || 1}</p><p>정신력: ${data.wil || 1}</p>
+
+            <div class="stats-grid-2x2">
+                <div class="stats-table-container">
+                    ${renderHorizontalTable('표 1: 신체 스탯', [
+                        { label: '근력', value: data.muscle },
+                        { label: '민첩', value: data.agility },
+                        { label: '지구력', value: data.endurance },
+                        { label: '유연성', value: data.flexibility },
+                        { label: '시각', value: data.visual },
+                        { label: '청각', value: data.auditory },
+                        { label: '상황 인지 능력', value: data.situation },
+                        { label: '반응속도', value: data.reaction },
+                    ], isAdminUser(), true)}
+                </div>
+                <div class="chart-container-1" style="width:100%; height:auto; min-height:300px;"></div>
+
+                <div class="stats-table-container">
+                    ${renderHorizontalTable('표 2: 정신 스탯', [
+                        { label: '지능', value: data.intellect },
+                        { label: '판단력', value: data.judgment },
+                        { label: '기억력', value: data.memory },
+                        { label: '정신력', value: data.spirit },
+                        { label: '의사 결정 능력', value: data.decision },
+                        { label: '스트레스 내성', value: data.stress },
+                    ], isAdminUser(), true)}
+                </div>
+                <div class="chart-container-2" style="width:100%; height:auto; min-height:300px;"></div>
             </div>
-            <canvas id="statRadar" width="260" height="260"></canvas>
-        </div>
-        <div id="editArea"></div>
+
+            <div id="editArea"></div>
         </div>
     `;
 
     profileModal.showModal();
     document.getElementById("closeProfile").onclick = () => profileModal.close();
 
-    // --- [수정된 편집 버튼 로직 시작] ---
+    // 관리자 편집 버튼
     const editArea = document.getElementById("editArea");
-    const isAdmin = await isAdminUser(); // 관리자 여부 확인 함수 호출
-
+    const isAdmin = await isAdminUser();
     if (isAdmin) {
         const editBtn = document.createElement("button");
         editBtn.textContent = "편집";
-        editBtn.className = "edit-btn"; // 스타일링을 위한 클래스 추가
+        editBtn.className = "edit-btn";
         editBtn.onclick = () => openInlineEdit(docId, data);
         editArea.appendChild(editBtn);
     }
-    // --- [수정된 편집 버튼 로직 끝] ---
 
-    setTimeout(() => drawStatChart(data), 100); 
+    // 스탯 차트 렌더링 (기존 스탯 데이터 사용)
+    setTimeout(() => initStatsRadarCharts(data), 100);
 }
 
-function openInlineEdit(docId, data) {
-  const editArea = document.getElementById("editArea");
+// 수정 버튼 눌렀을 때
+async function openInlineEdit(docId, data) {
+    const editArea = document.getElementById("editArea");
 
-  // 1. HTML을 먼저 생성 (버튼이 이때 생김)
-  editArea.innerHTML = `
-    <div class="edit-grid-inline">
-      <label>이름</label><input id="editName" value="${data.name || ''}">
-      <label>성별</label><input id="editGender" value="${data.gender || ''}">
-      <label>나이</label><input id="editAge" value="${data.age || ''}">
-      <label>키·체중</label><input id="editBody" value="${data.body || ''}">
-      <label>국적</label><input id="editNation" value="${data.nation || ''}">
-      <label>비고</label><textarea id="editNote">${data.note || ''}</textarea>
+    // 1. 편집용 HTML 생성
+    editArea.innerHTML = `
+        <div class="edit-grid-inline">
+            <label>이름</label><input id="editName" value="${data.name || ''}">
+            <label>성별</label><input id="editGender" value="${data.gender || ''}">
+            <label>나이</label><input id="editAge" value="${data.age || ''}">
+            <label>키/체중</label><input id="editHeight" value="${data.height || ''}">
+            <label>국적</label><input id="editNationality" value="${data.nationality || ''}">
 
-      <label>이미지 업로드</label><input id="editImageFile" type="file" accept="image/*">
-      <label>이미지 URL</label><input id="editImage" value="${data.image || ''}">
+            <label>이미지 업로드</label><input id="editImageFile" type="file" accept="image/*">
+            <label>이미지 URL</label><input id="editImage" value="${data.image || ''}">
 
-      <div class="edit-stats-inline">
-        <label>근력</label><input id="editStr" value="${data.str || 0}">
-        <label>건강</label><input id="editVit" value="${data.vit || 0}">
-        <label>민첩</label><input id="editAgi" value="${data.agi || 0}">
-        <label>정신력</label><input id="editWil" value="${data.wil || 0}">
-      </div>
-
-      <button id="saveStaffInline">저장</button>
-    </div>
-  `;
-
-  // 2. HTML이 생성된 '직후'에 이벤트를 연결해야 함 (함수 내부)
-  document.getElementById("saveStaffInline").onclick = async () => {
-    let finalImg = document.getElementById("editImage").value;
-    const file = document.getElementById("editImageFile").files[0];
-
-    if (file) {
-      // 이미지 업로드 함수 호출 (uploadStaffImage가 정의되어 있어야 함)
-      finalImg = await uploadStaffImage(file, docId);
-    }
-
-    const newData = {
-      name: document.getElementById("editName").value,
-      gender: document.getElementById("editGender").value,
-      age: document.getElementById("editAge").value,
-      body: document.getElementById("editBody").value,
-      nation: document.getElementById("editNation").value,
-      note: document.getElementById("editNote").value,
-      image: finalImg,
-      str: Number(document.getElementById("editStr").value),
-      vit: Number(document.getElementById("editVit").value),
-      agi: Number(document.getElementById("editAgi").value),
-      wil: Number(document.getElementById("editWil").value),
-      updatedAt: serverTimestamp()
-    };
-
-    await updateDoc(doc(db, "staff", docId), newData);
-
-    // 화면 갱신
-    openProfileModal(docId, { ...data, ...newData });
-    renderStaff();
-    editArea.innerHTML = ''; // 편집 영역 초기화
-  };
-}
-
-
-// --- Map Functionality ---
-
-// [수정] 정의되지 않은 함수 추가 (빈 함수)
-async function openMapInlineEdit(mapId, data) {
-    const cardInner = document.querySelector(`.map-card-inner[data-id="${mapId}"]`);
-    if (!cardInner) return;
-
-    // 기존 내용을 숨기고 편집 폼 렌더링
-    const originalContent = cardInner.innerHTML;
-    
-    // 이미지 URL과 위험도를 미리 변수에 저장
-    const currentImage = data.image || '';
-    const currentDanger = data.danger || 1;
-    const currentTypes = Array.isArray(data.types) ? data.types.join(', ') : (data.types || '');
-
-    // 맵 편집 폼 HTML 렌더링 (이 부분은 원본과 동일)
-    cardInner.innerHTML = `
-        <div class="map-edit-form">
-            <h4>맵 편집 (ID: ${mapId})</h4>
-            <div class="map-card-inner map-edit-layout">
-                <div class="map-media">
-                    <img class="map-img map-img-preview" src="${currentImage}" alt="맵 이미지 미리보기">
-                    <div style="margin-top: 10px;">
-                        <label class="muted" style="display:block; margin-bottom: 5px; font-size:13px;">이미지 URL</label>
-                        <input id="editMapImage" value="${currentImage}" placeholder="이미지 URL">
-                    </div>
-                    <div style="margin-top: 10px;">
-                        <label class="muted" style="display:block; margin-bottom: 5px; font-size:13px;">이미지 파일 업로드</label>
-                        <input id="editMapImageFile" type="file" accept="image/*">
-                    </div>
-                </div>
+            <div class="edit-stats-inline">
+                <label>근력</label><input id="editMuscle" value="${data.muscle || 0}">
+                <label>민첩</label><input id="editAgility" value="${data.agility || 0}">
+                <label>지구력</label><input id="editEndurance" value="${data.endurance || 0}">
+                <label>유연성</label><input id="editFlexibility" value="${data.flexibility || 0}">
+                <label>시각</label><input id="editVisual" value="${data.visual || 0}">
+                <label>청각</label><input id="editAuditory" value="${data.auditory || 0}">
+                <label>상황 인지 능력</label><input id="editSituation" value="${data.situation || 0}">
+                <label>반응속도</label><input id="editReaction" value="${data.reaction || 0}">
                 
-                <div class="map-main">
-                    <div class="map-head" style="flex-direction: column; align-items: flex-start;">
-                        <label class="muted">이름</label>
-                        <input id="editMapName" class="form-control-inline" value="${data.name || ''}" style="font-size: 1.2em; font-weight: bold; color: var(--accent); margin-bottom: 10px;">
-                        
-                        <div class="map-meta" style="text-align: left; width: 100%;">
-                            <label class="muted" style="display:block;">위험도 (1~5)</label>
-                            <input id="editMapDanger" type="number" min="1" max="5" value="${currentDanger}" class="form-control-inline" style="width: 50px;">
-                            <span class="muted" id="dangerStars"></span>
-                        </div>
-                        
-                        <div class="map-meta" style="text-align: left; width: 100%; margin-top: 10px;">
-                            <label class="muted" style="display:block;">출현 타입 (쉼표 구분)</label>
-                            <input id="editMapTypes" class="form-control-inline" value="${currentTypes}" placeholder="예: 불, 물, 풀">
-                        </div>
-                    </div>
-
-                    <div style="margin-top: 20px;">
-                        <label class="muted">설명</label>
-                        <textarea id="editMapDesc" rows="6" class="form-control-inline" style="width: 100%; height: auto; min-height: 120px; resize: vertical; margin-top: 5px;">${data.description || ''}</textarea>
-                    </div>
-
-                    <div style="margin-top: 25px; display: flex; gap: 10px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 15px;">
-                        <button id="saveMapInline" class="btn primary">저장</button>
-                        <button id="cancelMapInline" class="btn link">취소</button>
-                        <button id="deleteMapInline" class="btn danger" style="margin-left: auto;">맵 삭제</button>
-                    </div>
-                </div>
+                <label>지능</label><input id="editIntellect" value="${data.intellect || 0}">
+                <label>판단력</label><input id="editJudgment" value="${data.judgment || 0}">
+                <label>기억력</label><input id="editMemory" value="${data.memory || 0}">
+                <label>정신력</label><input id="editSpirit" value="${data.spirit || 0}">
+                <label>의사 결정 능력</label><input id="editDecision" value="${data.decision || 0}">
+                <label>스트레스 내성</label><input id="editStress" value="${data.stress || 0}">
             </div>
+
+            <button id="saveStaffInline">저장</button>
         </div>
     `;
 
-    // ✅ [수정] 유틸리티 함수: 위험도 별 표시를 cardInner 기준으로 다시 정의
-    const updateDangerStars = (value) => {
-        // cardInner 내부에서 #dangerStars를 찾도록 수정
-        const starsEl = cardInner.querySelector("#dangerStars"); 
-        if (starsEl) {
-            const danger = Math.min(5, Math.max(1, Number(value) || 1));
-            starsEl.textContent = '★'.repeat(danger) + '☆'.repeat(5 - danger);
-        }
-    };
+    // 2. 저장 버튼 이벤트
+    document.getElementById("saveStaffInline").onclick = async () => {
+        let finalImg = document.getElementById("editImage").value;
+        const file = document.getElementById("editImageFile").files[0];
 
-    // 초기 별 표시
-    updateDangerStars(currentDanger);
-
-    // 이벤트 리스너: 이미지 미리보기 및 위험도 별표 업데이트 (나머지 로직은 원본과 동일)
-    const imgPreviewEl = cardInner.querySelector('.map-img-preview');
-    const imgUrlInput = document.getElementById("editMapImage");
-    const imgFileInput = document.getElementById("editMapImageFile");
-    const dangerInput = document.getElementById("editMapDanger");
-
-    // 1. URL 입력 시 미리보기 업데이트
-    imgUrlInput.addEventListener('input', () => {
-        imgPreviewEl.src = imgUrlInput.value;
-        imgFileInput.value = ''; // URL 입력 시 파일 입력 비활성화/초기화
-    });
-
-    // 2. 파일 선택 시 미리보기 업데이트
-    imgFileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
         if (file) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                imgPreviewEl.src = e.target.result;
-            };
-            reader.readAsDataURL(file);
-            imgUrlInput.value = ''; // 파일 입력 시 URL 입력 비활성화/초기화
-        } else if (!imgUrlInput.value) {
-            imgPreviewEl.src = ''; // 파일이 없고 URL도 없으면 미리보기 비우기
+            // 이미지 업로드 함수 호출 (uploadStaffImage가 정의되어 있어야 함)
+            finalImg = await uploadStaffImage(file, docId);
         }
-    });
-    
-    // 3. 위험도 입력 시 별표 업데이트
-    dangerInput.addEventListener('input', (e) => {
-        updateDangerStars(e.target.value);
-    });
-
-    // 저장 로직 (원본과 동일)
-    document.getElementById("saveMapInline").onclick = async () => {
-        let finalImg = document.getElementById("editMapImage").value;
-        const file = document.getElementById("editMapImageFile").files[0];
-
-        try {
-            if (file) {
-                finalImg = await uploadMapImage(file, mapId);
-            }
-
-            const typesArray = document.getElementById("editMapTypes").value.split(',').map(t => t.trim()).filter(t => t);
-
-            const newData = {
-                name: document.getElementById("editMapName").value,
-                danger: Number(document.getElementById("editMapDanger").value),
-                types: typesArray,
-                description: document.getElementById("editMapDesc").value,
-                image: finalImg,
-                updatedAt: serverTimestamp()
-            };
-
-            await updateDoc(doc(db, "maps", mapId), newData);
-            showMessage('맵 정보 저장 완료', 'info');
-            renderMap(); // 맵 목록 새로고침
-        } catch(e) {
-            console.error(e);
-            showMessage('맵 정보 저장 실패', 'error');
-        }
-    };
-
-    // 취소 로직 (원본과 동일)
-    document.getElementById("cancelMapInline").onclick = () => {
-        cardInner.innerHTML = originalContent; // 원래 내용으로 복구
-        renderMap();
-    };
-    
-    // 삭제 로직 (원본과 동일)
-    document.getElementById("deleteMapInline").onclick = async () => {
-        if (await showConfirm(`정말로 맵 '${data.name}'을 삭제하시겠습니까? (복구 불가)`)) {
-            try {
-                await deleteDoc(doc(db, "maps", mapId));
-                showMessage('맵 삭제 완료', 'info');
-                renderMap();
-            } catch(e) {
-                console.error(e);
-                showMessage('맵 삭제 실패', 'error');
-            }
-        }
-    };
-}
-
-// 초기 별 표시
-updateDangerStars(currentDanger);
-
-// 이벤트 리스너: 이미지 미리보기 및 위험도 별표 업데이트
-const imgPreviewEl = cardInner.querySelector('.map-img-preview');
-const imgUrlInput = document.getElementById("editMapImage");
-const imgFileInput = document.getElementById("editMapImageFile");
-const dangerInput = document.getElementById("editMapDanger");
-
-// 1. URL 입력 시 미리보기 업데이트
-imgUrlInput.addEventListener('input', () => {
-    imgPreviewEl.src = imgUrlInput.value;
-    imgFileInput.value = ''; // URL 입력 시 파일 입력 비활성화/초기화
-});
-
-// 2. 파일 선택 시 미리보기 업데이트
-imgFileInput.addEventListener('change', (e) => {
-    const file = e.target.files[0];
-    if (file) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            imgPreviewEl.src = e.target.result;
-        };
-        reader.readAsDataURL(file);
-        imgUrlInput.value = ''; // 파일 입력 시 URL 입력 비활성화/초기화
-    } else if (!imgUrlInput.value) {
-          imgPreviewEl.src = ''; // 파일이 없고 URL도 없으면 미리보기 비우기
-    }
-});
-
-// 3. 위험도 입력 시 별표 업데이트
-dangerInput.addEventListener('input', (e) => {
-    updateDangerStars(e.target.value);
-});
-
-// 저장 로직 (기존과 동일)
-document.getElementById("saveMapInline").onclick = async () => {
-    let finalImg = document.getElementById("editMapImage").value;
-    const file = document.getElementById("editMapImageFile").files[0];
-
-    try {
-        if (file) {
-            finalImg = await uploadMapImage(file, mapId);
-        }
-
-        const typesArray = document.getElementById("editMapTypes").value.split(',').map(t => t.trim()).filter(t => t);
 
         const newData = {
-            name: document.getElementById("editMapName").value,
-            danger: Number(document.getElementById("editMapDanger").value),
-            types: typesArray,
-            description: document.getElementById("editMapDesc").value,
+            name: document.getElementById("editName").value,
+            gender: document.getElementById("editGender").value,
+            age: document.getElementById("editAge").value,
+            height: document.getElementById("editHeight").value,
+            nationality: document.getElementById("editNationality").value,
             image: finalImg,
+            muscle: Number(document.getElementById("editMuscle").value),
+            agility: Number(document.getElementById("editAgility").value),
+            endurance: Number(document.getElementById("editEndurance").value),
+            flexibility: Number(document.getElementById("editFlexibility").value),
+            visual: Number(document.getElementById("editVisual").value),
+            auditory: Number(document.getElementById("editAuditory").value),
+            situation: Number(document.getElementById("editSituation").value),
+            reaction: Number(document.getElementById("editReaction").value),
+            intellect: Number(document.getElementById("editIntellect").value),
+            judgment: Number(document.getElementById("editJudgment").value),
+            memory: Number(document.getElementById("editMemory").value),
+            spirit: Number(document.getElementById("editSpirit").value),
+            decision: Number(document.getElementById("editDecision").value),
+            stress: Number(document.getElementById("editStress").value),
             updatedAt: serverTimestamp()
         };
 
-        await updateDoc(doc(db, "maps", mapId), newData);
-        showMessage('맵 정보 저장 완료', 'info');
-        renderMap(); // 맵 목록 새로고침
-    } catch(e) {
-        console.error(e);
-        showMessage('맵 정보 저장 실패', 'error');
-    }
-};
+        await updateDoc(doc(db, "staff", docId), newData);
 
-// 취소 로직 (기존과 동일)
-document.getElementById("cancelMapInline").onclick = () => {
-    cardInner.innerHTML = originalContent; // 원래 내용으로 복구
-    renderMap();
-};
+        // 화면 갱신
+        openProfileModal(docId, { ...data, ...newData });
+        renderStaff();
+        editArea.innerHTML = ''; // 편집 영역 초기화
+    };
+}
 
-// 삭제 로직 (기존과 동일)
-document.getElementById("deleteMapInline").onclick = async () => {
-    if (await showConfirm(`정말로 맵 '${data.name}'을 삭제하시겠습니까? (복구 불가)`)) {
-        try {
-            await deleteDoc(doc(db, "maps", mapId));
-            showMessage('맵 삭제 완료', 'info');
-            renderMap();
-        } catch(e) {
-            console.error(e);
-            showMessage('맵 삭제 실패', 'error');
-        }
-    }
-};
+/* =========================================================
+   맵
+========================================================= */
 
+// 일단 맵을 열 게 한 다
 async function renderMap() {
     contentEl.innerHTML = '<div class="card muted">맵 로딩중...</div>';
     try {
         const snap = await getDocs(collection(db, 'maps'));
         contentEl.innerHTML = '';
         
-        // 맵 추가 버튼 (관리자용)
         if (await isAdminUser()) {
             const addBtn = document.createElement('button');
             addBtn.className = 'btn';
@@ -1249,21 +1351,359 @@ async function renderMap() {
     }
 }
 
+// 맵 렌더링
+async function renderMapCard(mapDoc) {
+    const mapId = mapDoc.id;
+    const data = mapDoc.data ? mapDoc.data() : mapDoc;
+
+    const img = data.image || DEFAULT_MAP_IMAGE;
+    const name = data.name || '이름 없음';
+    const danger = data.danger || 1;
+    const types = Array.isArray(data.types) ? data.types.join(', ') : (data.types || '');
+
+    const el = document.createElement('div');
+    el.className = 'map-card card';
+    el.style.transition = 'transform 0.2s';
+    el.onmouseenter = () => el.style.transform = 'scale(1.03)';
+    el.onmouseleave = () => el.style.transform = 'scale(1)';
+
+    // 탭 메뉴에서 미리보기용 카드
+    el.innerHTML = `
+        <div class="map-card-inner" data-id="${mapId}">
+            <div class="map-media"><img class="map-img" src="${img}" alt="${name}"></div>
+            <div class="map-main">
+                <h3 class="map-name">${name}</h3>
+                <div class="map-meta">
+                    <div class="map-danger">${renderDangerStars(danger)}</div>
+                    <div class="map-types">출현: ${types}</div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // 클릭하면 팝업 열기
+    el.onclick = () => openMapPopup(mapId, data);
+
+    return el;
+}
+
+// 팝업 렌더링
+async function openMapPopup(mapId, data) {
+    const modal = document.createElement('div');
+    modal.className = 'map-popup';
+    document.body.appendChild(modal);
+
+    modal.innerHTML = `
+        <div class="popup-top">
+            <img src="${data.image}" class="map-popup-img">
+            <h2>${data.name}</h2>
+            <p>${data.description}</p>
+            <div class="map-meta">
+                <div class="map-danger">${renderDangerStars(danger)}</div>
+                <div class="map-types">출현: ${Array.isArray(data.types)?data.types.join(', '):data.types||''}</div>
+            </div>
+        </div>
+        <div class="popup-bottom">
+            <div class="map-left-grid"></div>
+            <div class="map-right-teams"></div>
+        </div>
+        <div class="popup-comments-area"></div>
+    `;
+
+    (async () => {
+        if (await isAdminUser()) {
+            const popupTop = modal.querySelector('.popup-top');
+            const editBtn = document.createElement('button');
+            editBtn.textContent = '편집';
+            editBtn.className = 'btn';
+            editBtn.style.marginLeft = '10px';
+            editBtn.onclick = (e) => {
+                e.stopPropagation(); // 클릭이 카드 전체 클릭 이벤트에 걸리지 않도록
+                openMapInlineEdit(mapId, data);
+            };
+            popupTop.appendChild(editBtn);
+        }
+    })();
+
+    const gridContainer = modal.querySelector('.map-left-grid');
+    const teamsContainer = modal.querySelector('.map-right-teams');
+    const commentsArea = modal.querySelector('.popup-comments-area');
+
+    // 격자 생성
+    const rows = data.grid?.rows || 8;
+    const cols = data.grid?.cols || 8;
+    gridContainer.style.display = 'grid';
+    gridContainer.style.gridTemplateRows = `repeat(${rows}, 40px)`;
+    gridContainer.style.gridTemplateColumns = `repeat(${cols}, 40px)`;
+    for(let y=0; y<rows; y++){
+        for(let x=0; x<cols; x++){
+            const cell = document.createElement('div');
+            cell.className = 'grid-cell';
+            cell.dataset.x = x;
+            cell.dataset.y = y;
+            cell.style.border = '1px solid #888';
+            cell.style.position = 'relative';
+            gridContainer.appendChild(cell);
+        }
+    }
+
+    // 탐사팀 목록
+    const visits = data.visits || [];
+    const sortedVisits = visits.sort((a,b)=>b.timestamp-a.timestamp);
+    const recentVisits = sortedVisits.slice(0,5);
+    for(const v of recentVisits){
+        const teamEl = document.createElement('div');
+        teamEl.textContent = v.teamName;
+        teamEl.style.color = v.colorHex || '#fff';
+        teamEl.className = 'explore-team';
+        teamsContainer.appendChild(teamEl);
+
+        // 클릭 시 탐사원/결과 표시 + 선 애니메이션
+        teamEl.onclick = () => showTeamVisit(v, gridContainer);
+    }
+
+    // 더보기 버튼
+    if(visits.length > 5){
+        const moreBtn = document.createElement('button');
+        moreBtn.textContent = '더보기';
+        moreBtn.className = 'link';
+        moreBtn.onclick = () => {
+            teamsContainer.innerHTML = '';
+            for(const v of sortedVisits){
+                const teamEl = document.createElement('div');
+                teamEl.textContent = v.teamName;
+                teamEl.style.color = v.colorHex || '#fff';
+                teamEl.className = 'explore-team';
+                teamEl.onclick = () => showTeamVisit(v, gridContainer);
+                teamsContainer.appendChild(teamEl);
+            }
+        };
+        teamsContainer.appendChild(moreBtn);
+    }
+
+    // 댓글 단락
+    const commentCard = renderCommentCard({ id: mapId, dbCollection:'maps' });
+    commentsArea.appendChild(commentCard);
+}
+
+// 탐사팀 클릭 시 격자 경로 표시 + 말풍선
+function showTeamVisit(visit, gridContainer){
+    const path = visit.path || [];
+    const members = visit.members || [];
+
+    // 먼저 모든 이전 선 제거 (필요 시)
+    gridContainer.querySelectorAll('.visit-line').forEach(l=>l.remove());
+    gridContainer.querySelectorAll('.visit-bubble').forEach(b=>b.remove());
+
+    path.forEach((p, i)=>{
+        const cell = gridContainer.querySelector(`.grid-cell[data-x='${p.x}'][data-y='${p.y}']`);
+        if(!cell) return;
+
+        // 경로 선
+        if(i>0){
+            const prev = path[i-1];
+            const line = document.createElement('div');
+            line.className = 'visit-line';
+            line.style.position='absolute';
+            line.style.height='2px';
+            line.style.background='#0f0';
+            line.style.left='50%';
+            line.style.top='50%';
+            line.style.transformOrigin='0 0';
+            // 위치/길이/각도 계산
+            const dx = (p.x - prev.x)*40;
+            const dy = (p.y - prev.y)*40;
+            const length = Math.sqrt(dx*dx+dy*dy);
+            const angle = Math.atan2(dy, dx)*180/Math.PI;
+            line.style.width = `${length}px`;
+            line.style.transform = `translate(-50%, -50%) rotate(${angle}deg)`;
+            line.style.transition='width 0.5s linear';
+            cell.appendChild(line);
+        }
+
+        // 특수 상황 말풍선 (사망, 실종, 오염 등)
+        const events = members.filter(m=>['dead','missing','contaminated'].includes(m.status));
+        events.forEach(m=>{
+            const bubble = document.createElement('div');
+            bubble.className='visit-bubble';
+            bubble.textContent = `${m.name} ${statusText(m.status)}`;
+            bubble.style.position='absolute';
+            bubble.style.top='-20px';
+            bubble.style.left='50%';
+            bubble.style.transform='translateX(-50%)';
+            bubble.style.background='rgba(255,0,0,0.8)';
+            bubble.style.color='#fff';
+            bubble.style.padding='2px 4px';
+            bubble.style.borderRadius='4px';
+            cell.appendChild(bubble);
+        });
+    });
+}
+
+// 상태 텍스트 변환
+function statusText(status){
+    switch(status){
+        case 'dead': return '사망';
+        case 'missing': return '실종';
+        case 'contaminated': return '오염';
+        case 'aborted': return '귀환 불가';
+        case 'completed': return '탐사 종료';
+        default: return '';
+    }
+}
+
+async function openMapInlineEdit(mapId, data) {
+    const cardInner = document.querySelector(`.map-card-inner[data-id="${mapId}"]`);
+    if (!cardInner) return;
+
+    const originalContent = cardInner.innerHTML;
+
+    const currentImage = data.image || '';
+    const currentDanger = data.danger || 1;
+    const currentTypes = Array.isArray(data.types) ? data.types.join(', ') : (data.types || '');
+
+    cardInner.innerHTML = `
+        <div class="map-edit-form">
+            <div class="map-card-inner map-edit-layout">
+                <div class="map-media">
+                    <img class="map-img map-img-preview" src="${currentImage}" alt="맵 이미지">
+                    <div style="margin-top:10px;">
+                        <label class="muted">이미지 URL</label>
+                        <input id="editMapImage" value="${currentImage}" placeholder="이미지 URL">
+                    </div>
+                    <div style="margin-top:10px;">
+                        <label class="muted">이미지 파일 업로드</label>
+                        <input id="editMapImageFile" type="file" accept="image/*">
+                    </div>
+                </div>
+                <div class="map-main">
+                    <div class="map-head" style="flex-direction: column; align-items: flex-start;">
+                        <label class="muted">이름</label>
+                        <input id="editMapName" class="form-control-inline" value="${data.name || ''}">
+                        
+                        <div class="map-meta" style="margin-top:10px;">
+                            <label class="muted">위험도 (1~5)</label>
+                            <input id="editMapDanger" type="number" min="1" max="5" value="${currentDanger}" style="width:50px;">
+                            <span id="dangerStars" class="muted"></span>
+                        </div>
+
+                        <div class="map-meta" style="margin-top:10px;">
+                            <label class="muted">출현 타입 (쉼표 구분)</label>
+                            <input id="editMapTypes" value="${currentTypes}" placeholder="예: 불, 물, 풀">
+                        </div>
+                    </div>
+
+                    <div style="margin-top:20px;">
+                        <label class="muted">설명</label>
+                        <textarea id="editMapDesc" rows="6" style="width:100%;">${data.description || ''}</textarea>
+                    </div>
+
+                    <div style="margin-top:15px; display:flex; gap:10px; border-top:1px solid rgba(255,255,255,0.05); padding-top:10px;">
+                        <button id="saveMapInline" class="btn primary">저장</button>
+                        <button id="cancelMapInline" class="btn link">취소</button>
+                        <button id="deleteMapInline" class="btn danger" style="margin-left:auto;">삭제</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    const updateDangerStars = (value) => {
+        const starsEl = cardInner.querySelector("#dangerStars");
+        if (!starsEl) return;
+        const danger = Math.min(5, Math.max(1, Number(value) || 1));
+        starsEl.textContent = renderDangerStars(danger);
+    };
+    updateDangerStars(currentDanger);
+
+    const imgPreview = cardInner.querySelector('.map-img-preview');
+    const imgUrlInput = document.getElementById("editMapImage");
+    const imgFileInput = document.getElementById("editMapImageFile");
+    const dangerInput = document.getElementById("editMapDanger");
+    const nameInput = document.getElementById("editMapName");
+    const typesInput = document.getElementById("editMapTypes");
+    const descInput = document.getElementById("editMapDesc");
+
+    const collectFormData = async () => {
+        let finalImg = imgUrlInput.value;
+        const file = imgFileInput.files[0];
+        if (file) finalImg = await uploadMapImage(file, mapId);
+        return {
+            name: nameInput.value,
+            danger: Number(dangerInput.value),
+            types: typesInput.value.split(',').map(t => t.trim()).filter(t => t),
+            description: descInput.value,
+            image: finalImg,
+            updatedAt: serverTimestamp()
+        };
+    };
+
+    const saveData = async () => {
+        try {
+            const newData = await collectFormData();
+            await updateDoc(doc(db, "maps", mapId), newData);
+            updateDangerStars(newData.danger);
+        } catch(e) {
+            console.error(e);
+            showMessage('자동 저장 실패', 'error');
+        }
+    };
+
+    // 이벤트: 입력 시 자동 저장 (1초 딜레이)
+    let saveTimeout;
+    const autoSaveHandler = () => {
+        clearTimeout(saveTimeout);
+        saveTimeout = setTimeout(saveData, 1000);
+    };
+
+    [imgUrlInput, imgFileInput, dangerInput, nameInput, typesInput, descInput].forEach(el => {
+        el.addEventListener('input', autoSaveHandler);
+        el.addEventListener('change', autoSaveHandler);
+    });
+
+    // 이미지 미리보기
+    imgUrlInput.addEventListener('input', () => { imgPreview.src = imgUrlInput.value; imgFileInput.value = ''; });
+    imgFileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (ev) => imgPreview.src = ev.target.result;
+            reader.readAsDataURL(file);
+            imgUrlInput.value = '';
+        } else if (!imgUrlInput.value) imgPreview.src = '';
+    });
+
+    dangerInput.addEventListener('input', (e) => updateDangerStars(e.target.value));
+
+    document.getElementById("saveMapInline").onclick = async () => { await saveData(); renderMap(); };
+    document.getElementById("cancelMapInline").onclick = () => { cardInner.innerHTML = originalContent; renderMap(); };
+    document.getElementById("deleteMapInline").onclick = async () => {
+        if (await showConfirm(`정말로 맵 '${data.name}'을 삭제하시겠습니까?`)) {
+            try { await deleteDoc(doc(db, "maps", mapId)); showMessage('맵 삭제 완료', 'info'); renderMap(); }
+            catch(e){ console.error(e); showMessage('맵 삭제 실패', 'error'); }
+        }
+    };
+
+    // 페이지 벗어날 때 자동 저장
+    window.addEventListener('beforeunload', saveData);
+}
+
 async function openNewMapInlineEdit() {
     const tempId = 'new_map_' + Date.now();
     const tempEl = document.createElement('div');
-    // ... (임시 카드 생성 및 삽입 로직은 원본과 동일) ...
     tempEl.className = 'map-card card';
     tempEl.id = tempId;
     tempEl.style.marginBottom = '20px';
-    
-    // 임시 카드를 최상단 맵 추가 버튼 바로 아래에 삽입
+
+    // 맵 추가 버튼 바로 아래에 삽입
     const mapAddBtn = contentEl.querySelector('.btn');
     contentEl.insertBefore(tempEl, mapAddBtn.nextSibling);
 
-    const defaultImage = ''; // 새 맵은 기본 이미지 없음
+    // 초기값
+    const defaultImage = '';
+    const defaultDanger = 1;
 
-    // 편집 폼 렌더링 (이 부분은 원본과 동일)
+    // 편집 폼 렌더링
     tempEl.innerHTML = `
         <div class="map-card-inner" data-id="new">
             <div class="map-edit-form">
@@ -1284,12 +1724,12 @@ async function openNewMapInlineEdit() {
                     <div class="map-main">
                         <div class="map-head" style="flex-direction: column; align-items: flex-start;">
                             <label class="muted">이름</label>
-                            <input id="newMapName" class="form-control-inline" value="" placeholder="맵 이름" style="font-size: 1.2em; font-weight: bold; color: var(--accent); margin-bottom: 10px;">
+                            <input id="newMapName" class="form-control-inline" placeholder="맵 이름" style="font-size: 1.2em; font-weight: bold; color: var(--accent); margin-bottom: 10px;">
                             
                             <div class="map-meta" style="text-align: left; width: 100%;">
                                 <label class="muted" style="display:block;">위험도 (1~5)</label>
-                                <input id="newMapDanger" type="number" min="1" max="5" value="1" class="form-control-inline" style="width: 50px;">
-                                <span class="muted" id="dangerStars"></span>
+                                <input id="newMapDanger" type="number" min="1" max="5" value="${defaultDanger}" class="form-control-inline" style="width: 50px;">
+                                <span class="muted" id="dangerStars">${renderDangerStars(defaultDanger)}</span>
                             </div>
                             
                             <div class="map-meta" style="text-align: left; width: 100%; margin-top: 10px;">
@@ -1311,917 +1751,238 @@ async function openNewMapInlineEdit() {
                 </div>
             </div>
         </div>
-      `;
-    
-    // ✅ [수정] 유틸리티 함수: 위험도 별 표시
-    const updateDangerStars = (value) => {
-        // tempEl 내부에서 #dangerStars를 찾도록 수정 (원래 의도대로)
-        const starsEl = tempEl.querySelector("#dangerStars");
-        if (starsEl) {
-            const danger = Math.min(5, Math.max(1, Number(value) || 1));
-            starsEl.textContent = '★'.repeat(danger) + '☆'.repeat(5 - danger);
-        }
-    };
-    updateDangerStars(1); // 초기 별 표시
+    `;
 
-    // 이벤트 리스너: 이미지 미리보기 및 위험도 별표 업데이트 (나머지 로직은 원본과 동일)
     const imgPreviewEl = tempEl.querySelector('.map-img-preview');
-    const imgUrlInput = document.getElementById("newMapImage");
-    const imgFileInput = document.getElementById("newMapImageFile");
-    const dangerInput = document.getElementById("newMapDanger");
+    const imgUrlInput = tempEl.querySelector('#newMapImage');
+    const imgFileInput = tempEl.querySelector('#newMapImageFile');
+    const dangerInput = tempEl.querySelector('#newMapDanger');
 
-    // 1. URL 입력 시 미리보기 업데이트
-    imgUrlInput.addEventListener('input', () => {
-        imgPreviewEl.src = imgUrlInput.value;
-        imgFileInput.value = ''; // URL 입력 시 파일 입력 비활성화/초기화
-    });
+    // ✅ 이미지 미리보기 & 위험도 별표 업데이트
+    const updatePreviewAndStars = () => {
+        // 별표
+        dangerInput.addEventListener('input', e => {
+            const starsEl = tempEl.querySelector('#dangerStars');
+            if (starsEl) starsEl.textContent = renderDangerStars(Number(e.target.value) || 1);
+        });
 
-    // 2. 파일 선택 시 미리보기 업데이트
-    imgFileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = (e) => {
-                imgPreviewEl.src = e.target.result;
-            };
-            reader.readAsDataURL(file);
-            imgUrlInput.value = ''; // 파일 입력 시 URL 입력 비활성화/초기화
-        } else if (!imgUrlInput.value) {
-            imgPreviewEl.src = ''; // 파일이 없고 URL도 없으면 미리보기 비우기
-        }
-    });
-    
-    // 3. 위험도 입력 시 별표 업데이트
-    dangerInput.addEventListener('input', (e) => {
-        updateDangerStars(e.target.value);
-    });
+        // URL 입력
+        imgUrlInput.addEventListener('input', () => {
+            imgPreviewEl.src = imgUrlInput.value;
+            imgFileInput.value = '';
+        });
 
-    // 저장 로직 (원본과 동일)
-    document.getElementById("saveNewMapInline").onclick = async () => {
-        let finalImg = document.getElementById("newMapImage").value;
-        const file = document.getElementById("newMapImageFile").files[0];
+        // 파일 선택
+        imgFileInput.addEventListener('change', e => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = e => imgPreviewEl.src = e.target.result;
+                reader.readAsDataURL(file);
+                imgUrlInput.value = '';
+            } else if (!imgUrlInput.value) imgPreviewEl.src = '';
+        });
+    };
+    updatePreviewAndStars();
 
-        if (!document.getElementById("newMapName").value) {
+    // 저장
+    tempEl.querySelector('#saveNewMapInline').onclick = async () => {
+        if (!tempEl.querySelector('#newMapName').value) {
             showMessage('맵 이름을 입력해주세요.', 'error');
             return;
         }
 
         try {
-            // 새 문서 ID를 미리 생성하여 이미지 업로드에 사용
             const newDocRef = doc(collection(db, "maps"));
             const newMapId = newDocRef.id;
+            let finalImg = imgUrlInput.value;
+            const file = imgFileInput.files[0];
+            if (file) finalImg = await uploadMapImage(file, newMapId);
 
-            if (file) {
-                finalImg = await uploadMapImage(file, newMapId);
-            }
+            const typesArray = tempEl.querySelector('#newMapTypes').value.split(',').map(t => t.trim()).filter(t => t);
 
-            const typesArray = document.getElementById("newMapTypes").value.split(',').map(t => t.trim()).filter(t => t);
-
-            const newData = {
-                name: document.getElementById("newMapName").value,
-                danger: Number(document.getElementById("newMapDanger").value),
+            await setDoc(newDocRef, {
+                name: tempEl.querySelector('#newMapName').value,
+                danger: Number(dangerInput.value),
                 types: typesArray,
-                description: document.getElementById("newMapDesc").value,
+                description: tempEl.querySelector('#newMapDesc').value,
                 image: finalImg,
                 createdAt: serverTimestamp()
-            };
+            });
 
-            await setDoc(newDocRef, newData);
             showMessage('새 맵 생성 완료', 'info');
-            renderMap(); // 맵 목록 새로고침
+            renderMap();
         } catch(e) {
             console.error(e);
             showMessage('새 맵 생성 실패', 'error');
         }
     };
-    
-    // 취소 로직 (원본과 동일)
-    document.getElementById("cancelNewMapInline").onclick = () => {
-        tempEl.remove();
-    };
+
+    // 취소
+    tempEl.querySelector('#cancelNewMapInline').onclick = () => tempEl.remove();
 }
 
-function showMessage(msg, type='info') {
-    const el = document.createElement('div');
-    el.className = `in-browser-msg ${type}`;
-    el.textContent = msg;
-    Object.assign(el.style, {
-        position:'fixed', top:'20px', left:'50%', transform:'translateX(-50%)',
-        background:'#222', color:'#fff', padding:'10px 20px', borderRadius:'6px',
-        zIndex:9999, boxShadow:'0 2px 6px rgba(0,0,0,0.4)'
-    });
-    document.body.appendChild(el);
-    setTimeout(() => el.remove(), 2500);
-}
+/* =========================================================
+   도감
+========================================================= */
 
-function showConfirm(msg) {
-    return new Promise(resolve => {
-        const confirmDiv = document.createElement('div');
-        confirmDiv.className = 'fullscreen confirm-popup';
-        confirmDiv.innerHTML = `
-        <div class="card" style="max-width:400px; width:90%; padding:20px; display:flex; flex-direction:column; gap:12px; text-align:center;">
-            <div>${msg}</div>
-            <div style="display:flex; justify-content:center; gap:12px;">
-            <button class="btn confirm-yes">확인</button>
-            <button class="btn confirm-no">취소</button>
-            </div>
-        </div>
-        `;
-        document.body.appendChild(confirmDiv);
-        confirmDiv.querySelector('.confirm-yes').onclick = () => { resolve(true); confirmDiv.remove(); };
-        confirmDiv.querySelector('.confirm-no').onclick = () => { resolve(false); confirmDiv.remove(); };
-    });
-}
-
-// [개선된 uploadMapImage 함수 (mapId가 고유 ID임을 가정)]
-async function uploadMapImage(file, mapId) {
-    if (!mapId) throw new Error("맵 ID가 없어 이미지를 저장할 수 없습니다.");
-    
-    // 파일 확장자 추출 (예: png, jpg)
-    const extension = file.name.split('.').pop(); 
-    
-    // 경로: maps/[mapId]/background.[확장자]
-    // 이렇게 하면 한 맵당 하나의 이미지 경로만 유지할 수 있어 관리하기 용이합니다.
-    const storageRef = ref(storage, `maps/${mapId}/background.${extension}`); 
-    
-    try {
-        await uploadBytes(storageRef, file);
-        return await getDownloadURL(storageRef);
-    } catch(e) {
-        console.error("맵 이미지 업로드 실패:", e);
-        throw e;
-    }
-}
-
-function renderMapCard(mapDoc) {
-    const mapId = mapDoc.id;
-    const data = mapDoc.data ? mapDoc.data() : mapDoc;
-    const img = data.image || DEFAULT_MAP_IMAGE;
-    const name = data.name || '이름 없음';
-    const desc = data.description || '';
-    const danger = data.danger || 1;
-    const types = Array.isArray(data.types) ? data.types.join(', ') : (data.types || '');
-
-    const el = document.createElement('div');
-    el.className = 'map-card card';
-    el.innerHTML = `
-        <div class="map-card-inner" data-id="${mapId}">
-        <div class="map-media"><img class="map-img" src="${img}" alt="${name}"></div>
-        <div class="map-main">
-            <div class="map-head">
-            <h3 class="map-name">${name}</h3>
-            <div class="map-meta">
-                <div class="map-danger">${'★'.repeat(danger)}${'☆'.repeat(5 - danger)}</div>
-                <div class="map-types">출현: ${types}</div>
-            </div>
-            </div>
-            <div class="map-desc">${desc}</div>
-            <div class="map-actions">
-            <button class="btn map-open-comments">댓글 보기</button>
-            <button class="btn link map-edit-btn" style="display:none">편집</button>
-            </div>
-            
-            <div class="map-comment-input-area" style="margin-top: 15px;">
-                <input type="text" id="commentInput-${mapId}" placeholder="댓글 작성 (엔터로 등록)" 
-                       style="width: 100%; padding: 8px; border-radius: 6px; background: transparent; border: 1px solid rgba(255,255,255,0.1); color: inherit;">
-            </div>
-
-            <div class="map-comments-preview">
-            <div class="comments-count muted">댓글 0개</div>
-            <div class="comments-list"></div>
-            <div class="comments-more" style="display:none">
-                <button class="link map-more-comments">더보기</button>
-            </div>
-            </div>
-        </div>
-        </div>
-    `;
-    
-    // [수정] 인라인 댓글 등록 이벤트 리스너 추가
-    const commentInput = el.querySelector(`#commentInput-${mapId}`);
-    if (commentInput) {
-        commentInput.addEventListener('keydown', e => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                const text = commentInput.value.trim();
-                if (text) {
-                    postMapComment(mapId, text, () => {
-                        commentInput.value = ''; // 성공 후 입력창 비우기
-                        // 댓글 새로고침을 위해 맵 전체를 다시 렌더링
-                        renderMap(); 
-                    });
-                }
-            }
-        });
-    }
-
-
-    el.querySelector('.map-open-comments').addEventListener('click', () => openCommentsPopup(mapId));
-    // 기존 댓글 작성 버튼(focusCommentInput) 대신 인라인 입력 필드를 사용하므로 제거
-    // el.querySelector('.map-add-comment').addEventListener('click', () => focusCommentInput(mapId)); 
-    el.querySelector('.map-more-comments').addEventListener('click', () => openCommentsPopup(mapId));
-    el.querySelector('.map-edit-btn').addEventListener('click', async () => openMapInlineEdit(mapId, data));
-
-    (async () => {
-        if (await isAdminUser()) {
-            const btn = el.querySelector('.map-edit-btn');
-            if (btn) btn.style.display = 'inline-block';
-        }
-    })();
-
-    // Preview Comments (최신 3개)
-    (async () => {
-        try {
-            const cSnap = await getDocs(collection(db, 'maps', mapId, 'comments'));
-            const arr = [];
-            cSnap.forEach(d => arr.push({ id: d.id, ...d.data() }));
-            arr.sort((a,b) => (b.createdAt?.seconds||0) - (a.createdAt?.seconds||0));
-            const preview = arr.slice(0, 3);
-            const commentsList = el.querySelector('.comments-list');
-            const commentsCount = el.querySelector('.comments-count');
-            commentsCount.textContent = `댓글 ${arr.length}개`;
-
-            if (!preview.length) commentsList.innerHTML = `<div class="muted">댓글이 없습니다.</div>`;
-            else {
-                commentsList.innerHTML = '';
-                preview.forEach(c => {
-                    const item = document.createElement('div');
-                    item.className = 'comment-item';
-                    item.innerHTML = `
-                        <div class="cm-left"><img class="cm-avatar" src="${c.photo||''}" alt=""></div>
-                        <div class="cm-right">
-                        <div class="cm-head">
-                            <strong class="cm-name">${c.name||'익명'}</strong> 
-                            <span class="muted cm-time">${fmtTime(c.createdAt)}</span>
-                        </div>
-                        <div class="cm-body">${c.text || ''}</div>
-                        <div class="cm-admin" style="margin-top:6px; display:none; gap:8px;">
-                            <button class="link cm-edit">수정</button>
-                            <button class="link cm-del">삭제</button>
-                        </div>
-                        </div>
-                    `;
-
-                    // ... (관리자 편집/삭제 로직, 세부 댓글창과 동일)
-                    (async () => {
-                        if (await isAdminUser()) {
-                            const btnWrap = item.querySelector('.cm-admin');
-                            btnWrap.style.display = 'flex';
-                            
-                            // 수정
-                            btnWrap.querySelector('.cm-edit').onclick = async () => {
-                                const newText = prompt('댓글 내용을 수정하시오.', c.text||'');
-                                if (!newText) return;
-                                try {
-                                    await updateDoc(doc(db, 'maps', mapId, 'comments', c.id), { text: newText, editedAt: serverTimestamp() });
-                                    renderMap(); // 목록 갱신
-                                    showMessage('댓글 수정 완료', 'info');
-                                } catch(e) {
-                                    console.error(e);
-                                    showMessage('댓글 수정 실패', 'error');
-                                }
-                            };
-                            
-                            // 삭제
-                            btnWrap.querySelector('.cm-del').onclick = async () => {
-                                if (await showConfirm('정말 이 댓글을 삭제하시겠습니까?')) {
-                                    try {
-                                        await deleteDoc(doc(db, 'maps', mapId, 'comments', c.id));
-                                        renderMap(); // 목록 갱신
-                                        showMessage('댓글 삭제 완료', 'info');
-                                    } catch(e) {
-                                        console.error(e);
-                                        showMessage('댓글 삭제 실패', 'error');
-                                    }
-                                }
-                            };
-                        }
-                    })();
-                    commentsList.appendChild(item);
-                });
-            }
-            const moreWrap = el.querySelector('.comments-more');
-            if (arr.length > 3 && moreWrap) moreWrap.style.display = 'block';
-        } catch(e) {
-            console.error('load comments preview err', e);
-        }
-    })();
-
-    return el;
-}
-
-/**
- * 맵 댓글 등록 함수 (콜백 추가)
- * @param {string} mapId 맵 ID
- * @param {string} text 댓글 내용
- * @param {function} onSuccess 성공 시 실행할 콜백 함수
- */
-async function postMapComment(mapId, text, onSuccess) {
-    if (!currentUser) { showMessage('로그인이 필요합니다.', 'error'); return; }
-    try {
-        const userSnap = await getDoc(doc(db, 'users', currentUser.uid));
-        const me = userSnap.exists() ? userSnap.data() : {};
-        const newRef = doc(collection(db, 'maps', mapId, 'comments'));
-        await setDoc(newRef, {
-            uid: currentUser.uid,
-            name: me.nickname || me.id || '사용자',
-            photo: me.photo||'',
-            text,
-            createdAt: serverTimestamp()
-        });
-        showMessage('댓글 등록 완료', 'info');
-        if (onSuccess) onSuccess();
-    } catch(e) {
-        console.error('postMapComment err', e);
-        showMessage('댓글 등록 실패', 'error');
-    }
-}
-
-function openCommentsPopup(mapId) {
-    const popup = document.createElement('div');
-    popup.className = 'fullscreen comments-popup';
-    popup.innerHTML = `
-        <div class="card" style="max-width:800px; width:90%; max-height:80vh; overflow:hidden; display:flex; flex-direction:column;">
-        <div style="padding:12px; display:flex; justify-content:space-between; align-items:center;">
-            <div class="muted">댓글</div>
-            <button class="btn close-comments">닫기</button>
-        </div>
-        <div class="comments-scroll" style="overflow:auto; padding:12px; flex:1; border-top:1px solid rgba(255,255,255,0.02);">
-            <div class="comments-full-list"></div>
-        </div>
-        <div style="padding:12px; border-top:1px solid rgba(255,255,255,0.02); display:flex; gap:8px;">
-            <input id="commentsInput" placeholder="댓글을 입력하세요 (엔터로 등록)" style="flex:1; padding:8px; border-radius:6px; background:transparent; border:1px solid rgba(255,255,255,0.04); color:inherit;">
-            <button class="btn post-comment">등록</button>
-        </div>
-        </div>
-    `;
-    document.body.appendChild(popup);
-
-    const closeBtn = popup.querySelector('.close-comments');
-    const listEl = popup.querySelector('.comments-full-list');
-    const postBtn = popup.querySelector('.post-comment');
-    const inputEl = popup.querySelector('#commentsInput');
-
-    closeBtn.onclick = () => popup.remove();
-    
-    // [수정] 세부 댓글창의 '등록' 버튼 및 엔터 키 이벤트 리스너
-    const postCommentAction = async () => {
-        if (!currentUser) { showMessage('로그인이 필요합니다.', 'error'); return; }
-        const v = inputEl.value.trim();
-        if (!v) return;
-        await postMapComment(mapId, v, () => {
-            // 성공 후 팝업 갱신
-            popup.remove();
-            openCommentsPopup(mapId);
-            renderMap(); // 메인 맵 목록의 댓글 수도 갱신
-        });
-    };
-    
-    postBtn.onclick = postCommentAction;
-    inputEl.addEventListener('keydown', e => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            postCommentAction();
-        }
-    });
-
-    (async () => {
-        try {
-            const cSnap = await getDocs(collection(db, 'maps', mapId, 'comments'));
-            const arr = [];
-            cSnap.forEach(d => arr.push({ id: d.id, ...d.data() }));
-            arr.sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-
-            if (!arr.length) {
-                listEl.innerHTML = `<div class="muted">댓글이 없습니다.</div>`;
-            } else {
-                listEl.innerHTML = '';
-                arr.forEach(c => {
-                    const item = document.createElement('div');
-                    item.className = 'comment-item';
-                    item.style = 'margin-bottom:10px; border-bottom:1px dashed rgba(255,255,255,0.1); padding-bottom:10px;';
-                    item.innerHTML = `
-                        <div style="display:flex; align-items:center;">
-                            <strong style="margin-right:10px;">${c.name||'익명'}</strong> 
-                            <span class="muted" style="font-size:0.8em;">${fmtTime(c.createdAt)}</span>
-                        </div>
-                        <div style="margin-top:5px;">${c.text || ''}</div>
-                        <div class="cm-admin" style="margin-top:6px; display:none; gap:8px;">
-                            <button class="link cm-edit">수정</button>
-                            <button class="link cm-del">삭제</button>
-                        </div>
-                    `;
-                    
-                    (async () => {
-                        if (await isAdminUser()) {
-                            const btnWrap = item.querySelector('.cm-admin');
-                            btnWrap.style.display = 'flex';
-                            btnWrap.querySelector('.cm-edit').onclick = async () => {
-                                const newText = prompt('댓글 내용을 수정하시오.', c.text||'');
-                                if (!newText) return;
-                                try {
-                                    await updateDoc(doc(db, 'maps', mapId, 'comments', c.id), { text: newText, editedAt: serverTimestamp() });
-                                    // 팝업 새로고침
-                                    popup.remove();
-                                    openCommentsPopup(mapId);
-                                    showMessage('댓글 수정 완료', 'info');
-                                } catch(e) {
-                                    showMessage('댓글 수정 실패', 'error');
-                                }
-                            };
-                            btnWrap.querySelector('.cm-del').onclick = async () => {
-                                if (await showConfirm('정말로 이 댓글을 삭제하시겠습니까?')) {
-                                    try {
-                                        await deleteDoc(doc(db, 'maps', mapId, 'comments', c.id));
-                                        // 팝업 새로고침
-                                        popup.remove();
-                                        openCommentsPopup(mapId);
-                                        showMessage('댓글 삭제 완료', 'info');
-                                    } catch(e) {
-                                        showMessage('댓글 삭제 실패', 'error');
-                                    }
-                                }
-                            };
-                        }
-                    })();
-                    listEl.appendChild(item);
-                });
-            }
-        } catch(e) {
-            console.error('load full comments err', e);
-            listEl.innerHTML = `<div class="muted">댓글 로드 실패</div>`;
-        }
-    })();
-}
-
-// --- Dex Tab (도감) ---
-
-// 코드명 생성에 사용될 상수
-const DANGER_TYPES = {
-    '유광': '유광',
-    '해수': '해수',
-    '심해': '심해',
-    '파생': '파생' // 파생은 코드명 규칙이 다름
-};
-const SHAPE_TYPES = ['P', 'F', 'O', 'C'];
-
-// 계산 로직 상수
-const BASE_HP = 100;
-const BASE_MP = 50;
-const HP_PER_STR = 15;
-const HP_PER_HEALTH = 20;
-const MP_PER_AGI = 5;
-const MP_PER_MIND = 10;
-const ATTACK_PER_STR = 8;
-const ATTACK_PER_AGI = 5;
-const M_ATTACK_PER_MIND = 10;
-
-/**
- * 심연체 스탯 기반 계산
- * @param {object} stats - { strength, health, agility, mind }
- * @returns {object} 계산된 능력치
- */
-function calculateAbyssStats(stats) {
-    const str = stats.strength || 0;
-    const health = stats.health || 0;
-    const agi = stats.agility || 0;
-    const mind = stats.mind || 0;
-
-    const maxHp = BASE_HP + (str * HP_PER_STR) + (health * HP_PER_HEALTH);
-    const maxMp = BASE_MP + (agi * MP_PER_AGI) + (mind * MP_PER_MIND);
-    const physicalAttack = ATTACK_PER_STR * str + ATTACK_PER_AGI * agi;
-    const mentalAttack = M_ATTACK_PER_MIND * mind;
-
-    return { maxHp, maxMp, physicalAttack, mentalAttack };
-}
-
-/**
- * 인라인 편집 필드 값 변경을 처리하고 데이터 객체에 반영합니다.
- * @param {object} data - 전체 심연체 데이터 객체 (참조로 전달)
- * @param {string} section - 'basic', 'stats', 'management', 'logs'
- * @param {string} key - 변경할 필드 키 또는 인덱스 및 서브 키 (e.g., 'name', 'basicInfo[1].value')
- * @param {*} value - 새로운 값
- */
-function handleEditFieldChange(data, section, key, value) {
-    if (key.includes('[')) {
-        // 동적 배열 처리 (예: 'basicInfo[1].value')
-        const match = key.match(/(\w+)\[(\d+)\].(\w+)/);
-        if (match) {
-            const arrKey = match[1];
-            const index = parseInt(match[2]);
-            const subKey = match[3];
-            if (data[section] && data[section][arrKey] && data[section][arrKey][index]) {
-                 data[section][arrKey][index][subKey] = value;
-            }
-        }
-    } else if (section === 'basic' && (key === 'discoverySeq' || key === 'derivedSeq')) {
-        // 숫자 필드는 강제 변환
-        data[section][key] = Number(value);
-    } else if (section === 'basic' || section === 'stats') {
-         data[section][key] = value;
-    } 
-    
-    // 코드명 실시간 업데이트 (필요한 경우)
-    if (section === 'basic' && ['danger', 'shape', 'discoverySeq', 'derivedSeq'].includes(key)) {
-        const d = data.basic;
-        data.basic.code = generateAbyssCode(d.danger, d.shape, d.discoverySeq, d.derivedSeq);
-    }
-    // console.log('Data Updated:', section, key, value, data);
-}
-
-/**
- * 심연체 코드명 생성 로직
- * @param {string} danger 위험도 (유광, 해수 등)
- * @param {string} shape 외형 (P, F 등)
- * @param {number} discoverySeq 발견 순서
- * @param {number} [derivedSeq] 파생 순서 (파생일 경우)
- * @returns {string} 생성된 코드명
- */
-function generateAbyssCode(danger, shape, discoverySeq, derivedSeq) {
-    const dangerCode = DANGER_TYPES[danger] || ''
-    const shapeCode = shape || '';
-    
-    // discoverySeq, derivedSeq가 undefined일 경우 0으로 처리하여 오류 방지
-    discoverySeq = discoverySeq || 0;
-    derivedSeq = derivedSeq || 0;
-
-    if (danger === '파생' && derivedSeq > 0) {
-        // (외형)(발견 순서)-(파생 순서)
-        return `${shapeCode}${discoverySeq}-${derivedSeq}`;
-    } else {
-        // (위험도)-(외형)(발견 순서)
-        return `${dangerCode}-${shapeCode}${discoverySeq}`;
-    }
-}
-
-/**
- * 공개 여부 퍼센티지를 계산하는 함수
- *
- * 이 함수는 '기본 정보(management.basicInfo[0])'와 
- * '기본 일지(logs[0])'를 전체 개방 항목 수와 공개된 항목 수 카운트에서 제외합니다.
- * @param {object} abyssData - 전체 심연체 데이터 객체
- * @returns {number} 0에서 100 사이의 개방률 퍼센티지
- */
-function calculateDisclosurePercentage(abyssData) {
-    let totalFields = 0;
-    let publicCount = 0;
-    
-    const basicIsPublic = abyssData.basic?.isPublic || {};
-    const statsIsPublic = abyssData.stats?.isPublic || {};
-    const management = abyssData.management || {};
-    const logs = abyssData.logs || [];
-    
-    // 1. Basic Fields (기본 정보 항목 카운트 - isPublic 객체 내 모든 키)
-    // 이 섹션의 모든 isPublic 필드는 카운트에 포함됩니다.
-    const basicKeys = Object.keys(basicIsPublic);
-    totalFields += basicKeys.length;
-    basicKeys.forEach(key => {
-        if (basicIsPublic[key]) {
-            publicCount++;
-        }
-    });
-
-    // 2. Stats Fields (스탯 항목 카운트 - isPublic 객체 내 모든 키)
-    const statsKeys = Object.keys(statsIsPublic);
-    totalFields += statsKeys.length;
-    statsKeys.forEach(key => {
-        if (statsIsPublic[key]) {
-            publicCount++;
-        }
-    });
-    
-    // 3. Management Fields (관리 정보)
-    const managementKeys = ['basicInfo', 'collectionInfo', 'otherInfo'];
-    
-    managementKeys.forEach(key => {
-        const items = management[key] || [];
-        
-        items.forEach((item, index) => {
-            // ✅ 사용자 요구사항 반영: basicInfo 배열의 첫 번째 항목 ("기본 정보")은 제외
-            const isBasicInfoDefault = (key === 'basicInfo' && index === 0);
-            
-            if (!isBasicInfoDefault) {
-                totalFields++;
-                if (item.isPublic) {
-                    publicCount++;
-                }
-            }
-        });
-    });
-    
-    // 4. Logs Fields (연구 일지)
-    logs.forEach((log, index) => {
-        // ✅ 사용자 요구사항 반영: logs 배열의 첫 번째 항목 ("기본 일지")은 제외
-        const isDefaultLog = (index === 0);
-        
-        if (!isDefaultLog) {
-            totalFields++;
-            if (log.isPublic) {
-                publicCount++;
-            }
-        }
-    });
-
-    // 5. 최종 계산: 0%에서 시작
-    if (totalFields === 0) {
-        return 0; // 나눗셈 방지
-    }
-
-    // (공개된 필드 수 / 전체 필드 수) * 100
-    const percentage = (publicCount / totalFields) * 100;
-
-    return Math.min(100, Math.floor(percentage));
-}
-
-/**
- * DB에 데이터를 저장하는 함수 (Firestore setDoc 사용)
- * @param {string} id - 심연체 ID
- * @param {object} data - 저장할 심연체 데이터 객체
- */
-async function saveAbyssData(id, data) {
-    showMessage('데이터를 Firebase에 저장 중...', 'info');
-    try {
-        // data 객체의 유효성을 검사하고 Firestore에 setDoc을 호출 (merge: true로 부분 업데이트 가능)
-        // save 전에 코드명, 계산된 스탯 등을 최종 업데이트하는 것이 좋습니다.
-        data.basic.code = generateAbyssCode(data.basic.danger, data.basic.shape, data.basic.discoverySeq, data.basic.derivedSeq);
-        
-        await setDoc(doc(db, 'abyssal_dex', id), data, { merge: true });
-        showMessage('저장 완료!', 'success');
-    } catch (error) {
-        console.error("Error saving data:", error);
-        showMessage('저장 중 오류 발생', 'error');
-        throw error;
-    }
-}
-
-// 이전에 정의된 contentEl 사용 가정
-
+// 심연체들 렌더링
 async function renderDex() {
     contentEl.innerHTML = '<div class="card muted">도감 정보 로딩중...</div>';
     const isManager = await isAdminUser();
-    
+
     try {
         const snap = await getDocs(collection(db, 'abyssal_dex'));
-        const abyssList = [];
-        snap.forEach(d => abyssList.push({ id: d.id, ...d.data() }));
+        const abyssList = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 
         const totalCount = abyssList.length;
         const completedCount = abyssList.filter(a => calculateDisclosurePercentage(a) === 100).length;
 
-        let html = '';
+        contentEl.innerHTML = '';
+        contentEl.appendChild(renderSummaryCard(completedCount, totalCount));
 
-        // 0-1. 심연체 개방 정보 요약
-        html += `<div class="card" style="margin-bottom: 20px;">
-            <h2>도감 개방 현황: ${completedCount} / ${totalCount}</h2>
-            <p class="muted">총 ${totalCount}개의 심연체 중 ${completedCount}개의 정보가 완전히 개방되었습니다.</p>
-        </div>`;
-
-        // 0-2. 관리자: 새 심연체 추가 버튼
         if (isManager) {
-            html += `<button class="btn" id="addNewAbyssBtn" style="margin-bottom: 20px;">
-                새 심연체 추가 +
-            </button>`;
+            contentEl.appendChild(renderAdminAddButton('새 심연체 추가 +', createNewAbyss));
         }
 
-        html += '<div class="dex-grid" style="display: flex; flex-wrap: wrap; gap: 20px; justify-content: center;">';
-        
+        const gridContainer = document.createElement('div');
+        gridContainer.className = 'dex-grid';
+        gridContainer.style = 'display:flex; flex-wrap:wrap; gap:20px; justify-content:center;';
+
         abyssList.forEach(abyss => {
-            html += renderDexCard(abyss, isManager);
+            const card = renderDexCard(abyss, isManager);
+            if (card) {
+                card.onclick = () => renderDexDetail(abyss.id); // 여기서 연결
+                gridContainer.appendChild(card);
+            }
         });
-        
-        html += '</div>';
-        
-        contentEl.innerHTML = html;
 
-        // 이벤트 리스너 부착
+        contentEl.appendChild(gridContainer);
+
         if (isManager) {
-            document.getElementById('addNewAbyssBtn').onclick = () => createNewAbyss();
+            contentEl.appendChild(renderAdminAddButton('새 심연체 추가 +', createNewAbyss));
         }
-        document.querySelectorAll('.dex-card').forEach(card => {
-            const abyssId = card.dataset.id;
-            card.onclick = () => renderDexDetail(abyssId);
-        });
-
     } catch(e) {
         console.error(e);
         contentEl.innerHTML = '<div class="card error">도감 정보를 로드하는 데 실패했습니다.</div>';
     }
 }
 
-function renderManagementSection(el, data, isEditMode, isManager) {
-    const d = data.management;
-    const section = 'management';
-    
-    const renderArrayInfo = (key, title, labelBase) => {
-        let html = `<h4>${title}</h4><table class="info-table" style="width: 100%;">`;
-        const items = d[key] || [];
-
-        // 1. 안내 문구 메시지 설정 (배열이 완전히 비어있는 경우)
-        let emptyMessage = null;
-        if (key === 'otherInfo' && items.length === 0) {
-            emptyMessage = '기타 정보가 존재하지 않습니다.';
-        } else if (key === 'collectionInfo' && items.length === 0) {
-            emptyMessage = '채취 정보가 존재하지 않습니다.'; // ✅ 채취 정보 안내 문구 추가
-        }
-        
-        let hasVisibleRows = false;
-
-        items.forEach((item, index) => {
-            const isBasicInfoDefault = (key === 'basicInfo' && index === 0);
-            
-            // 비관리자이면서 비공개 항목이고 기본 정보 항목도 아닐 경우 스킵
-            if (!isManager && !item.isPublic && !isBasicInfoDefault) return;
-            
-            hasVisibleRows = true;
-
-            const isPublic = item.isPublic !== undefined ? item.isPublic : false;
-            const masked = !isPublic && !isManager;
-            const itemLabel = isBasicInfoDefault ? '기본 정보' : `${labelBase} (${index + 1})`;
-
-            // basicInfo의 첫 번째 항목은 배열의 크기가 1보다 클 때만 삭제 방지 (나머지는 모두 삭제 가능)
-            const isProtectedBasicInfo = (key === 'basicInfo' && index === 0 && items.length > 1);
-
-            html += `
-                <tr class="${masked ? 'masked-row' : ''}">
-                    <td style="width: 30%; font-weight: bold; vertical-align: top; padding-top: 8px;">
-                        ${isManager && isEditMode ? `<input type="checkbox" data-key="${key}[${index}].isPublic" data-section="${section}" ${isPublic ? 'checked' : ''} style="margin-right: 5px;">` : ''}
-                        ${itemLabel}
-                        
-                        ${isManager && isEditMode && !isProtectedBasicInfo ? 
-                            `<button class="btn-xs danger" data-action="delete" data-key="${key}" data-index="${index}" style="margin-left: 5px;">-</button>` : ''}
-                    </td>
-                    <td>
-                        ${masked ? '<div class="masked-data"></div>' : renderInlineField({key, type: 'textarea', readOnly: false}, item.value, isEditMode, section, index, 'value')}
-                    </td>
-                </tr>
-            `;
-        });
-        
-        if (!hasVisibleRows && emptyMessage) {
-            html += `<tr><td colspan="2" class="muted" style="text-align: center;">
-                ${emptyMessage}
-            </td></tr>`;
-        } else if (!hasVisibleRows && key === 'basicInfo' && items.length === 0) {
-            html += `<tr><td colspan="2" class="muted" style="text-align: center;">
-                관리 정보가 존재하지 않습니다.
-            </td></tr>`;
-        }
-
-        
-        if (isManager && isEditMode) {
-            html += `<tr><td colspan="2"><button class="btn-xs primary" data-action="add" data-key="${key}">+ ${title} 추가</button></td></tr>`;
-        }
-        
-        html += '</table>';
-        return html;
-    };
-
-    el.innerHTML = `
-        <h3>관리 정보</h3>
-        ${renderArrayInfo('basicInfo', '관리 정보', '추가 정보')}
-        ${renderArrayInfo('collectionInfo', '채취 정보', '채취 정보')}
-        ${renderArrayInfo('otherInfo', '기타 정보', '기타 정보')}
+// 개방된 심연체 퍼센트
+function renderSummaryCard(completed, total) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.style.marginBottom = '20px';
+    card.innerHTML = `
+        <h2>도감 개방 현황: ${completed} / ${total}</h2>
+        <p class="muted">총 ${total}개의 심연체 중 ${completed}개의 정보가 완전히 개방되었습니다.</p>
     `;
-
-    if (isEditMode) {
-        el.querySelectorAll('.inline-edit-field').forEach(field => {
-            field.onchange = (e) => {
-                handleEditFieldChange(data, e.target.dataset.section, e.target.dataset.key, e.target.value);
-            };
-        });
-        
-        el.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
-            checkbox.onchange = (e) => {
-                handleEditFieldChange(data, e.target.dataset.section, e.target.dataset.key, e.target.checked);
-            };
-        });
-
-        el.querySelectorAll('button[data-action]').forEach(button => {
-            button.onclick = (e) => {
-                const action = e.target.dataset.action;
-                const key = e.target.dataset.key;
-                const index = parseInt(e.target.dataset.index);
-                const currentArray = data.management[key];
-
-                if (action === 'add') {
-                    if (currentArray.length < 10) { 
-                        currentArray.push({ label: '새 정보', value: '', isPublic: false });
-                    } else {
-                        showMessage('더 이상 정보를 추가할 수 없습니다.', 'warning');
-                    }
-                } else if (action === 'delete') {
-                    // basicInfo의 index 0을 삭제하려고 할 때, 배열 길이가 1보다 크면 방지
-                    if (key === 'basicInfo' && index === 0 && currentArray.length > 1) {
-                         showMessage('기본 관리 정보는 삭제할 수 없습니다. (최소 1개 유지 필요)', 'error');
-                         return;
-                    }
-                    
-                    currentArray.splice(index, 1);
-                }
-                renderManagementSection(el, data, isEditMode, isManager);
-            };
-        });
-    }
+    return card;
 }
 
-function renderLogsSection(el, data, isEditMode, isManager) {
-    const logsData = data.logs || []; // logsData로 변수명 변경 (d 대신)
-    const section = 'logs';
+function calculateDisclosurePercentage(abyssData) {
+    let totalFields = 0;
+    let publicCount = 0;
 
-    if (logsData.length === 0) {
-         el.innerHTML = `
-            <h3>연구 일지</h3>
-            <div class="card muted" style="text-align: center; padding: 20px;">
-                연구 일지가 존재하지 않습니다.
-            </div>
-            ${isManager && isEditMode ? 
-                `<button class="btn primary" id="addLogBtn" style="margin-top: 15px;">+ 연구 일지 추가</button>` : ''}
-         `;
-         
-         document.getElementById('addLogBtn')?.addEventListener('click', () => {
-             logsData.push({ title: '새 일지', content: '내용 없음', createdAt: new Date(), isPublic: false }); 
-             renderLogsSection(el, data, isEditMode, isManager);
-         });
+    // 1. Basic
+    const basicCounts = countPublicFromObject(abyssData.basic?.isPublic);
+    totalFields += basicCounts.total;
+    publicCount += basicCounts.publicCount;
 
-         return; // 일지가 없으면 여기서 렌더링 종료
-    }
-    
-    let logsHtml = logsData.map((log, index) => {
-        const logLabel = index === 0 ? '기본 일지' : `연구 일지 (${index})`;
-        const isPublic = log.isPublic || false; // 기본 일지는 isPublic이 없으면 false로 처리
-        const masked = !isPublic && !isManager;
+    // 2. Stats
+    const statsCounts = countPublicFromObject(abyssData.stats?.isPublic);
+    totalFields += statsCounts.total;
+    publicCount += statsCounts.publicCount;
 
-        const canDelete = isManager && isEditMode && logsData.length > 0;
+    // 3. Management
+    const managementKeys = ['basicInfo', 'collectionInfo', 'otherInfo'];
+    managementKeys.forEach(key => {
+        const items = abyssData.management?.[key] || [];
+        const startIndex = key === 'basicInfo' ? 1 : 0; // 첫 항목 제외
+        const counts = countPublic(items.slice(startIndex));
+        totalFields += counts.total;
+        publicCount += counts.publicCount;
+    });
 
-        return `
-            <div class="card log-entry ${masked ? 'masked-log' : ''}" style="margin-bottom: 15px;">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <h4 style="margin: 0;">${logLabel}</h4>
-                    <span class="muted" style="font-size: 0.9em;">${log.createdAt ? fmtTime(log.createdAt) : '날짜 없음'}</span>
-                </div>
-                
-                ${canDelete ? 
-                    `<button class="btn-xs danger" data-action="delete" data-index="${index}" style="float: right;">- 삭제</button>` : ''}
-                
-                <p style="margin-top: 10px;">
-                    <strong>제목:</strong> 
-                    ${masked ? '<div class="masked-data"></div>' : renderInlineField({key:'logs', type:'text'}, log.title, isEditMode, section, index, 'title')}
-                </p>
-                <p>
-                    <strong>내용:</strong>
-                    ${masked ? '<div class="masked-data" style="height: 50px;"></div>' : renderInlineField({key:'logs', type:'textarea'}, log.content, isEditMode, section, index, 'content')}
-                </p>
-                
-                ${isManager && isEditMode ? `<p>
-                    <input type="checkbox" data-key="${section}[${index}].isPublic" data-section="${section}" ${isPublic ? 'checked' : ''} style="margin-right: 5px;"> 공개
-                </p>` : ''}
-            </div>
-        `;
-    }).join('');
+    // 4. Logs
+    const logs = abyssData.logs || [];
+    const logCounts = countPublic(logs.slice(1)); // 첫 로그 제외
+    totalFields += logCounts.total;
+    publicCount += logCounts.publicCount;
 
-    el.innerHTML = `
-        <h3>연구 일지</h3>
-        <div class="log-list">${logsHtml}</div>
-        ${isManager && isEditMode && logsData.length < 4 ? 
-            `<button class="btn primary" id="addLogBtn" style="margin-top: 15px;">+ 연구 일지 추가</button>` : ''}
-    `;
-
-    if (isEditMode) {
-        el.querySelectorAll('.inline-edit-field').forEach(field => {
-            field.onchange = (e) => {
-                handleEditFieldChange(data, e.target.dataset.section, e.target.dataset.key, e.target.value);
-            };
-        });
-        
-        el.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
-            checkbox.onchange = (e) => {
-                handleEditFieldChange(data, e.target.dataset.section, e.target.dataset.key, e.target.checked);
-            };
-        });
-
-        // 일지 추가 버튼
-        document.getElementById('addLogBtn')?.addEventListener('click', () => {
-            if (logsData.length < 4) {
-                logsData.push({ title: '새 일지', content: '내용 없음', createdAt: new Date(), isPublic: false }); 
-                renderLogsSection(el, data, isEditMode, isManager);
-            }
-        });
-
-        // 일지 삭제 버튼
-        el.querySelectorAll('button[data-action="delete"]').forEach(button => {
-            button.onclick = (e) => {
-                const index = parseInt(e.target.dataset.index);
-                logsData.splice(index, 1);
-                renderLogsSection(el, data, isEditMode, isManager);
-            };
-        });
-    }
+    return totalFields === 0 ? 0 : Math.min(100, Math.floor((publicCount / totalFields) * 100));
 }
 
-/**
- * DB에서 심연체 데이터를 삭제하는 함수 (Firestore deleteDoc 사용)
- * @param {string} id - 심연체 ID
- */
+// 유틸 함수
+function countPublic(fields) {
+    let total = 0, publicCount = 0;
+    fields.forEach(f => {
+        total++;
+        if (f.isPublic) publicCount++;
+    });
+    return { total, publicCount };
+}
+
+function countPublicFromObject(obj) {
+    const keys = Object.keys(obj || {});
+    const total = keys.length;
+    const publicCount = keys.reduce((acc, k) => acc + (obj[k] ? 1 : 0), 0);
+    return { total, publicCount };
+}
+
+// 심연체 카드
+function renderDexCard(abyssData, isManager) {
+    const { id, basic = {} } = abyssData;
+    const disclosurePercent = calculateDisclosurePercentage(abyssData);
+
+    const isImagePublic = basic.isPublic?.image || false;
+    const showImage = isImagePublic || isManager;
+    const imgUrl = showImage ? (basic.image || DEFAULT_PROFILE_IMAGE) : '';
+
+    const displayName = getDisplayField(basic.name, basic.isPublic?.name, '정보 없음', isManager);
+    const displayCode = getDisplayField(basic.code, basic.isPublic?.code, '???', isManager);
+
+    const isCompletelyHidden = !isManager && !isImagePublic && !basic.isPublic?.code && !basic.isPublic?.name;
+    if (isCompletelyHidden) return null;
+
+    const borderColor = `rgb(${255 - Math.floor(disclosurePercent*2.55)}, ${Math.floor(disclosurePercent*2.55)}, 0)`;
+    const cardStyles = [
+        `width: calc(25% - 15px)`,
+        `aspect-ratio: 1 / 1`,
+        `background-size: cover`,
+        `background-position: center`,
+        `border: 5px solid ${borderColor}`,
+        `position: relative`,
+        `cursor: pointer`,
+        `overflow: hidden`,
+        `transition: all 0.3s`,
+        showImage && imgUrl ? `background-image: url('${imgUrl}')` : `background-color: #555`
+    ].filter(Boolean).join('; ');
+
+    const el = document.createElement('div');
+    el.className = 'dex-card';
+    el.dataset.id = id;
+    el.style.cssText = cardStyles;
+
+    el.innerHTML = `
+        <div class="dex-overlay">
+            <strong>${displayName}</strong>
+            <span>${displayCode}</span>
+        </div>
+        <div class="dex-hover-overlay">
+            <strong>${displayName}</strong>
+            <span>개방률: ${disclosurePercent}%</span>
+        </div>
+    `;
+
+    return el;
+}
+
+function getDisplayField(value, isPublic, fallback = '???', isManager) {
+    return (isPublic || isManager) ? (value || fallback) : '???';
+}
+
+// 심연체 삭제
 async function deleteAbyssData(id) {
     if (!confirm('정말로 이 심연체를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
         return;
@@ -2240,341 +2001,35 @@ async function deleteAbyssData(id) {
     }
 }
 
-/**
- * 심연체 스탯을 방사형 그래프(레이더 차트)로 렌더링
- * @param {object} stats - { strength, health, agility, mind }
- * @param {object} calculatedStats - { maxHp, maxMp, physicalAttack, mentalAttack }
- */
-function renderRadarChart(stats, calculatedStats) {
-    const chartContainerEl = document.getElementById('radarChartContainer');
-    if (!chartContainerEl) return;
-    
-    // 캔버스가 이미 존재하면 제거하고 새로 생성
-    chartContainerEl.innerHTML = '<canvas id="abyssRadarChart" width="400" height="400"></canvas>';
-    const ctx = document.getElementById('abyssRadarChart').getContext('2d');
-
-    // 이전 차트 인스턴스 파괴
-    if (window.currentChart) {
-        window.currentChart.destroy();
-    }
-    
-    const maxVal = Math.max(stats.strength, stats.health, stats.agility, stats.mind, 5); // 최소 5를 최대값 기준으로 설정
-
-    // 레이더 차트 데이터
-    const data = {
-        labels: ['STR (힘)', 'HEALTH (체력)', 'AGI (민첩)', 'MIND (정신)'],
-        datasets: [{
-            label: '기본 스탯',
-            data: [stats.strength, stats.health, stats.agility, stats.mind],
-            backgroundColor: 'rgba(102, 204, 255, 0.5)', // 연한 파란색
-            borderColor: 'rgb(102, 204, 255)',
-            pointBackgroundColor: 'rgb(102, 204, 255)',
-            pointBorderColor: '#fff',
-            pointHoverBackgroundColor: '#fff',
-            pointHoverBorderColor: 'rgb(102, 204, 255)'
-        }]
-    };
-
-    // 레이더 차트 옵션
-    const options = {
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: {
-            r: {
-                angleLines: { display: true },
-                suggestedMin: 0,
-                suggestedMax: maxVal * 1.2, // 최대값보다 약간 크게 설정
-                pointLabels: {
-                    font: { size: 14 }
-                },
-                ticks: {
-                    stepSize: Math.ceil(maxVal / 5) || 1, // 5단계로 눈금 표시
-                    display: false // 눈금 값 숨기기
-                }
-            }
-        },
-        plugins: {
-            legend: { display: false },
-            tooltip: {
-                callbacks: {
-                    label: function(context) {
-                        let label = context.dataset.label || '';
-                        if (label) {
-                            label += ': ';
-                        }
-                        label += context.parsed.r;
-                        return label;
-                    }
-                }
-            }
-        }
-    };
-
-    // 차트 생성
-    window.currentChart = new Chart(ctx, {
-        type: 'radar',
-        data: data,
-        options: options
-    });
-}
-
-/**
- * 심연체 카드 렌더링 (그리드 뷰)
- * @param {object} abyssData - 심연체 데이터 객체
- * @param {boolean} isManager - 관리자 여부
- */
-
-function renderDexCard(abyssData, isManager) {
-    const id = abyssData.id;
-    const basic = abyssData.basic || {};
-    const disclosurePercent = calculateDisclosurePercentage(abyssData);
-    
-    const isImagePublic = basic.isPublic?.image || false;
-    const showImage = isImagePublic || isManager;
-    const imgUrl = showImage ? (basic.image || DEFAULT_PROFILE_IMAGE) : '';
-
-    const isCodePublic = basic.isPublic?.code || false;
-    const isNamePublic = basic.isPublic?.name || false;
-    
-    const displayName = (isNamePublic || isManager) ? (basic.name || '정보 없음') : '???';
-    const displayCode = (isCodePublic || isManager) ? (basic.code || '???') : '???';
-    
-    const isCompletelyHidden = !isManager && !isImagePublic && !isCodePublic && !isNamePublic;
-
-    // 테두리 색상 계산 (0% > Red, 100% > Green)
-    const red = 255 - Math.floor(disclosurePercent * 2.55);
-    const green = Math.floor(disclosurePercent * 2.55);
-    const borderColor = `rgb(${red}, ${green}, 0)`;
-    
-    // 비공개 시 회색 배경 처리
-    const backgroundStyle = showImage && imgUrl
-        ? `background-image: url('${imgUrl}'); background-color: #222;`
-        : `background-color: #555;`; // 이미지가 없거나 비공개일 경우 회색 배경
-
-    if (isCompletelyHidden) {
-        return '';
-    }
-
-    return `
-        <div class="dex-card" data-id="${id}" 
-             style="width: calc(25% - 15px); aspect-ratio: 1 / 1; 
-                    ${backgroundStyle} background-size: cover; 
-                    background-position: center; border: 5px solid ${borderColor}; 
-                    position: relative; cursor: pointer; overflow: hidden;
-                    transition: all 0.3s;">
-            
-            <div class="dex-overlay" 
-                 style="position: absolute; bottom: 0; left: 0; width: 100%; min-height: 40px;
-                        background: rgba(0, 0, 0, 0.7); padding: 5px; box-sizing: border-box; 
-                        display: flex; flex-direction: column; justify-content: center; align-items: center;
-                        color: white; text-align: center;">
-                
-                <strong style="font-size: 1.1em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;">${displayName}</strong>
-                <span style="font-size: 0.9em; margin-top: 2px; color: #ccc;">${displayCode}</span>
-            </div>
-            
-            <div class="dex-hover-overlay" 
-                 style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-                        background: rgba(0, 0, 0, 0.6); opacity: 0; transition: opacity 0.3s;
-                        display: flex; flex-direction: column; justify-content: center; align-items: center;
-                        color: white;">
-                <strong style="font-size: 1.2em; text-align: center;">${displayName}</strong>
-                <span style="margin-top: 5px;">개방률: ${disclosurePercent}%</span>
-            </div>
-        </div>
-        <style>
-            .dex-card[data-id="${id}"]:hover .dex-hover-overlay { opacity: 1; background: rgba(var(--accent-rgb), 0.7); }
-            .dex-card[data-id="${id}"]:hover { transform: scale(1.05); }
-        </style>
-    `;
-}
-
-async function createNewAbyss() {
-    showMessage('새 심연체 순서를 계산하고 있습니다...', 'info');
-
-    const abyssCollectionRef = collection(db, 'abyssal_dex');
-    const newDocRef = doc(abyssCollectionRef);
-    const newId = newDocRef.id;
-
-    let nextDiscoverySeq = 1;
-
+// 심연체 저장
+async function saveAbyssData(id, data) {
+    showMessage('데이터를 Firebase에 저장 중...', 'info');
     try {
-        const snap = await getDocs(abyssCollectionRef);
-        let maxSeq = 0;
+        data.basic.code = generateAbyssCode(data.basic.danger, data.basic.shape, data.basic.discoverySeq, data.basic.derivedSeq);
         
-        snap.forEach(d => {
-            const data = d.data();
-            const danger = data.basic?.danger;
-            const seq = data.basic?.discoverySeq || 0;
-
-            if (danger !== '파생' && seq > maxSeq) {
-                maxSeq = seq;
-            }
-        });
-        
-        nextDiscoverySeq = maxSeq + 1;
-        
-    } catch(e) {
-        console.error("최대 discoverySeq 조회 실패:", e);
-        showMessage('순서 조회 중 오류 발생. 기본값 1을 사용합니다.', 'warning');
-    }
-
-    const initialData = {
-        id: newId, 
-        basic: {
-            discoverySeq: nextDiscoverySeq, 
-            danger: '유광', // 기본 위험도
-            shape: 'P',
-            name: `새 심연체 ${nextDiscoverySeq}`, // 이름도 순서에 맞춰 초기 설정
-            derivedSeq: 0, 
-            image: '',
-            majorDamage: '',
-            deathChance: '',
-            sanityChance: '',
-            isPublic: {
-                name: false, code: false, danger: false, shape: false, discoverySeq: false,
-                majorDamage: false, deathChance: false, sanityChance: false, image: false
-            }
-        },
-        stats: { 
-            strength: 1, health: 1, agility: 1, mind: 1, 
-            isPublic: { strength: false, health: false, agility: false, mind: false } 
-        },
-        management: {
-            basicInfo: [{ label: '기본 정보', value: '초기 관리 정보', isPublic: false }],
-            collectionInfo: [{ label: '채취 정보', value: '초기 채취 정보', isPublic: false }],
-            otherInfo: [{ label: '기타 정보', value: '초기 기타 정보', isPublic: false }]
-        },
-        logs: [
-            { title: '기본 일지', content: '기록 시작', createdAt: new Date(), isPublic: true }, 
-    ],
-        comments: [],
-        createdAt: serverTimestamp(),
-    };
-    
-    // 코드명 최종 계산
-    initialData.basic.code = generateAbyssCode(
-        initialData.basic.danger, 
-        initialData.basic.shape, 
-        initialData.basic.discoverySeq, 
-        initialData.basic.derivedSeq
-    );
-
-    // 4. DB에 데이터 저장 및 상세 편집 모드로 이동
-    try {
-        await setDoc(newDocRef, initialData);
-        showMessage(`새 심연체 [${initialData.basic.code}] 템플릿 추가 완료. 내용을 편집하세요.`, 'info');
-        renderDexDetail(newId, true, initialData); 
-    } catch (e) {
-        console.error("새 심연체 추가 실패:", e);
-        showMessage('새 심연체 추가 실패', 'error');
+        await setDoc(doc(db, 'abyssal_dex', id), data, { merge: true });
+        showMessage('저장 완료!', 'success');
+    } catch (error) {
+        console.error("Error saving data:", error);
+        showMessage('저장 중 오류 발생', 'error');
+        throw error;
     }
 }
 
-/**
- * 특정 섹션의 모든 공개 여부 필드를 일괄적으로 설정합니다.
- * @param {object} data - 전체 심연체 데이터 객체 (참조로 전달)
- * @param {string} sectionKey - 'basic', 'stats', 'management', 'logs'
- * @param {boolean} isPublic - true면 공개, false면 비공개
- */
-
-function setSectionDisclosure(data, sectionKey, isPublic) {
-    if (sectionKey === 'basic' || sectionKey === 'stats') {
-        const isPublicObj = data[sectionKey].isPublic;
-        if (isPublicObj) {
-            Object.keys(isPublicObj).forEach(key => {
-                isPublicObj[key] = isPublic;
-            });
-        }
-    } else if (sectionKey === 'management') {
-        const managementKeys = ['basicInfo', 'collectionInfo', 'otherInfo'];
-        managementKeys.forEach(arrayKey => {
-            data.management[arrayKey].forEach(item => {
-                item.isPublic = isPublic;
-            });
-        });
-    } else if (sectionKey === 'logs') {
-        data.logs.forEach(log => {
-            log.isPublic = isPublic;
-        });
-    }
-}
-
-/**
- * 심연체 상세 보기/편집 렌더링
- * @param {string} id 심연체 ID
- * @param {boolean} [isEditMode=false] 편집 모드로 시작할지 여부
- * @param {object} [preloadedData=null] 미리 로드된 데이터 (선택 사항)
- */
 async function renderDexDetail(id, isEditMode = false, preloadedData = null) {
-    let data; 
-    
-    // 1. 데이터 로딩 로직 (⭐ 이 부분이 누락되었을 가능성이 높습니다)
-    if (preloadedData) {
-        data = preloadedData;
-    } else {
-        // Firebase Firestore에서 ID로 문서를 가져옵니다.
-        contentEl.innerHTML = '<div class="card muted">상세 정보 로딩중...</div>'; // 로딩 메시지
-        try {
-            // 이 줄이 실행되려면 `getDoc`, `doc`, `db` 등의 Firebase 변수가 스코프 내에 정의되어 있어야 합니다.
-            const docSnap = await getDoc(doc(db, 'abyssal_dex', id)); 
-            
-            if (docSnap.exists()) {
-                data = docSnap.data();
-            } else {
-                showMessage('심연체 정보를 찾을 수 없습니다.', 'error');
-                renderDex(); // 목록으로 복귀
-                return;
-            }
-        } catch (e) {
-            console.error("데이터 로딩 실패:", e);
-            showMessage('데이터 로딩 중 심각한 오류가 발생했습니다.', 'error');
-            return;
-        }
-    }
-    
-    // 2. 유효성 검사 (오류 방지)
-    // 데이터 로드에 실패했거나, 로드된 데이터에 'basic' 필드가 없을 경우 처리
-    if (!data || !data.basic) {
-        console.error("Abyss data or 'basic' section is missing after load attempt:", data);
-        showMessage('심연체 데이터 구조 오류: 기본 정보를 찾을 수 없습니다.', 'error');
-        renderDex(); 
-        return;
-    }
+    const data = await loadAbyssData(id, preloadedData);
+    if (!data) return;
 
-    // 3. 오류가 발생했던 라인 (이제 data.basic이 확실히 존재합니다)
     const isManager = await isAdminUser();
-    
-    const code = generateAbyssCode(
-        data.basic.danger, 
-        data.basic.shape, 
-        data.basic.discoverySeq, 
-        data.basic.derivedSeq
+    data.basic.code = generateAbyssCode(
+        data.basic.danger, data.basic.shape, data.basic.discoverySeq, data.basic.derivedSeq
     );
-    data.basic.code = code;
-    
-    const calculatedStats = calculateAbyssStats(data.stats); // (이 함수는 전체 코드에 정의되어 있다고 가정)
+
+    const calculatedStats = calculateAbyssStats(data.stats);
     const disclosurePercent = calculateDisclosurePercentage(data);
 
-    // 섹션 프리셋 버튼 HTML 생성
-    const presetButtonsHtml = isManager && isEditMode ? `
-        <div style="margin-bottom: 15px; border: 1px dashed var(--muted); padding: 10px; border-radius: 5px; display: flex; gap: 10px; flex-wrap: wrap;">
-            <strong>전체 공개/비공개 프리셋:</strong>
-            <button class="btn-xs primary disclosure-preset-btn" data-section="basic" data-public="true">기본 정보 공개</button>
-            <button class="btn-xs danger disclosure-preset-btn" data-section="basic" data-public="false">기본 정보 비공개</button>
-            <button class="btn-xs primary disclosure-preset-btn" data-section="stats" data-public="true">스탯 공개</button>
-            <button class="btn-xs danger disclosure-preset-btn" data-section="stats" data-public="false">스탯 비공개</button>
-            <button class="btn-xs primary disclosure-preset-btn" data-section="management" data-public="true">관리 정보 공개</button>
-            <button class="btn-xs danger disclosure-preset-btn" data-section="management" data-public="false">관리 정보 비공개</button>
-            <button class="btn-xs primary disclosure-preset-btn" data-section="logs" data-public="true">연구 일지 공개</button>
-            <button class="btn-xs danger disclosure-preset-btn" data-section="logs" data-public="false">연구 일지 비공개</button>
-        </div>
-    ` : '';
-
-    const deleteButtonHtml = isManager && !isEditMode ? 
-        `<button class="btn danger" id="deleteAbyssBtn" style="margin-left: 10px;">심연체 삭제</button>` : '';
-
-    let html = `
+    // HTML 렌더링
+    contentEl.innerHTML = `
         <div class="dex-detail-wrap card">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                 <button class="btn link" id="backToDexList">← 도감 목록으로</button>
@@ -2585,682 +2040,621 @@ async function renderDexDetail(id, isEditMode = false, preloadedData = null) {
                     ${isManager ? `<button class="btn ${isEditMode ? 'warning' : ''}" id="toggleEditMode">
                         ${isEditMode ? '저장 및 편집 종료' : '편집'}
                     </button>` : ''}
-                    ${deleteButtonHtml} </div>
+                    ${isManager && !isEditMode ? `<button class="btn danger" id="deleteAbyssBtn">심연체 삭제</button>` : ''}
+                </div>
             </div>
-
-            ${presetButtonsHtml}
-
+            ${isManager && isEditMode ? renderDisclosurePresetHtml() : ''}
             <div class="dex-sections-container" style="display: flex; flex-wrap: wrap;">
                 <div class="dex-section" id="basicInfoSection" style="flex: 1 1 50%; padding-right: 15px;"></div>
                 <div class="dex-section" id="statsSection" style="flex: 1 1 50%; padding-left: 15px;"></div>
-                
                 <div class="dex-section" id="radarChartSection" style="flex: 1 1 100%; margin-top: 20px;">
-                    <h3>스탯 분포 (레이더 차트)</h3>
-                    <div id="radarChartContainer" style="width: 100%; height: 400px; margin-top: 10px;">
-                        </div>
+                    <h3>스탯 분포</h3>
+                    <div id="radarChartContainer" style="width: 100%; height: 400px; margin-top: 10px;"></div>
                 </div>
-                
                 <hr style="flex: 1 1 100%; margin: 20px 0;">
-
                 <div class="dex-section" id="managementSection" style="flex: 1 1 50%; padding-right: 15px;"></div>
                 <div class="dex-section" id="logsSection" style="flex: 1 1 50%; padding-left: 15px;"></div>
             </div>
-
             <hr style="margin: 30px 0;">
-
             <div class="dex-comments-area" data-id="${id}">
                 ${renderCommentArea(id, data.comments || [])}
             </div>
         </div>
     `;
-    
-    contentEl.innerHTML = html;
 
-    // 각 섹션 렌더링
+    // 섹션 렌더링
     renderBasicInfoSection(document.getElementById('basicInfoSection'), data, isEditMode, isManager);
     renderStatsSection(document.getElementById('statsSection'), data, calculatedStats, isEditMode, isManager);
     renderManagementSection(document.getElementById('managementSection'), data, isEditMode, isManager);
     renderLogsSection(document.getElementById('logsSection'), data, isEditMode, isManager);
+    drawRadarChart('radarChartContainer', Object.keys(calculatedStats), Object.values(calculatedStats), 5, 'rgba(0,0,0,0.1)', 'var(--accent)'
+);
 
-    renderRadarChart(data.stats, calculatedStats);
-
-    // 이벤트 리스너 부착
+    // 이벤트
     document.getElementById('backToDexList').onclick = renderDex;
-    
+
     if (isManager) {
-        document.getElementById('toggleEditMode').onclick = () => {
-             // ... (기존 편집 모드 토글 로직 유지)
+        document.getElementById('toggleEditMode').onclick = async () => {
             if (isEditMode) {
-                // 편집 종료 시 저장 로직
-                saveAbyssData(id, data).then(() => {
-                    renderDexDetail(id, false); 
-                }).catch((e) => {
-                    console.error('Save failed:', e);
+                try {
+                    await saveAbyssData(id, data);
+                    renderDexDetail(id, false);
+                } catch(e) {
+                    console.error(e);
                     showMessage('저장 중 오류 발생', 'error');
-                });
+                }
             } else {
-                renderDexDetail(id, true); // 편집 모드로 전환
+                renderDexDetail(id, true);
             }
         };
 
-        document.getElementById('deleteAbyssBtn')?.addEventListener('click', () => {
-            deleteAbyssData(id);
-        });
+        document.getElementById('deleteAbyssBtn')?.addEventListener('click', () => deleteAbyssData(id));
 
-        // ✅ 프리셋 버튼 이벤트 리스너 부착
-        document.querySelectorAll('.disclosure-preset-btn').forEach(button => {
-            button.onclick = (e) => {
-                const sectionKey = e.target.dataset.section;
-                const isPublic = e.target.dataset.public === 'true';
-
-                // 데이터 모델 업데이트
-                setSectionDisclosure(data, sectionKey, isPublic);
-                
-                // 섹션별로 UI 리렌더링 (전체 페이지 리렌더링보다 빠름)
-                renderBasicInfoSection(document.getElementById('basicInfoSection'), data, isEditMode, isManager);
-                renderStatsSection(document.getElementById('statsSection'), data, calculatedStats, isEditMode, isManager);
-                renderManagementSection(document.getElementById('managementSection'), data, isEditMode, isManager);
-                renderLogsSection(document.getElementById('logsSection'), data, isEditMode, isManager);
-                
-                // 개방률 업데이트를 위해 전체 디테일 섹션 헤더만 리렌더링
-                // (간단하게는 전체 페이지를 다시 로딩할 수도 있지만, 여기서는 UI만 업데이트)
-                const newPercent = calculateDisclosurePercentage(data);
-                showMessage(`${sectionKey} 섹션 항목을 ${isPublic ? '공개' : '비공개'}로 설정했습니다. 개방률: ${newPercent}%`, 'info');
-                
-                // 개방률 표시 업데이트
-                document.querySelector('.dex-detail-wrap .gap:last-child > div').textContent = `개방률: ${newPercent}%`;
-                // 필요하다면 배경색도 업데이트하는 로직 추가 가능
-            };
-        });
+        attachDisclosurePresetButtons(data, isEditMode, isManager);
     }
-    
-    // 댓글 이벤트 리스너 (9, 10)
+
     attachCommentEventListeners(id);
 }
 
-function renderInlineField(f, currentValue, isEditMode, section, index = null, subKey = null) {
-    // 배열 필드의 키 생성 (e.g., 'basicInfo[1].value')
-    const key = index !== null ? `${f.key}[${index}].${subKey}` : f.key;
+async function loadAbyssData(id, preloadedData = null) {
+    if (preloadedData) return preloadedData;
 
-    if (isEditMode && !f.readOnly) {
-        if (f.type === 'select') {
-            const optionsHtml = f.options.map(opt => 
-                `<option value="${opt}" ${opt === currentValue ? 'selected' : ''}>${opt}</option>`
-            ).join('');
-            return `
-                <select data-key="${key}" data-section="${section}" class="inline-edit-field form-control-inline">
-                    ${optionsHtml}
-                </select>
-            `;
-        }
-        
-        const type = f.type || 'text';
-        if (type === 'textarea') {
-            return `
-                <textarea data-key="${key}" data-section="${section}" 
-                          class="inline-edit-field form-control-inline" rows="3" style="width:100%;">${currentValue}</textarea>
-            `;
-        }
-        
-        return `
-            <input type="${type}" data-key="${key}" data-section="${section}" 
-                   class="inline-edit-field form-control-inline" value="${currentValue}" 
-                   min="${f.min || ''}" style="width:100%;">
-        `;
+    contentEl.innerHTML = '<div class="card muted">상세 정보 로딩중...</div>';
+    try {
+        const docSnap = await getDoc(doc(db, 'abyssal_dex', id));
+        if (!docSnap.exists()) throw new Error('심연체 정보를 찾을 수 없음');
+        const data = docSnap.data();
+        if (!data.basic) throw new Error("'basic' 정보 없음");
+        return data;
+    } catch (e) {
+        console.error("데이터 로딩 실패:", e);
+        showMessage(e.message || '데이터 로딩 중 오류 발생', 'error');
+        renderDex();
+        return null;
     }
-    return currentValue; // 읽기 모드
+}
+
+function attachDisclosurePresetButtons(data, isEditMode, isManager) {
+    if (!isManager || !isEditMode) return;
+
+    document.querySelectorAll('.disclosure-preset-btn').forEach(button => {
+        button.onclick = (e) => {
+            const sectionKey = e.target.dataset.section;
+            const isPublic = e.target.dataset.public === 'true';
+
+            setSectionDisclosure(data, sectionKey, isPublic);
+
+            // 섹션 UI 업데이트
+            renderBasicInfoSection(document.getElementById('basicInfoSection'), data, isEditMode, isManager);
+            renderStatsSection(document.getElementById('statsSection'), data, calculateAbyssStats(data.stats), isEditMode, isManager);
+            renderManagementSection(document.getElementById('managementSection'), data, isEditMode, isManager);
+            renderLogsSection(document.getElementById('logsSection'), data, isEditMode, isManager);
+
+            const newPercent = calculateDisclosurePercentage(data);
+            showMessage(`${sectionKey} 섹션을 ${isPublic ? '공개' : '비공개'}로 설정했습니다. 개방률: ${newPercent}%`, 'info');
+            
+            // 개방률 UI 업데이트
+            const percentEl = document.querySelector('.dex-detail-wrap .gap:last-child > div');
+            if (percentEl) percentEl.textContent = `개방률: ${newPercent}%`;
+        };
+    });
 }
 
 function renderBasicInfoSection(el, data, isEditMode, isManager) {
     const d = data.basic;
     const section = 'basic';
-    
-    // 3.1: 1:1 정사각형 사진 인라인 편집
+
+    // 이미지 HTML 생성
     const imgHtml = `
-        <div style="width: 100%; aspect-ratio: 1 / 1; 
-                    background-image: url('${d.image || ''}'); background-size: cover; 
-                    background-position: center; border-radius: 8px; margin-bottom: 15px;">
-        </div>
+        <div style="width:100%; aspect-ratio:1/1; 
+                    background-image: url('${d.image || ''}'); 
+                    background-size: cover; background-position: center; 
+                    border-radius:8px; margin-bottom:15px;"></div>
         ${isEditMode ? `
-            <input type="text" id="editImageURL" placeholder="이미지 URL" value="${d.image || ''}" style="width: 100%; margin-top: 5px;" 
-                   data-key="image" data-section="${section}" class="inline-edit-field form-control-inline">
-            <input type="file" id="editImageFile" accept="image/*" style="width: 100%; margin-top: 5px;">
+            <input type="text" id="editImageURL" placeholder="이미지 URL" value="${d.image || ''}" 
+                   data-key="image" data-section="${section}" class="inline-edit-field form-control-inline" 
+                   style="width:100%; margin-top:5px;">
+            <input type="file" id="editImageFile" accept="image/*" style="width:100%; margin-top:5px;">
         ` : ''}
     `;
 
     const discoveryKey = d.danger === '파생' ? 'derivedSeq' : 'discoverySeq';
     const discoveryLabel = d.danger === '파생' ? '파생 순서' : '발견 순서';
-    
+
+    // 렌더링할 필드 목록
     const fields = [
-        // ✅ 코드명: isPublic 체크박스 추가, readOnly: true
-        { label: '코드명', key: 'code', type: 'text', readOnly: true, hasPublicCheckbox: true }, 
-        
-        { label: '명칭', key: 'name', type: 'text', hasPublicCheckbox: true },
-        
-        // ✅ 위험도/외형/순서: 코드명 구성 요소이므로 readOnly: false로 편집은 가능하게 하되, 
-        //    isPublic 체크박스는 제거하여 코드 구성 요소 자체의 개방 여부를 강제함 (코드명 공개/비공개로 일괄 제어)
-        { label: '위험도', key: 'danger', type: 'select', options: Object.keys(DANGER_TYPES), hasPublicCheckbox: false },
-        { label: '외형', key: 'shape', type: 'select', options: SHAPE_TYPES, hasPublicCheckbox: false },
-        { label: discoveryLabel, key: discoveryKey, type: 'number', min: 1, hasPublicCheckbox: false },
-        
-        // 나머지 필드는 기존처럼 isPublic 체크박스 유지
-        { label: '주요 피해', key: 'majorDamage', type: 'text', hasPublicCheckbox: true },
-        { label: '사망 가능성', key: 'deathChance', type: 'text', hasPublicCheckbox: true },
-        { label: '광기 가능성', key: 'sanityChance', type: 'text', hasPublicCheckbox: true }
+        { label: '코드명', key: 'code', type: 'text', readOnly:true, hasPublicCheckbox:true },
+        { label: '명칭', key: 'name', type: 'text', hasPublicCheckbox:true },
+        { label: '위험도', key: 'danger', type: 'select', options:Object.keys(DANGER_TYPES), hasPublicCheckbox:false },
+        { label: '외형', key: 'shape', type: 'select', options:SHAPE_TYPES, hasPublicCheckbox:false },
+        { label: discoveryLabel, key: discoveryKey, type: 'number', min:1, hasPublicCheckbox:false },
+        { label: '주요 피해', key: 'majorDamage', type: 'text', hasPublicCheckbox:true },
+        { label: '사망 가능성', key: 'deathChance', type: 'text', hasPublicCheckbox:true },
+        { label: '광기 가능성', key: 'sanityChance', type: 'text', hasPublicCheckbox:true }
     ];
 
-let tableHtml = '<table class="info-table" style="width: 100%;">';
-    fields.forEach(f => {
-        const value = d[f.key] || (f.type === 'number' ? 0 : '');
-        const isPublic = d.isPublic[f.key] !== undefined ? d.isPublic[f.key] : false;
-        const masked = !isPublic && !isManager;
+    // 필드 테이블 생성
+    const tableHtml = `<table class="info-table" style="width:100%;">
+        ${fields.map(f => {
+            const value = d[f.key] || (f.type==='number'?0:'');
+            const isPublic = d.isPublic[f.key] || false;
+            const masked = !isPublic && !isManager;
+            const showCheckbox = isManager && isEditMode && f.hasPublicCheckbox;
 
-        // isPublic 체크박스 표시 여부 결정
-        const showCheckbox = isManager && isEditMode && f.hasPublicCheckbox;
-        
-        tableHtml += `
-            <tr class="${masked ? 'masked-row' : ''}">
-                <td style="width: 30%; font-weight: bold;">
-                    ${showCheckbox ? 
-                        `<input type="checkbox" data-key="${f.key}" data-section="${section}-isPublic" ${isPublic ? 'checked' : ''} style="margin-right: 5px;">` : ''}
+            return `
+            <tr class="${masked?'masked-row':''}">
+                <td style="width:30%; font-weight:bold;">
+                    ${showCheckbox?`<input type="checkbox" data-key="${f.key}" data-section="${section}-isPublic" ${isPublic?'checked':''} style="margin-right:5px;">`:''}
                     ${f.label}
                 </td>
-                <td>
-                    ${masked ? '<div class="masked-data"></div>' : renderInlineField(f, value, isEditMode, section)}
-                </td>
+                <td>${masked?'<div class="masked-data"></div>': renderInlineField(f, value, isEditMode, section)}</td>
             </tr>
-        `;
-    });
-    tableHtml += '</table>';
+            `;
+        }).join('')}
+    </table>`;
 
+    // 최종 HTML
     el.innerHTML = `
         <h3>기본 정보</h3>
-        <div style="display: flex; gap: 20px;">
-            <div style="flex: 0 0 200px; max-width: 200px;">
-                ${
-                    // 이미지 공개 체크박스 별도 처리
-                    isManager && isEditMode ? 
-                        `<input type="checkbox" data-key="image" data-section="${section}-isPublic" ${d.isPublic.image ? 'checked' : ''} style="margin-right: 5px; margin-bottom: 5px;"> 이미지 공개` : ''
-                }
+        <div style="display:flex; gap:20px;">
+            <div style="flex:0 0 200px; max-width:200px;">
+                ${isManager && isEditMode ? `<input type="checkbox" data-key="image" data-section="${section}-isPublic" ${d.isPublic.image?'checked':''} style="margin-right:5px; margin-bottom:5px;"> 이미지 공개` : ''}
                 ${imgHtml}
             </div>
-            <div style="flex: 1;">${tableHtml}</div>
+            <div style="flex:1;">${tableHtml}</div>
         </div>
     `;
-    
-    // **인라인 편집 이벤트 리스너 부착**
+
+    // 이벤트 리스너 부착
     if (isEditMode) {
         el.querySelectorAll('.inline-edit-field').forEach(field => {
-            field.onchange = (e) => {
+            field.onchange = e => {
                 handleEditFieldChange(data, e.target.dataset.section, e.target.dataset.key, e.target.value);
-                // 실시간 코드명 및 필드 레이블 반영을 위해 섹션만 리렌더링
                 renderBasicInfoSection(el, data, isEditMode, isManager);
             };
         });
-        
-        // 공개 체크박스 이벤트 리스너 부착
+
         el.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
-            checkbox.onchange = (e) => {
+            checkbox.onchange = e => {
                 const key = e.target.dataset.key;
                 data.basic.isPublic[key] = e.target.checked;
             };
         });
 
-        document.getElementById('editImageFile')?.addEventListener('change', async (e) => {
-          const file = e.target.files[0];
-          if (!file) return;
+        const fileInput = document.getElementById('editImageFile');
+        fileInput?.addEventListener('change', async e => {
+            const file = e.target.files[0];
+            if (!file) return;
 
-          showMessage('이미지 업로드 중...', 'info');
-          
-          try {
-              // Firebase Storage의 uploadBytes와 getDownloadURL 함수 필요
-              const storageRef = ref(storage, `abyss_images/${data.id}_${file.name}`);
-              const uploadTask = await uploadBytes(storageRef, file);
-              const imageUrl = await getDownloadURL(uploadTask.ref);
+            showMessage('이미지 업로드 중...', 'info');
+            try {
+                const storageRef = ref(storage, `abyss_images/${data.id}_${file.name}`);
+                const uploadTask = await uploadBytes(storageRef, file);
+                const imageUrl = await getDownloadURL(uploadTask.ref);
 
-              // data 객체 업데이트
-              handleEditFieldChange(data, section, 'image', imageUrl);
-
-              // 업데이트된 데이터로 화면 리렌더링
-              renderBasicInfoSection(el, data, isEditMode, isManager);
-              showMessage('이미지 업로드 및 반영 완료', 'success');
-
-          } catch (error) {
-              console.error("이미지 업로드 실패:", error);
-              showMessage('이미지 업로드 실패', 'error');
-          }
-      });
+                handleEditFieldChange(data, section, 'image', imageUrl);
+                renderBasicInfoSection(el, data, isEditMode, isManager);
+                showMessage('이미지 업로드 및 반영 완료', 'success');
+            } catch (err) {
+                console.error('이미지 업로드 실패:', err);
+                showMessage('이미지 업로드 실패', 'error');
+            }
+        });
     }
 }
 
-/**
- * 심연체 정보 섹션 렌더링 (스탯 및 계산된 능력치)
- */
 function renderStatsSection(el, data, calculatedStats, isEditMode, isManager) {
     const d = data.stats;
     const section = 'stats';
     const statsKeys = ['strength', 'health', 'agility', 'mind'];
-    
-    let statTable = '<table class="info-table" style="width: 100%;">';
-    statsKeys.forEach(key => {
-        const label = { strength: '근력', health: '건강', agility: '민첩', mind: '정신력' }[key];
-        const value = d[key] || 0;
-        const isPublic = d.isPublic[key] !== undefined ? d.isPublic[key] : false;
-        const masked = !isPublic && !isManager;
+    const labels = { strength: '근력', health: '건강', agility: '민첩', mind: '정신력' };
 
-        statTable += `
-            <tr class="${masked ? 'masked-row' : ''}">
-                <td style="width: 50%; font-weight: bold;">
-                    ${isManager && isEditMode ? `<input type="checkbox" data-key="${key}" data-section="${section}-isPublic" ${isPublic ? 'checked' : ''} style="margin-right: 5px;">` : ''}
-                    ${label}
+    // 스탯 테이블 생성
+    const statTable = `<table class="info-table" style="width:100%;">
+        ${statsKeys.map(key => {
+            const value = d[key] || 0;
+            const isPublic = d.isPublic[key] ?? false;
+            const masked = !isPublic && !isManager;
+            const showCheckbox = isManager && isEditMode;
+
+            return `
+            <tr class="${masked?'masked-row':''}">
+                <td style="width:50%; font-weight:bold;">
+                    ${showCheckbox ? `<input type="checkbox" data-key="${key}" data-section="${section}-isPublic" ${isPublic?'checked':''} style="margin-right:5px;">` : ''}
+                    ${labels[key]}
                 </td>
-                <td>
-                    ${masked ? '<div class="masked-data"></div>' : renderInlineField({key, type: 'number', min: 1}, value, isEditMode, section)}
-                </td>
+                <td>${masked ? '<div class="masked-data"></div>' : renderInlineField({key, type:'number', min:1}, value, isEditMode, section)}</td>
             </tr>
-        `;
-    });
-    statTable += '</table>';
-    
+            `;
+        }).join('')}
+    </table>`;
+
+    // 계산된 능력치 테이블 생성
+    const calcTable = `<table class="info-table" style="width:100%;">
+        <tr><td style="width:50%;">최대 체력</td><td>${calculatedStats.maxHp}</td></tr>
+        <tr><td>최대 정신력</td><td>${calculatedStats.maxMp}</td></tr>
+        <tr><td>물리 공격력</td><td>${calculatedStats.physicalAttack}</td></tr>
+        <tr><td>정신 공격력</td><td>${calculatedStats.mentalAttack}</td></tr>
+    </table>`;
+
+    // 최종 HTML
     el.innerHTML = `
-        <h3>심연체 정보 (스테이터스)</h3>
-        <div style="display: flex; gap: 20px;">
-            <div style="flex: 1;">
+        <h3>심연체 정보</h3>
+        <div style="display:flex; gap:20px;">
+            <div style="flex:1;">
                 <h4>스테이터스</h4>
                 ${statTable}
-                <canvas id="radarChart-${data.id}" width="200" height="200" style="margin-top: 15px;"></canvas>
+                <canvas id="radarChart-${data.id}" width="200" height="200" style="margin-top:15px;"></canvas>
             </div>
-            <div style="flex: 1;">
+            <div style="flex:1;">
                 <h4>계산된 능력치</h4>
-                <table class="info-table" style="width: 100%;">
-                    <tr><td style="width: 50%;">최대 체력</td><td>${calculatedStats.maxHp}</td></tr>
-                    <tr><td>최대 정신력</td><td>${calculatedStats.maxMp}</td></tr>
-                    <tr><td>물리 공격력</td><td>${calculatedStats.physicalAttack}</td></tr>
-                    <tr><td>정신 공격력</td><td>${calculatedStats.mentalAttack}</td></tr>
-                </table>
+                ${calcTable}
             </div>
         </div>
     `;
 
-    // **인라인 편집 이벤트 리스너 부착**
+    // 이벤트 리스너 부착
     if (isEditMode) {
         el.querySelectorAll('.inline-edit-field').forEach(field => {
-            field.onchange = (e) => {
-                // 스탯 변경 시 계산된 값과 그래프까지 반영하기 위해 전체 상세 화면을 다시 렌더링합니다.
+            field.onchange = e => {
                 handleEditFieldChange(data, e.target.dataset.section, e.target.dataset.key, e.target.value);
-                renderDexDetail(data.id, true); 
+                renderDexDetail(data.id, true); // 스탯 변경 시 전체 상세 화면 갱신
             };
         });
-        
-        // 공개 체크박스 이벤트 리스너 부착
+
         el.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
-            checkbox.onchange = (e) => {
+            checkbox.onchange = e => {
                 const key = e.target.dataset.key;
-                data.stats.isPublic[key] = e.target.checked;
+                d.isPublic[key] = e.target.checked;
             };
         });
     }
 }
 
 /**
- * 댓글 영역 렌더링 (9. 인라인 댓글, 미리보기 3개)
+ * 데이터 객체의 필드를 실시간으로 업데이트
+ * @param {Object} data - 전체 심연체 데이터 객체
+ * @param {string} section - 수정할 섹션 ('basic', 'stats', 등)
+ * @param {string} key - 수정할 키 (배열 포함 가능, e.g. 'basicInfo[1].value')
+ * @param {any} value - 새로운 값
  */
-function renderCommentArea(abyssId, comments = []) {
-    // 최신 순 정렬
-    comments.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-    
-    const preview = comments.slice(0, 3);
-    const count = comments.length;
-
-    let listHtml = '';
-    if (count === 0) {
-        listHtml = '<div class="muted">아직 댓글이 없습니다.</div>';
-    } else {
-        preview.forEach(c => {
-            listHtml += renderCommentItem(c); // 댓글 아이템 렌더링 함수 사용
-        });
-    }
-
-    return `
-        <h4>댓글 (${count}개)</h4>
-        <div class="comments-list" style="margin-bottom: 15px;">
-            ${listHtml}
-        </div>
-        ${count > 3 ? `<button class="btn link" data-action="open-full-comments">댓글 전체 보기 (${count}개)</button>` : ''}
-        
-        <div class="comment-input-area" style="margin-top: 15px;">
-            <input type="text" id="dexCommentInput-${abyssId}" placeholder="댓글 작성 (엔터로 등록)" 
-                   style="width: 100%; padding: 8px; border-radius: 6px; background: transparent; 
-                          border: 1px solid rgba(255,255,255,0.1); color: inherit;">
-        </div>
-    `;
-}
-
-/**
- * 댓글 아이템 HTML 렌더링 (9, 10. 수정됨 표시 및 권한에 따른 액션)
- */
-function renderCommentItem(comment) {
-    const userHex = comment.userColor || '#CCCCCC'; // users/유저 uid/colorHex 값 사용 가정
-    const isEdited = !!comment.editedAt;
-    
-    // 배경 색상 밝기 판단 (대략적인 판단 로직)
-    const r = parseInt(userHex.slice(1, 3), 16);
-    const g = parseInt(userHex.slice(3, 5), 16);
-    const b = parseInt(userHex.slice(5, 7), 16);
-    const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-    const iconColor = brightness > 125 ? 'black' : 'white';
-
-    return `
-        <div class="comment-item" data-id="${comment.id}" data-uid="${comment.uid}" style="display: flex; gap: 10px; margin-bottom: 10px;">
-            <div style="width: 30px; height: 30px; border-radius: 50%; background-color: ${userHex}; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                <span class="material-icons" style="font-size: 20px; color: ${iconColor};">person</span>
-            </div>
-            <div style="flex-grow: 1;">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <strong>${comment.name || '익명'}</strong>
-                    <span class="muted" style="font-size: 0.8em;">${fmtTime(comment.createdAt)}${isEdited ? ' (수정됨)' : ''}</span>
-                </div>
-                <div class="comment-text">${comment.text || ''}</div>
-                <div class="comment-actions" style="margin-top: 5px; font-size: 0.9em; display: none;">
-                    <button class="link comment-edit">수정</button>
-                    <button class="link comment-delete">삭제</button>
-                </div>
-            </div>
-        </div>
-    `;
-}
-
-/**
- * 댓글 이벤트 리스너 부착 및 처리 (10. 수정/삭제 권한)
- */
-function attachCommentEventListeners(abyssId) {
-    const inputEl = document.getElementById(`dexCommentInput-${abyssId}`);
-    
-    // 9. 인라인 댓글 등록 (Enter)
-    if (inputEl) {
-        inputEl.addEventListener('keydown', e => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                const text = inputEl.value.trim();
-                if (text) {
-                    // postMapComment와 유사한 postDexComment 함수 사용 가정
-                    postDexComment(abyssId, text).then(() => {
-                        inputEl.value = '';
-                        renderDexDetail(abyssId); // 댓글 후 상세 페이지 새로고침
-                    });
-                }
+function handleEditFieldChange(data, section, key, value) {
+    if (key.includes('[')) {
+        const match = key.match(/(\w+)\[(\d+)\]\.(\w+)/);
+        if (match) {
+            const [_, arrKey, indexStr, subKey] = match;
+            const index = parseInt(indexStr);
+            if (data[section]?.[arrKey]?.[index]) {
+                data[section][arrKey][index][subKey] = value;
             }
-        });
-    }
-
-    // 9. 전체 댓글 보기
-    document.querySelector('[data-action="open-full-comments"]')?.addEventListener('click', () => {
-        openCommentsPopup(abyssId, 'abyssal_dex'); // 기존 팝업 함수 재사용 (컬렉션 지정)
-    });
-
-    // 10. 댓글 수정/삭제 권한 처리
-    document.querySelectorAll('.comment-item').forEach(async item => {
-        const commentId = item.dataset.id;
-        const commentUid = item.dataset.uid;
-        
-        const isManager = await isAdminUser();
-        const isOwner = currentUser && currentUser.uid === commentUid;
-
-        if (isManager || isOwner) {
-            const actions = item.querySelector('.comment-actions');
-            actions.style.display = 'block';
-
-            // 수정
-            actions.querySelector('.comment-edit').onclick = async () => {
-                const originalText = item.querySelector('.comment-text').textContent;
-                const newText = prompt('댓글 내용을 수정하시오.', originalText);
-                if (newText) {
-                    await updateDoc(doc(db, 'abyssal_dex', abyssId, 'comments', commentId), { 
-                        text: newText, 
-                        editedAt: serverTimestamp() 
-                    });
-                    renderDexDetail(abyssId);
-                }
-            };
-            
-            // 삭제
-            actions.querySelector('.comment-delete').onclick = async () => {
-                if (await showConfirm('정말로 이 댓글을 삭제하시겠습니까?')) {
-                    await deleteDoc(doc(db, 'abyssal_dex', abyssId, 'comments', commentId));
-                    renderDexDetail(abyssId);
-                }
-            };
         }
-    });
-}
-
-async function postDexComment(abyssId, text) {
-    const user = auth.currentUser;
-    if (!user) {
-        showMessage('로그인이 필요합니다.', 'warning');
         return;
     }
-    
-    try {
-        // 1. 사용자 정보(이름, 색상)를 가져옵니다.
-        const userDoc = await getDoc(doc(db, 'users', user.uid));
-        const userData = userDoc.exists() ? userDoc.data() : {};
-        const userName = userData.nickname || '익명';
-        // ⭐ 이 userColor를 댓글 문서에 저장해야 합니다.
-        const userColor = userData.colorHex || '#CCCCCC'; 
 
-        // 2. 댓글을 Firestore에 저장
-        await addDoc(collection(db, 'abyssal_dex', abyssId, 'comments'), {
-            uid: user.uid,
-            name: userName,
-            userColor: userColor, // 색상 정보 함께 저장
-            text: text,
-            createdAt: serverTimestamp(),
-            editedAt: null
+    if (section === 'basic' && (key === 'discoverySeq' || key === 'derivedSeq')) {
+        data[section][key] = Number(value);
+    } 
+    else if (section === 'basic' || section === 'stats') {
+        data[section][key] = value;
+    }
+
+    if (section === 'basic' && ['danger', 'shape', 'discoverySeq', 'derivedSeq'].includes(key)) {
+        const d = data.basic;
+        data.basic.code = generateAbyssCode(d.danger, d.shape, d.discoverySeq, d.derivedSeq);
+    }
+}
+
+/**
+ * 관리 정보 섹션 렌더링
+ * @param {HTMLElement} el - 렌더링할 컨테이너
+ * @param {Object} data - 심연체 전체 데이터
+ * @param {boolean} isEditMode - 편집 모드 여부
+ * @param {boolean} isManager - 관리자 여부
+ */
+function renderManagementSection(el, data, isEditMode, isManager) {
+    const d = data.management;
+    const section = 'management';
+
+    const renderArrayInfo = (key, title, labelBase) => {
+        const items = d[key] || [];
+        let html = `<h4>${title}</h4><table class="info-table" style="width: 100%;">`;
+        let hasVisibleRows = false;
+
+        // 안내 문구
+        const emptyMessages = {
+            otherInfo: '기타 정보가 존재하지 않습니다.',
+            collectionInfo: '채취 정보가 존재하지 않습니다.'
+        };
+        const emptyMessage = emptyMessages[key] || '관리 정보가 존재하지 않습니다.';
+
+        items.forEach((item, index) => {
+            const isBasicInfoDefault = key === 'basicInfo' && index === 0;
+            
+            // 비관리자 + 비공개 + 기본 정보 항목 아니면 스킵
+            if (!isManager && !item.isPublic && !isBasicInfoDefault) return;
+
+            hasVisibleRows = true;
+            const isPublic = item.isPublic ?? false;
+            const masked = !isPublic && !isManager;
+            const itemLabel = isBasicInfoDefault ? '기본 정보' : `${labelBase} (${index + 1})`;
+            const isProtectedBasicInfo = isBasicInfoDefault && items.length > 1;
+
+            html += `
+                <tr class="${masked ? 'masked-row' : ''}">
+                    <td style="width: 30%; font-weight: bold; vertical-align: top; padding-top: 8px;">
+                        ${isManager && isEditMode ? `<input type="checkbox" data-key="${key}[${index}].isPublic" data-section="${section}" ${isPublic ? 'checked' : ''} style="margin-right: 5px;">` : ''}
+                        ${itemLabel}
+                        ${isManager && isEditMode && !isProtectedBasicInfo ? 
+                            `<button class="btn-xs danger" data-action="delete" data-key="${key}" data-index="${index}" style="margin-left: 5px;">-</button>` : ''}
+                    </td>
+                    <td>
+                        ${masked ? '<div class="masked-data"></div>' : renderInlineField({ key, type: 'textarea' }, item.value, isEditMode, section, index, 'value')}
+                    </td>
+                </tr>
+            `;
         });
-        
-    } catch(e) {
-        console.error("댓글 등록 실패:", e);
-        showMessage('댓글 등록에 실패했습니다.', 'error');
-    }
+
+        if (!hasVisibleRows) {
+            html += `<tr><td colspan="2" class="muted" style="text-align: center;">${emptyMessage}</td></tr>`;
+        }
+
+        if (isManager && isEditMode) {
+            html += `<tr><td colspan="2"><button class="btn-xs primary" data-action="add" data-key="${key}">+ ${title} 추가</button></td></tr>`;
+        }
+
+        html += '</table>';
+        return html;
+    };
+
+    el.innerHTML = `
+        <h3>관리 정보</h3>
+        ${renderArrayInfo('basicInfo', '관리 정보', '추가 정보')}
+        ${renderArrayInfo('collectionInfo', '채취 정보', '채취 정보')}
+        ${renderArrayInfo('otherInfo', '기타 정보', '기타 정보')}
+    `;
+
+    if (!isEditMode) return;
+
+    // 인라인 편집 이벤트
+    el.querySelectorAll('.inline-edit-field').forEach(field => {
+        field.onchange = (e) => handleEditFieldChange(data, e.target.dataset.section, e.target.dataset.key, e.target.value);
+    });
+
+    // 공개 체크박스
+    el.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+        cb.onchange = (e) => handleEditFieldChange(data, e.target.dataset.section, e.target.dataset.key, e.target.checked);
+    });
+
+    // 추가/삭제 버튼
+    el.querySelectorAll('button[data-action]').forEach(btn => {
+        btn.onclick = (e) => {
+            const action = e.target.dataset.action;
+            const key = e.target.dataset.key;
+            const index = parseInt(e.target.dataset.index);
+            const arr = data.management[key];
+
+            if (action === 'add') {
+                if (arr.length < 10) arr.push({ label: '새 정보', value: '', isPublic: false });
+                else showMessage('더 이상 정보를 추가할 수 없습니다.', 'warning');
+            } 
+            else if (action === 'delete') {
+                if (key === 'basicInfo' && index === 0 && arr.length > 1) {
+                    showMessage('기본 관리 정보는 삭제할 수 없습니다. (최소 1개 유지 필요)', 'error');
+                    return;
+                }
+                arr.splice(index, 1);
+            }
+
+            renderManagementSection(el, data, isEditMode, isManager);
+        };
+    });
 }
 
 /**
- * 현재 로그인된 사용자가 관리자인지 확인합니다.
- * @returns {Promise<boolean>}
+ * 연구 일지 섹션 렌더링
+ * @param {HTMLElement} el - 렌더링할 컨테이너
+ * @param {Object} data - 심연체 전체 데이터
+ * @param {boolean} isEditMode - 편집 모드 여부
+ * @param {boolean} isManager - 관리자 여부
  */
-async function isAdminUser() {
-    const user = auth.currentUser;
-    if (!user) return false;
-    try {
-        // 'users' 컬렉션에서 사용자 UID로 문서 조회
-        const uDoc = await getDoc(doc(db, 'users', user.uid));
-        // 사용자가 존재하고 역할(role)이 'admin'인지 확인
-        return uDoc.exists() && uDoc.data().role === 'admin';
-    } catch(e) {
-        console.error('isAdminUser check failed:', e);
-        return false;
+function renderLogsSection(el, data, isEditMode, isManager) {
+    const logsData = data.logs || [];
+    const section = 'logs';
+
+    const renderLogCard = (log, index) => {
+        const logLabel = index === 0 ? '기본 일지' : `연구 일지 (${index})`;
+        const isPublic = log.isPublic || false;
+        const masked = !isPublic && !isManager;
+        const canDelete = isManager && isEditMode && logsData.length > 0;
+
+        return `
+            <div class="card log-entry ${masked ? 'masked-log' : ''}" style="margin-bottom: 15px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h4 style="margin: 0;">${logLabel}</h4>
+                    <span class="muted" style="font-size: 0.9em;">${log.createdAt ? fmtTime(log.createdAt) : '날짜 없음'}</span>
+                </div>
+                
+                ${canDelete ? `<button class="btn-xs danger" data-action="delete" data-index="${index}" style="float: right;">- 삭제</button>` : ''}
+
+                <p style="margin-top: 10px;">
+                    <strong>제목:</strong> 
+                    ${masked ? '<div class="masked-data"></div>' : renderInlineField({key: section, type: 'text'}, log.title, isEditMode, section, index, 'title')}
+                </p>
+                <p>
+                    <strong>내용:</strong> 
+                    ${masked ? '<div class="masked-data" style="height:50px;"></div>' : renderInlineField({key: section, type: 'textarea'}, log.content, isEditMode, section, index, 'content')}
+                </p>
+
+                ${isManager && isEditMode ? `
+                    <p>
+                        <input type="checkbox" data-key="${section}[${index}].isPublic" data-section="${section}" ${isPublic ? 'checked' : ''} style="margin-right:5px;"> 공개
+                    </p>` : ''}
+            </div>
+        `;
+    };
+
+    // 일지가 없으면 안내 및 추가 버튼
+    if (logsData.length === 0) {
+        el.innerHTML = `
+            <h3>연구 일지</h3>
+            <div class="card muted" style="text-align:center; padding:20px;">연구 일지가 존재하지 않습니다.</div>
+            ${isManager && isEditMode ? `<button class="btn primary" id="addLogBtn" style="margin-top:15px;">+ 연구 일지 추가</button>` : ''}
+        `;
+    } else {
+        el.innerHTML = `
+            <h3>연구 일지</h3>
+            <div class="log-list">${logsData.map(renderLogCard).join('')}</div>
+            ${isManager && isEditMode && logsData.length < 4 ? `<button class="btn primary" id="addLogBtn" style="margin-top:15px;">+ 연구 일지 추가</button>` : ''}
+        `;
     }
+
+    if (!isEditMode) return;
+
+    // 인라인 편집 이벤트
+    el.querySelectorAll('.inline-edit-field').forEach(field => {
+        field.onchange = (e) => handleEditFieldChange(data, e.target.dataset.section, e.target.dataset.key, e.target.value);
+    });
+
+    // 공개 체크박스 이벤트
+    el.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+        cb.onchange = (e) => handleEditFieldChange(data, e.target.dataset.section, e.target.dataset.key, e.target.checked);
+    });
+
+    // 추가 버튼
+    document.getElementById('addLogBtn')?.addEventListener('click', () => {
+        if (logsData.length < 4) {
+            logsData.push({ title: '새 일지', content: '내용 없음', createdAt: new Date(), isPublic: false });
+            renderLogsSection(el, data, isEditMode, isManager);
+        }
+    });
+
+    // 삭제 버튼
+    el.querySelectorAll('button[data-action="delete"]').forEach(btn => {
+        btn.onclick = (e) => {
+            const index = parseInt(e.target.dataset.index);
+            logsData.splice(index, 1);
+            renderLogsSection(el, data, isEditMode, isManager);
+        };
+    });
 }
 
 /**
- * 현재 로그인된 사용자의 UID를 반환합니다.
- * onAuthStateChanged 이벤트가 완료될 때까지 기다려 로그인 상태를 확정합니다.
- * @returns {Promise<string|null>}
+ * 섹션 전체 공개 여부 설정
+ * @param {Object} data - 심연체 전체 데이터
+ * @param {string} sectionKey - 'basic', 'stats', 'management', 'logs'
+ * @param {boolean} isPublic - 공개(true)/비공개(false)
  */
-async function getCurrentUserSheetId() {
-    // 1. 현재 사용자 객체를 즉시 확인
-    let user = auth.currentUser;
-    
-    // 2. 만약 사용자 객체가 없으면, 인증 상태가 변경될 때까지 기다리는 Promise를 생성
-    if (!user) {
-        return new Promise((resolve) => {
-            // onAuthStateChanged는 첫 로딩 시에도 즉시 호출됩니다.
-            const unsubscribe = onAuthStateChanged(auth, (u) => {
-                // 구독 해제
-                unsubscribe(); 
-                // 유저가 있으면 UID 반환, 없으면 null 반환
-                resolve(u ? u.uid : null); 
+function setSectionDisclosure(data, sectionKey, isPublic) {
+    switch(sectionKey) {
+        case 'basic':
+        case 'stats':
+            const isPublicObj = data[sectionKey]?.isPublic;
+            if (isPublicObj) {
+                Object.keys(isPublicObj).forEach(key => isPublicObj[key] = isPublic);
+            }
+            break;
+
+        case 'management':
+            ['basicInfo', 'collectionInfo', 'otherInfo'].forEach(arrayKey => {
+                data.management[arrayKey]?.forEach(item => item.isPublic = isPublic);
             });
-        });
+            break;
+
+        case 'logs':
+            data.logs?.forEach(log => log.isPublic = isPublic);
+            break;
     }
-    
-    // 3. 이미 로그인된 상태라면 바로 UID 반환
-    return user.uid;
-}
-/**
- * 특정 시트 ID에 대한 데이터를 Firestore에서 가져옵니다.
- * 'sheets' 컬렉션에 모든 데이터가 저장되어 있다고 가정합니다.
- * @param {string} sheetId - 가져올 시트의 ID (사용자 UID와 동일)
- * @returns {Promise<Object>} 시트 데이터 객체
- */
-async function fetchSheetData(sheetId) {
-    // 'sheets' 컬렉션에서 해당 ID의 문서 조회
-    const sheetDoc = await getDoc(doc(db, 'sheets', sheetId));
-    if (!sheetDoc.exists()) {
-        throw new Error(`Sheet data not found for ID: ${sheetId}`);
-    }
-    
-    // 데이터 구조가 깊어지면 깊은 복사나 추가 처리가 필요할 수 있지만,
-    // 여기서는 문서 데이터를 직접 반환
-    return sheetDoc.data();
 }
 
 /**
- * 인벤토리 아이템에 대한 설명을 데이터베이스에서 가져옵니다.
- * 'items' 컬렉션에 아이템 정보가 저장되어 있다고 가정합니다.
- * @param {string} itemName - 아이템 이름
- * @returns {Promise<string>} 아이템 설명
+ * 인라인 편집 필드 렌더링
+ * @param {Object} f - 필드 설정 { key, type, readOnly, options, min }
+ * @param {*} currentValue - 현재 값
+ * @param {boolean} isEditMode - 편집 모드 여부
+ * @param {string} section - 섹션 이름 (basic, stats, management 등)
+ * @param {number|null} index - 배열 필드 인덱스 (없으면 null)
+ * @param {string|null} subKey - 배열 내 서브 키 (없으면 null)
+ * @returns {string} HTML 문자열
  */
-async function fetchItemDescription(itemName) {
-    try {
-        // 'items' 컬렉션에서 name 필드가 itemName과 일치하는 문서 쿼리
-        const q = query(collection(db, 'items'), where('name', '==', itemName));
-        const snap = await getDocs(q);
-        
-        if (!snap.empty) {
-            // 첫 번째 일치하는 아이템의 description 반환
-            return snap.docs[0].data().description || "설명 없음";
-        }
-    } catch(e) {
-        console.error("Failed to fetch item description:", e);
+function renderInlineField(f, currentValue, isEditMode, section, index = null, subKey = null) {
+    // 배열 필드용 키 생성 (예: 'basicInfo[1].value')
+    const key = index !== null ? `${f.key}[${index}].${subKey}` : f.key;
+
+    if (!isEditMode || f.readOnly) return currentValue;
+
+    switch(f.type) {
+        case 'select':
+            return `
+                <select data-key="${key}" data-section="${section}" class="inline-edit-field form-control-inline">
+                    ${f.options.map(opt => `<option value="${opt}" ${opt === currentValue ? 'selected' : ''}>${opt}</option>`).join('')}
+                </select>
+            `;
+        case 'textarea':
+            return `
+                <textarea data-key="${key}" data-section="${section}" 
+                          class="inline-edit-field form-control-inline" rows="3" style="width:100%;">${currentValue}</textarea>
+            `;
+        default:
+            const type = f.type || 'text';
+            return `
+                <input type="${type}" data-key="${key}" data-section="${section}" 
+                       class="inline-edit-field form-control-inline" value="${currentValue}" 
+                       ${f.min !== undefined ? `min="${f.min}"` : ''} style="width:100%;">
+            `;
     }
-    return "설명 없음 (DB 로드 실패)";
 }
 
-// 부상도/오염도에 따른 텍스트 구절 반환
-function getStatusText(injuryPercent, contaminationPercent) {
-    let injuryText = "";
-    let contaminationText = "";
+/* =========================================================
+   내 정보
+========================================================= */
 
-    // 부상도 텍스트
-    if (injuryPercent === 0) injuryText = "부상 없음.";
-    else if (injuryPercent <= 10) injuryText = "경미한 찰과상.";
-    else if (injuryPercent <= 30) injuryText = "타박상 및 출혈.";
-    else if (injuryPercent <= 60) injuryText = "깊은 상처 및 골절 가능성.";
-    else injuryText = "심각한 부상, 활동 불가 수준.";
-    
-    // 오염도 텍스트
-    if (contaminationPercent === 0) contaminationText = "오염 없음.";
-    else if (contaminationPercent <= 10) contaminationText = "경미한 오염, 즉시 제거 가능.";
-    else if (contaminationPercent <= 30) contaminationText = "중간 오염, 징후 발현.";
-    else if (contaminationPercent <= 60) contaminationText = "심각한 오염, 신체 능력 저하.";
-    else contaminationText = "치명적인 오염, 변이 진행 중.";
 
-    return [injuryText, contaminationText];
-}
-
-// 부위별 색상을 계산하는 함수 (검은색 -> 파란색(부상) / 보라색(오염) / 섞임)
-function calculatePartColor(injury, contamination) {
-    // 0~100 스케일
-    const i = Math.min(100, injury) / 100;
-    const c = Math.min(100, contamination) / 100;
-
-    // 검정(0,0,0)을 베이스로 파랑(부상)과 보라색(오염)을 섞음
-    // 부상(Blue) 증가, 오염(Purple=Red+Blue) 증가
-    
-    // R: 오염도에 의해 증가
-    const r = Math.round(i * 10 + c * 100); 
-    // G: 기본적으로 낮음
-    const g = Math.round(i * 10 + c * 10);
-    // B: 부상도와 오염도 모두에 의해 증가
-    const b = Math.round(i * 150 + c * 150); 
-    
-    // 부상도와 오염도가 모두 0일 때 (어두운 배경색과 섞여야 하므로)
-    if (i === 0 && c === 0) return 'rgba(255, 255, 255, 0.1)'; 
-    
-    // 색상 포화도를 높여서 변화를 명확하게 (최대 255를 넘지 않도록 제한)
-    const red = Math.min(200, r + 50);
-    const green = Math.min(200, g + 50);
-    const blue = Math.min(255, b + 50);
-
-    return `rgb(${red}, ${green}, ${blue})`;
-}
-
-// ----------------------------------------------------------------------
-
-/**
- * 개인 캐릭터 시트 전체를 렌더링합니다.
- * (이전 응답과 동일한 로직을 사용하며, 위에 정의된 Firebase 헬퍼 함수를 통해 데이터를 가져옴)
- * @param {string} [targetSheetId] - 관리자가 특정 유저 시트를 볼 때 사용하는 ID.
- */
+// 진짜 내 정보 보여줌
 async function renderMe(targetSheetId = null) {
-    // 0-2. 관리자/본인 시트 확인
     const isAdmin = await isAdminUser();
-    let currentSheetId = targetSheetId;
-    
-    if (!targetSheetId) {
-        currentSheetId = await getCurrentUserSheetId();
-        if (!currentSheetId) {
-            contentEl.innerHTML = '<div class="card muted">로그인 후 본인의 시트를 확인하세요.</div>';
-            return;
-        }
-    } else if (!isAdmin) {
+    let currentSheetId = targetSheetId || await getCurrentUserSheetId();
+
+    if (!currentSheetId) {
+        contentEl.innerHTML = '<div class="card muted">로그인 후 본인의 시트를 확인하세요.</div>';
+        return;
+    }
+    if (targetSheetId && !isAdmin) {
         contentEl.innerHTML = '<div class="card error">권한이 없습니다.</div>';
         return;
     }
-    
-    contentEl.innerHTML = '<div class="card muted">시트 로딩중...</div>';
-    
-    try {
-        // 1. 시트 데이터를 데이터베이스에서 가져옴 (Firebase 연동)
-        const sheetData = await fetchSheetData(currentSheetId);
 
+    contentEl.innerHTML = '<div class="card muted">시트 로딩중...</div>';
+
+    try {
+        const sheetData = await fetchSheetData(currentSheetId);
         const sheetContainer = document.createElement('div');
         sheetContainer.className = 'char-sheet-container';
-        
-        // ⭐ 2. 인적사항 섹션 렌더링 (시트 제목을 닉네임으로 설정하기 위해 변수에서 처리)
-        const nickname = sheetData.personnel?.name || currentSheetId; 
-        
-        sheetContainer.appendChild(renderPersonnelSection(sheetData.personnel, nickname, currentSheetId, isAdmin));
-        
-        // 3. 스탯 섹션 렌더링
-        sheetContainer.appendChild(renderMeStatsSection(sheetData.stats, isAdmin, currentSheetId));
-        
-        // 4. 인벤토리 섹션 렌더링 (비동기 함수 사용)
-        sheetContainer.appendChild(await renderInventorySection(sheetData.inventory, isAdmin, currentSheetId));
 
-        // 5. 현재 상태 섹션 렌더링
+        const nickname = sheetData.personnel?.name || currentSheetId;
+
+        sheetContainer.appendChild(renderPersonnelSection(sheetData.personnel, nickname, currentSheetId, isAdmin));
+        sheetContainer.appendChild(renderMeStatsSection(sheetData.stats, isAdmin, currentSheetId));
+        sheetContainer.appendChild(await renderInventorySection(sheetData.inventory, isAdmin, currentSheetId));
         sheetContainer.appendChild(renderStatusSection(sheetData.status, sheetData.stats.spirit, isAdmin, currentSheetId));
-        
+
         contentEl.innerHTML = '';
         contentEl.appendChild(sheetContainer);
-        
     } catch(e) {
         console.error("Sheet load failed:", e);
         contentEl.innerHTML = `<div class="card error">시트 로드 실패: ${e.message}</div>`;
     }
 }
 
-// 인적사항 섹션 렌더링
+// 인적사항
 function renderPersonnelSection(p, nickname, sheetId, isAdmin) {
     const section = document.createElement('div');
-    section.className = 'card map-card'; // 기존 카드 스타일 활용
+    section.className = 'card map-card';
+
     section.innerHTML = `
-        <h2 style="margin-top:0;">👤 ${nickname}님의 시트</h2>
+        <h2 style="margin-top:0;">${nickname}님의 시트</h2>
         <div class="personnel-grid">
             <div class="photo-area">
-                <img src="${p.photoUrl}" alt="프로필 사진" style="width:100%; height:auto; aspect-ratio: 3/4; object-fit: cover;">
+                <img src="${p.photoUrl}" alt="프로필 사진" style="width:100%; aspect-ratio: 3/4; object-fit: cover;">
             </div>
             <div class="details-area">
                 ${renderHorizontalTable('표 1: 기본 정보', [
@@ -3268,9 +2662,9 @@ function renderPersonnelSection(p, nickname, sheetId, isAdmin) {
                     { label: '성별', value: p.gender },
                     { label: '나이', value: p.age },
                     { label: '키/체중', value: `${p.height}cm / ${p.weight}kg` },
-                    { label: '국적', value: p.nationality },
+                    { label: '국적', value: p.nationality }
                 ], isAdmin)}
-                
+
                 ${renderHorizontalTable('표 2: 상세 정보', [
                     { label: '학력', value: p.education },
                     { label: '경력', value: p.career },
@@ -3279,16 +2673,17 @@ function renderPersonnelSection(p, nickname, sheetId, isAdmin) {
                     { label: '결혼 여부', value: p.marriage },
                     { label: '병력', value: p.medical },
                     { label: '범죄 전과', value: p.criminal },
-                    { label: '비고', value: p.etc, isLong: true },
+                    { label: '비고', value: p.etc, isLong: true }
                 ], isAdmin)}
             </div>
         </div>
-        ${isAdmin ? `<button class="btn link admin-edit-btn" onclick="openPersonnelEdit('${sheetId}', ${JSON.stringify(p)})">인적사항 편집</button>` : ''}
+        ${isAdmin ? `<button class="btn link admin-edit-btn" onclick='openPersonnelEdit("${sheetId}", ${JSON.stringify(p)})'>인적사항 편집</button>` : ''}
     `;
+    
     return section;
 }
 
-// 스탯 섹션 렌더링
+// 스텟
 function renderMeStatsSection(s, isAdmin, sheetId) {
     const section = document.createElement('div');
     section.className = 'card map-card';
@@ -3296,32 +2691,27 @@ function renderMeStatsSection(s, isAdmin, sheetId) {
     const style = `
         .stats-grid-2x2 {
             display: grid;
-            grid-template-columns: 1fr 1fr; /* 1/2, 1/2 너비 */
+            grid-template-columns: 1fr 1fr;
             gap: 20px;
         }
-        /* 각 행의 요소(테이블과 차트)의 높이를 자동으로 맞춤 */
         .stats-grid-2x2 > div {
             display: flex;
             flex-direction: column;
-            /* 높이가 행에 맞춰지도록 flex-grow를 사용하며, 차트 컨테이너는 늘어날 수 있도록 height: auto */
         }
-        /* renderHorizontalTable에서 생성되는 테이블 컨테이너에도 높이 확보를 위한 스타일 적용 */
         .stats-table-container {
             height: 100%; 
             display: flex;
             flex-direction: column;
         }
-        /* 테이블 내부의 테이블 엘리먼트가 꽉 차도록 */
         .stats-table-container > div:first-child { 
-             flex-grow: 1; 
+            flex-grow: 1; 
         }
     `;
-    
+
     section.innerHTML = `
         <style>${style}</style>
         <h2>스탯</h2>
         <div class="stats-grid-2x2">
-            
             <div class="stats-table-container">
                 ${renderHorizontalTable('표 1: 신체 스탯', [
                     { label: '근력', value: s.muscle },
@@ -3335,8 +2725,7 @@ function renderMeStatsSection(s, isAdmin, sheetId) {
                 ], isAdmin, true)}
             </div>
             
-            <div class="chart-container-1" style="width: 100%; height: auto; min-height: 300px;"> 
-            </div>
+            <div class="chart-container-1" style="width: 100%; min-height: 300px;"></div>
             
             <div class="stats-table-container">
                 ${renderHorizontalTable('표 2: 정신 스탯', [
@@ -3349,59 +2738,50 @@ function renderMeStatsSection(s, isAdmin, sheetId) {
                 ], isAdmin, true)}
             </div>
             
-            <div class="chart-container-2" style="width: 100%; height: auto; min-height: 300px;">
-            </div>
+            <div class="chart-container-2" style="width: 100%; min-height: 300px;"></div>
         </div>
-        ${isAdmin ? `<button class="btn link admin-edit-btn" onclick="openStatsEdit('${sheetId}', ${JSON.stringify(s)})">스탯 편집</button>` : ''}
+
+        ${isAdmin ? `<button class="btn link admin-edit-btn" onclick='openStatsEdit("${sheetId}", ${JSON.stringify(s)})'>스탯 편집</button>` : ''}
     `;
-    
-    // 차트 초기화 함수 호출 (실제 DOM 요소가 삽입된 후 실행)
-    setTimeout(() => {
-        initStatsRadarCharts(s);
-    }, 0); 
-    
+
+    // DOM에 삽입 후 차트 초기화
+    setTimeout(() => initStatsRadarCharts(s), 0);
+
     return section;
 }
 
-// 인벤토리 섹션 렌더링
 async function renderInventorySection(inv, isAdmin, sheetId) {
     const section = document.createElement('div');
     section.className = 'card map-card';
-    
-    const itemPromises = inv.items.map(item => {
-      // 이미 설명이 있다면 DB 쿼리 없이 바로 설명을 반환 (병렬 처리 대상에서 제외)
-      if (item.desc) return Promise.resolve(item.desc); 
-      // 설명이 없다면 fetchItemDescription 호출
-      return fetchItemDescription(item.name);
-  });
 
-  // 2. 모든 Promise가 완료되기를 기다립니다. (병렬 실행)
-  const descriptions = await Promise.all(itemPromises); 
-  let itemRows = '';
+    // 각 아이템 설명을 병렬로 가져오기 (desc가 있으면 바로 사용)
+    const itemPromises = inv.items.map(item => item.desc ? Promise.resolve(item.desc) : fetchItemDescription(item.name));
+    const descriptions = await Promise.all(itemPromises);
 
-  if (inv.items.length === 0) {
-      itemRows = `<tr><td colspan="5" style="text-align: center; color: #aaa;">소지한 물건이 없습니다.</td></tr>`;
-  } else {
-      // 3. 병렬 처리된 결과를 사용하여 HTML 생성
-      for (const [index, item] of inv.items.entries()) {
-          const desc = item.desc || descriptions[index]; // item.desc가 있으면 그걸 사용, 없으면 병렬 결과 사용
-          itemRows += `
-              <tr>
-                  <td>${index + 1}</td>
-                  <td>${item.name}</td>
-                  <td>${desc}</td>
-                  <td>${item.count}</td>
-              </tr>
-          `;
-      }
-  }
+    let itemRows = '';
+    if (inv.items.length === 0) {
+        itemRows = `<tr><td colspan="4" style="text-align:center; color:#aaa;">소지한 물건이 없습니다.</td></tr>`;
+    } else {
+        inv.items.forEach((item, index) => {
+            const desc = item.desc || descriptions[index];
+            itemRows += `
+                <tr>
+                    <td>${index + 1}</td>
+                    <td>${item.name}</td>
+                    <td>${desc}</td>
+                    <td>${item.count}</td>
+                </tr>
+            `;
+        });
+    }
+
     section.innerHTML = `
-        <h2>🎒 인벤토리</h2>
-        <div style="margin-bottom: 15px; font-weight: bold; padding: 5px; background: rgba(255, 255, 255, 0.05);">
+        <h2>인벤토리</h2>
+        <div style="margin-bottom:15px; font-weight:bold; padding:5px; background: rgba(255,255,255,0.05);">
             소지한 은화: <span style="color: gold;">${inv.silver}</span> 개
         </div>
-        
-        <table class="data-table" style="width: 100%; border-collapse: collapse;">
+
+        <table class="data-table" style="width:100%; border-collapse:collapse;">
             <thead>
                 <tr>
                     <th>번호</th>
@@ -3414,31 +2794,36 @@ async function renderInventorySection(inv, isAdmin, sheetId) {
                 ${itemRows}
             </tbody>
         </table>
-        
-        ${isAdmin ? `<button class="btn link admin-edit-btn" onclick="openInventoryEdit(sheetId, ${JSON.stringify(inv)})">인벤토리 편집</button>` : ''}
+
+        ${isAdmin ? `<button class="btn link admin-edit-btn" onclick='openInventoryEdit("${sheetId}", ${JSON.stringify(inv)})'>인벤토리 편집</button>` : ''}
     `;
+
     return section;
 }
 
-// 현재 상태 섹션 렌더링
+// 부위랑 통계
 function renderStatusSection(s, spiritStat, isAdmin, sheetId) {
     const section = document.createElement('div');
     section.className = 'card map-card';
-    
-    const injuryParts = ['head', 'neck', 'leftEye', 'rightEye', 'leftArm', 'leftHand', 'leftLeg', 'leftFoot', 'torso', 'rightArm', 'rightHand', 'rightLeg', 'rightFoot'];
+
+    const injuryParts = [
+        'head', 'neck', 'leftEye', 'rightEye', 'leftArm', 'leftHand',
+        'leftLeg', 'leftFoot', 'torso', 'rightArm', 'rightHand', 'rightLeg', 'rightFoot'
+    ];
+
     const mapKeyToLabel = {
-        head: '<머리>', neck: '목', leftEye: '왼쪽 안구', rightEye: '오른쪽 안구',
-        leftArm: '<왼팔>', leftHand: '<왼손>', leftLeg: '<왼다리>', leftFoot: '왼발',
-        torso: '<상체>', rightArm: '<오른팔>', rightHand: '<오른손>', rightLeg: '<오른다리>', rightFoot: '오른발'
+        head: '머리', neck: '목', leftEye: '왼쪽 안구', rightEye: '오른쪽 안구',
+        leftArm: '왼팔', leftHand: '왼손', leftLeg: '왼다리', leftFoot: '왼발',
+        torso: '상체', rightArm: '오른팔', rightHand: '오른손', rightLeg: '오른다리', rightFoot: '오른발'
     };
 
-    // 5-1. 정신력 바 및 상태 구절
+    // 정신력 퍼센트 계산
     const spiritPercent = (s.currentSpirit / s.maxSpirit) * 100;
-    
-    let physicalStatusText = '양호';
+
+    // 신체 상태 텍스트
     const totalInjury = injuryParts.reduce((sum, key) => sum + s.injuries[key], 0);
     const totalContamination = injuryParts.reduce((sum, key) => sum + s.contaminations[key], 0);
-    
+    let physicalStatusText = '양호';
     if (totalInjury > 50) physicalStatusText = '불안정';
     if (totalInjury > 100) physicalStatusText = '심각';
     if (totalInjury === 0 && totalContamination === 0) physicalStatusText = '여유로움';
@@ -3449,38 +2834,38 @@ function renderStatusSection(s, spiritStat, isAdmin, sheetId) {
         .injury-status-grid-revised {
             display: flex;
             gap: 20px;
-            align-items: stretch; /* 높이를 동일하게 늘림 */
+            align-items: stretch;
         }
         .injury-status-grid-revised > div {
-            flex-grow: 1; /* 1:1:1 비율로 너비 배분 (약 33.33%씩) */
+            flex-grow: 1;
             flex-basis: 0;
-            min-height: 400px; /* 최소 높이 지정 (내용이 적을 때를 대비) */
-            border: 1px solid rgba(255, 255, 255, 0.1); /* 경계선 추가로 높이 확인 용이 */
+            min-height: 400px;
+            border: 1px solid rgba(255,255,255,0.1);
             padding: 10px;
         }
         .human-icon-container {
             display: flex;
             justify-content: center;
-            align-items: center; /* 사람 아이콘 수직 중앙 배치 */
-            background: rgba(255, 255, 255, 0.05);
+            align-items: center;
+            background: rgba(255,255,255,0.05);
         }
     `;
-    
+
     section.innerHTML = `
         <style>${statusGridStyle}</style>
         <h2>현재 상태</h2>
 
-        <div style="display: flex; align-items: center; gap: 20px; margin-bottom: 20px;">
-            <div style="flex-grow: 1;">
-                <div style="font-weight: bold; margin-bottom: 5px;">
+        <div style="display:flex; align-items:center; gap:20px; margin-bottom:20px;">
+            <div style="flex-grow:1;">
+                <div style="font-weight:bold; margin-bottom:5px;">
                     현재 정신력: ${s.currentSpirit} / ${s.maxSpirit} (정신력 스탯: ${spiritStat})
                 </div>
-                <div style="background: rgba(255, 255, 255, 0.1); height: 15px; border-radius: 4px; overflow: hidden;">
-                    <div style="width: ${spiritPercent}%; background: ${spiritPercent > 30 ? 'green' : 'red'}; height: 100%; transition: width 0.3s;"></div>
+                <div style="background: rgba(255,255,255,0.1); height:15px; border-radius:4px; overflow:hidden;">
+                    <div style="width:${spiritPercent}%; background:${spiritPercent > 30 ? 'green':'red'}; height:100%; transition:width 0.3s;"></div>
                 </div>
             </div>
-            <div style="min-width: 200px; text-align: right;">
-                <div style="color: ${physicalStatusText === '여유로움' ? 'lime' : 'yellow'}; font-weight: bold;">
+            <div style="min-width:200px; text-align:right;">
+                <div style="color:${physicalStatusText==='여유로움'?'lime':'yellow'}; font-weight:bold;">
                     현재 신체 상태는 '${physicalStatusText}'입니다.
                 </div>
                 <div>현재 오염도: ${s.currentContamination}%</div>
@@ -3490,38 +2875,41 @@ function renderStatusSection(s, spiritStat, isAdmin, sheetId) {
 
         <div class="injury-status-grid-revised">
             <div class="injury-list left-side">
-                ${renderInjuryBlock(['head', 'neck', 'leftEye', 'rightEye'], s, mapKeyToLabel)}
-                ${renderInjuryBlock(['leftArm', 'leftHand'], s, mapKeyToLabel)}
-                ${renderInjuryBlock(['leftLeg', 'leftFoot'], s, mapKeyToLabel)}
+                ${renderInjuryBlock(['head','neck','leftEye','rightEye'], s, mapKeyToLabel)}
+                ${renderInjuryBlock(['leftArm','leftHand'], s, mapKeyToLabel)}
+                ${renderInjuryBlock(['leftLeg','leftFoot'], s, mapKeyToLabel)}
             </div>
-            
+
             <div class="human-icon-container">
-                ${humanIconHtml} </div>
-            
+                ${humanIconHtml}
+            </div>
+
             <div class="injury-list right-side">
                 ${renderInjuryBlock(['torso'], s, mapKeyToLabel)}
-                ${renderInjuryBlock(['rightArm', 'rightHand'], s, mapKeyToLabel)}
-                ${renderInjuryBlock(['rightLeg', 'rightFoot'], s, mapKeyToLabel)}
+                ${renderInjuryBlock(['rightArm','rightHand'], s, mapKeyToLabel)}
+                ${renderInjuryBlock(['rightLeg','rightFoot'], s, mapKeyToLabel)}
             </div>
         </div>
-        
-        <h3 style="margin-top: 30px;">📊 현재 통계</h3>
+
+        <h3 style="margin-top:30px;">📊 현재 통계</h3>
         ${renderHorizontalTable('현재 통계', [
-            { label: '죽은 횟수', value: s.stats.deaths },
-            { label: '탐사를 나간 횟수', value: s.stats.explorations },
-            { label: '면담을 진행한 횟수', value: s.stats.interviews },
-            { label: '소지하고 있는 소지품 수', value: s.stats.itemsCarried },
-            { label: '심연체를 제압한 횟수', value: s.stats.abyssDefeated },
-            { label: '소지 은화', value: s.stats.silverCarried },
+            { label:'죽은 횟수', value: s.stats.deaths },
+            { label:'탐사를 나간 횟수', value: s.stats.explorations },
+            { label:'면담을 진행한 횟수', value: s.stats.interviews },
+            { label:'소지하고 있는 소지품 수', value: s.stats.itemsCarried },
+            { label:'심연체를 제압한 횟수', value: s.stats.abyssDefeated },
+            { label:'소지 은화', value: s.stats.silverCarried },
         ], isAdmin, true)}
 
-        ${isAdmin ? `<button class="btn link admin-edit-btn" onclick="openStatusEdit(sheetId, ${JSON.stringify(s)})">상태 및 통계 편집</button>` : ''}
+        ${isAdmin ? `<button class="btn link admin-edit-btn" onclick='openStatusEdit("${sheetId}", ${JSON.stringify(s)})'>상태 및 통계 편집</button>` : ''}
     `;
+
     return section;
 }
 
+// 사람 모양을 만들어 주다
 function renderHumanIcon(injuries, contaminations) {
-    // calculatePartColor 함수를 사용하여 부위별 색상을 계산합니다.
+    // 부위별 색상 계산
     const colors = {
         head: calculatePartColor(injuries.head, contaminations.head),
         torso: calculatePartColor(injuries.torso, contaminations.torso),
@@ -3530,39 +2918,50 @@ function renderHumanIcon(injuries, contaminations) {
         leftLeg: calculatePartColor(injuries.leftLeg, contaminations.leftLeg),
         rightLeg: calculatePartColor(injuries.rightLeg, contaminations.rightLeg),
     };
-    
-    // 단순화된 사람 모양 SVG
+
+    // 간단화된 사람 SVG 아이콘
     return `
-        <svg viewBox="0 0 100 150" style="width: 100%; max-width: 250px; height: auto;"> 
-            <path d="M 50 5 A 1 1 0 0 0 50 31 A 1 1 0 0 0 50 5 Z" fill="${colors.head}" stroke="#888" stroke-width="1"/>
+        <svg viewBox="0 0 100 150" style="width:100%; max-width:250px; height:auto;">
+            <!-- 머리 -->
+            <path d="M50 5 A1 1 0 0 0 50 31 A1 1 0 0 0 50 5 Z"
+                  fill="${colors.head}" stroke="#888" stroke-width="1"/>
             
-            <path d="M 35 35 L 65 35 L 65 90 L 35 90 Z" fill="${colors.torso}" stroke="#888" stroke-width="1"/>
+            <!-- 상체 -->
+            <path d="M35 35 L65 35 L65 90 L35 90 Z"
+                  fill="${colors.torso}" stroke="#888" stroke-width="1"/>
             
-            <path d="M 35 35 L 28 35 C 24 35 20 39 20 43 L 20 90 C 20 99 32 99 32 90 L 32 56 C 32 55 34 53 35 53 Z" fill="${colors.leftArm}" stroke="#888" stroke-width="1"/>
+            <!-- 왼팔 -->
+            <path d="M35 35 L28 35 C24 35 20 39 20 43 L20 90 C20 99 32 99 32 90 L32 56 C32 55 34 53 35 53 Z"
+                  fill="${colors.leftArm}" stroke="#888" stroke-width="1"/>
             
-            <path d="M 65 35 L 72 35 C 76 35 79 39 79 43 L 80 90 C 80 99 68 99 68 90 L 68 56 C 68 54 67 53 65 53 Z" fill="${colors.rightArm}" stroke="#888" stroke-width="1"/>
+            <!-- 오른팔 -->
+            <path d="M65 35 L72 35 C76 35 79 39 79 43 L80 90 C80 99 68 99 68 90 L68 56 C68 54 67 53 65 53 Z"
+                  fill="${colors.rightArm}" stroke="#888" stroke-width="1"/>
             
-            <path d="M 35 90 L 35 153 C 35 162 48 162 48 153 L 48 97 C 48 96 49 95 50 95 L 50 90 Z" fill="${colors.leftLeg}" stroke="#888" stroke-width="1"/>
+            <!-- 왼다리 -->
+            <path d="M35 90 L35 153 C35 162 48 162 48 153 L48 97 C48 96 49 95 50 95 L50 90 Z"
+                  fill="${colors.leftLeg}" stroke="#888" stroke-width="1"/>
             
-            <path d="M 50 90 L 50 95 C 51 95 52 96 52 97 L 52 153 C 52 162 65 162 65 153 L 65 90 Z" fill="${colors.rightLeg}" stroke="#888" stroke-width="1"/>
+            <!-- 오른다리 -->
+            <path d="M50 90 L50 95 C51 95 52 96 52 97 L52 153 C52 162 65 162 65 153 L65 90 Z"
+                  fill="${colors.rightLeg}" stroke="#888" stroke-width="1"/>
         </svg>
     `;
 }
 
-// 부상도 상세 단락을 렌더링하는 함수 (5-2)
 function renderInjuryBlock(parts, status, mapKeyToLabel) {
     let detailRows = '';
-    
+
     parts.forEach(key => {
-        const isMainPart = mapKeyToLabel[key].startsWith('<'); // 대표 부위 확인
+        const isMainPart = mapKeyToLabel[key].startsWith('<'); // 대표 부위인지 확인
         const injury = status.injuries[key];
         const contamination = status.contaminations[key];
-        
+
         const [injuryText, contaminationText] = getStatusText(injury, contamination);
         const color = calculatePartColor(injury, contamination);
 
         if (isMainPart) {
-            // 대표 부위: 바로 아래 행을 내용으로 사용 (부상/오염 텍스트)
+            // 대표 부위: 강조 표시, 부상/오염 텍스트 포함
             detailRows += `
                 <div class="injury-row main-part" style="border: 1px solid ${color};">
                     <div class="part-label" style="font-weight: bold;">
@@ -3575,7 +2974,7 @@ function renderInjuryBlock(parts, status, mapKeyToLabel) {
                 </div>
             `;
         } else {
-            // 비대표 부위: 두 행과 열 중 왼쪽 세부 부위, 오른쪽 내용
+            // 서브 부위: 왼쪽 라벨, 오른쪽 내용
             detailRows += `
                 <div class="injury-row sub-part">
                     <div class="sub-label">
@@ -3593,39 +2992,76 @@ function renderInjuryBlock(parts, status, mapKeyToLabel) {
     return `<div class="injury-block">${detailRows}</div>`;
 }
 
-/**
- * 신규 사용자를 위한 기본 시트 데이터를 생성합니다.
- * @returns {object} 기본 시트 데이터
- */
+function getStatusText(injuryPercent, contaminationPercent) {
+    // 부상 텍스트
+    let injuryText = injuryPercent === 0 ? "부상 없음."
+                    : injuryPercent <= 10 ? "경미한 찰과상."
+                    : injuryPercent <= 30 ? "타박상 및 출혈."
+                    : injuryPercent <= 60 ? "깊은 상처 및 골절 가능성."
+                    : "심각한 부상, 활동 불가 수준.";
+
+    // 오염 텍스트
+    let contaminationText = contaminationPercent === 0 ? "오염 없음."
+                          : contaminationPercent <= 10 ? "경미한 오염, 즉시 제거 가능."
+                          : contaminationPercent <= 30 ? "중간 오염, 징후 발현."
+                          : contaminationPercent <= 60 ? "심각한 오염, 신체 능력 저하."
+                          : "치명적인 오염, 변이 진행 중.";
+
+    return [injuryText, contaminationText];
+}
+
+// 아이템 가져오기
+async function fetchItemDescription(itemName) {
+    try {
+        const q = query(collection(db, 'items'), where('name', '==', itemName));
+        const snap = await getDocs(q);
+        
+        if (!snap.empty) {
+            return snap.docs[0].data().description || "설명 없음";
+        }
+    } catch(e) {
+        console.error("Failed to fetch item description:", e);
+    }
+    return "설명 없음 (DB 로드 실패)";
+}
+
+/* =========================================================
+    새 시트 만들기
+========================================================= */
+
 function createDefaultSheet(uid, nickname) {
-    const injuryPartKeys = ['head', 'neck', 'leftEye', 'rightEye', 'leftArm', 'leftHand', 'leftLeg', 'leftFoot', 'torso', 'rightArm', 'rightHand', 'rightLeg', 'rightFoot'];
-    const initialInjuryState = injuryPartKeys.reduce((acc, key) => {
-        acc[key] = 0;
-        return acc;
-    }, {});
-    
+    const injuryKeys = ['head', 'neck', 'leftEye', 'rightEye', 'leftArm', 'leftHand', 'leftLeg', 'leftFoot', 'torso', 'rightArm', 'rightHand', 'rightLeg', 'rightFoot'];
+    const initialInjuryState = injuryKeys.reduce((acc, key) => ({ ...acc, [key]: 0 }), {});
+
     return {
-        // 3. 인적사항
         personnel: {
-            name: nickname || '신규 에이전트', gender: '미상', age: 0, height: 0, weight: 0,
-            nationality: '미상', education: '미상', career: '신입 에이전트', 
-            family: '없음', contact: '없음', marriage: '미상', medical: '없음', 
-            criminal: '없음', etc: '특이사항 없음', photoUrl: '' // 스토리지에 저장된 URL 사용
+            name: nickname || '인턴 사원',
+            gender: '미상',
+            age: 0,
+            height: 0,
+            weight: 0,
+            nationality: '미상',
+            education: '미상',
+            career: '미상',
+            family: '없음',
+            contact: '없음',
+            marriage: '미상',
+            medical: '없음',
+            criminal: '없음',
+            etc: '특이사항 없음',
+            photoUrl: ''
         },
-        // 3-2. 스탯 (기본 1)
         stats: baseStats,
-        // 4. 인벤토리
         inventory: {
             silver: 0,
             items: []
         },
-        // 5. 현재 상태
         status: {
             currentSpirit: 60,
             maxSpirit: (10 * (baseStats.spirit || 1)) + 50,
             injuries: { ...initialInjuryState },
             contaminations: { ...initialInjuryState },
-            currentContamination: 0, 
+            currentContamination: 0,
             currentErosion: 0,
             stats: { deaths: 0, explorations: 0, interviews: 0, itemsCarried: 0, abyssDefeated: 0, silverCarried: 0 }
         },
@@ -3634,44 +3070,17 @@ function createDefaultSheet(uid, nickname) {
     };
 }
 
-/**
- * 가로형 테이블 HTML을 생성합니다.
- * @param {string} title - 표의 제목 (사용하지 않을 수도 있음).
- * @param {Array<Object>} rows - {label: string, value: any, isLong: boolean} 객체 배열.
- * @param {boolean} isAdmin - 관리자 권한 여부.
- * @param {boolean} isStatLike - 스탯/통계와 같이 레이아웃이 단순한 경우.
- * @returns {string} HTML 테이블 마크업.
- */
-function renderHorizontalTable(title, rows, isAdmin, isStatLike = false) {
-    let rowHtml = '';
-    rows.forEach(row => {
-        const inputId = `${isStatLike ? 'stat' : 'person'}${row.label.replace(/\s/g, '')}`;
-        let valueContent;
+/* =========================================================
+    시트 관련
+========================================================= */
 
-        if (isAdmin) {
-            // 관리자일 경우 Input 필드로 대체 (편집 모드 가정)
-            const inputType = typeof row.value === 'number' ? 'number' : 'text';
-            valueContent = row.isLong 
-                ? `<textarea id="${inputId}" style="width:100%; min-height:60px;">${row.value}</textarea>`
-                : `<input type="${inputType}" id="${inputId}" value="${row.value}" style="width:100%;">`;
-        } else {
-            // 일반 사용자일 경우 값만 표시
-            valueContent = row.value;
-        }
+async function fetchSheetData(sheetId) {
+    const docRef = doc(db, 'sheets', sheetId);
+    const sheetDoc = await getDoc(docRef);
 
-        rowHtml += `
-            <tr class="horizontal-table-row">
-                <td class="table-label" style="font-weight: bold; padding: 8px; background: rgba(255, 255, 255, 0.03); width: 150px;">${row.label}</td>
-                <td class="table-value" style="padding: 8px;">${valueContent}</td>
-            </tr>
-        `;
-    });
+    if (!sheetDoc.exists()) {
+        throw new Error(`Sheet data not found for ID: ${sheetId}`);
+    }
 
-    return `
-        <table class="data-table horizontal" style="width: 100%; margin-top: 10px; border-collapse: collapse;">
-            <tbody>
-                ${rowHtml}
-            </tbody>
-        </table>
-    `;
+    return sheetDoc.data();
 }
