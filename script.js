@@ -1401,8 +1401,8 @@ async function renderMap() {
             addBtn.className = 'btn';
             addBtn.textContent = '새 맵 추가';
             addBtn.style.marginBottom = '20px';
-            addBtn.onclick = () => openNewMapInlineEdit();
-            contentEl.appendChild(addBtn);
+            addBtn.addEventListener('click', () => openNewMapInlineEdit());
+            contentEl.appendChild(addBtn);;
         }
 
         if(snap.empty){
