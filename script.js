@@ -251,6 +251,20 @@ function renderDangerStars(level, max = 5) {
     return '★'.repeat(level) + '☆'.repeat(max - level);
 }
 
+async function subscribeSystem(){
+    const sysDocRef = doc(db, 'system', 'employeeStatus');
+    try {
+        const snap = await getDoc(sysDocRef);
+        if (snap.exists() && systemInfo) {
+            systemInfo.textContent = JSON.stringify(snap.data());
+        } else if (systemInfo) {
+            systemInfo.textContent = '시스템 정보 없음';
+        }
+    } catch(e) {
+        if(systemInfo) systemInfo.textContent = '시스템 로드 실패';
+    }
+}
+
 /* =========================================================
     컬러 코드
 ========================================================= */
@@ -492,6 +506,20 @@ async function getCurrentUserSheetId() {
         });
     });
 }
+
+async function checkAndCreateSheet(uid, nickname) {
+    const sheetDocRef = doc(db, 'sheets', uid);
+    const sheetDoc = await getDoc(sheetDocRef);
+
+    if (!sheetDoc.exists()) {
+        const defaultSheetData = createDefaultSheet(uid, nickname);
+        await setDoc(sheetDocRef, defaultSheetData);
+        console.log(`Default sheet created for user: ${uid}`);
+
+        openNewUserCustomization(uid, nickname);
+    }
+}
+
 
 /* =========================================================
     댓글
@@ -791,6 +819,29 @@ loginBth.addEventListener('click', async () => {
     }
 });
 
+function showLogOutUI() {
+    header.style.display = 'none';
+    login.style.display = 'flex';
+    loginForm.style.display = 'block';
+    signupForm.style.display = 'none';
+    contentEl.innerHTML = ''; // 로그아웃 시 내용 비우기
+}
+
+function showLoggedInUI(){
+    login.style.display = 'none';
+    header.style.display = 'flex';
+}
+
+function renderAuthArea(user){
+    logOutEl.innerHTML = '';
+    if (!user) return;
+    const btn = document.createElement('button');
+    btn.className = 'btn';
+    btn.textContent = '로그아웃';
+    btn.addEventListener('click', ()=> signOut(auth));
+    logOutEl.appendChild(btn);
+}
+
 /* =========================================================
     본인 시트 작성
 ========================================================= */
@@ -1025,7 +1076,6 @@ function createMainUICards() {
 
 // 심연 기류
 async function updateAbyssFlow() {
-    const abyssFlowEl = document.getElementById('abyssFlow');
     if (!abyssFlowEl) return;
 
     const todayKey = getTodayKey();
@@ -1059,9 +1109,6 @@ async function updateAbyssFlow() {
 
 // 일정 & 상태
 async function updateStaffStatusAndSchedule() {
-    const staffStatusEl = document.getElementById('staffStatus');
-    const staffScheduleEl = document.getElementById('staffSchedule');
-
     const usersSnap = await getDocs(collection(db, 'users'));
     let alive=0, missing=0, dead=0, contaminated=0;
 
@@ -1099,7 +1146,6 @@ async function updateStaffStatusAndSchedule() {
 
 // 직원 순위 계산 
 async function updateStaffRank() {
-    const staffRankEl = document.getElementById('staffRank');
     if (!staffRankEl) return;
 
     const usersSnap = await getDocs(collection(db, 'users'));
