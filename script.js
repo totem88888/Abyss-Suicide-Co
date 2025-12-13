@@ -475,6 +475,24 @@ function fmtTime(timestamp) {
     return date.toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\. /g, '.').replace(/\.$/, '');
 }
 
+function getTodayKey() {
+    const d = new Date();
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}${m}${day}`;
+}
+
+function pickByWeight(list) {
+    const total = list.reduce((sum, item) => sum + item.weight, 0);
+    let r = Math.random() * total;
+    for (const item of list) {
+        if (r < item.weight) return item.text;
+        r -= item.weight;
+    }
+    return list[list.length - 1].text;
+}
+
 /* =========================================================
     인증 상태 변화 감지 및 유지
 ========================================================= */
