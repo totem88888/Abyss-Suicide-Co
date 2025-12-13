@@ -2317,7 +2317,7 @@ async function renderDexDetail(id, isEditMode = false, preloadedData = null) {
             </div>
             <hr style="margin: 30px 0;">
             <div class="dex-comments-area" data-id="${id}">
-                ${renderCommentArea(id, data.comments || [])}
+                ${renderCommentCard(id)}
             </div>
         </div>
     `;
