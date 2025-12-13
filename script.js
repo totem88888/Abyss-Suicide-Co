@@ -323,7 +323,6 @@ signupBth.addEventListener('click', async ()=>{
             uid, name: nick, status: 'alive', image: '', silver: 0, desc: '',
             updatedAt: serverTimestamp()
         });
-        await checkAndCreateSheet(uid, nick);
         signupBoxMsg.textContent = '가입 성공. 로그인 처리 중.';
     } catch(e) {
         signupBoxMsg.textContent = '가입 실패: ' + (e.message || e.code);
@@ -3211,7 +3210,7 @@ function renderPersonnelSection(p, nickname, sheetId, isAdmin) {
     const section = document.createElement('div');
     section.className = 'card map-card'; // 기존 카드 스타일 활용
     section.innerHTML = `
-        h2 style="margin-top:0;">👤 ${nickname}님의 시트 (ID: ${sheetId})</h2>
+        <h2 style="margin-top:0;">👤 ${nickname}님의 시트 (ID: ${sheetId})</h2>
         <div class="personnel-grid">
             <div class="photo-area">
                 <img src="${p.photoUrl}" alt="프로필 사진" style="width:100%; height:auto; aspect-ratio: 3/4; object-fit: cover;">
@@ -3359,7 +3358,6 @@ function renderStatusSection(s, spiritStat, isAdmin, sheetId) {
         leftArm: '<왼팔>', leftHand: '<왼손>', leftLeg: '<왼다리>', leftFoot: '왼발',
         torso: '<상체>', rightArm: '<오른팔>', rightHand: '<오른손>', rightLeg: '<오른다리>', rightFoot: '오른발'
     };
-    const mainParts = ['head', 'leftArm', 'leftLeg', 'torso', 'rightArm', 'rightLeg']; // 사람 아이콘 부위
 
     // 5-1. 정신력 바 및 상태 구절
     const spiritPercent = (s.currentSpirit / s.maxSpirit) * 100;
@@ -3402,7 +3400,7 @@ function renderStatusSection(s, spiritStat, isAdmin, sheetId) {
                 ${renderInjuryBlock(['leftLeg', 'leftFoot'], s, mapKeyToLabel)}
             </div>
             
-            <div class="human-icon-container">
+            <div class="human-icon-container" style="min-width: 200px; display: flex; justify-content: center;">
                 ${humanIconHtml} </div>
             
             <div class="injury-list right-side">
@@ -3440,18 +3438,17 @@ function renderHumanIcon(injuries, contaminations) {
     
     // 단순화된 사람 모양 SVG
     return `
-        <svg viewBox="0 0 100 150" style="width: 150px; height: 225px;">
-            <circle cx="50" cy="15" r="10" fill="${colors.head}" stroke="#888" stroke-width="1"/>
+        <svg viewBox="0 0 100 150" style="width: 200px; height: 300px;"> <path d="M 50 5 A 1 1 0 0 0 50 31 A 1 1 0 0 0 50 5 Z" fill="${colors.head}" stroke="#888" stroke-width="1"/>
             
-            <rect x="35" y="25" width="30" height="50" fill="${colors.torso}" stroke="#888" stroke-width="1"/>
+            <path d="M 35 35 L 65 35 L 65 90 L 35 90 Z" fill="${colors.torso}" stroke="#888" stroke-width="1"/>
             
-            <path d="M 35 35 L 20 60 L 15 90 L 25 90 L 35 60 Z" fill="${colors.leftArm}" stroke="#888" stroke-width="1"/>
+            <path d="M 35 35 L 28 35 C 24 35 20 39 20 43 L 20 90 C 20 99 32 99 32 90 L 32 56 C 32 55 34 53 35 53 Z" fill="${colors.leftArm}" stroke="#888" stroke-width="1"/>
             
-            <path d="M 65 35 L 80 60 L 85 90 L 75 90 L 65 60 Z" fill="${colors.rightArm}" stroke="#888" stroke-width="1"/>
+            <path d="M 65 35 L 72 35 C 76 35 79 39 79 43 L 80 90 C 80 99 68 99 68 90 L 68 56 C 68 54 67 53 65 53 Z" fill="${colors.rightArm}" stroke="#888" stroke-width="1"/>
             
-            <rect x="37" y="75" width="10" height="65" fill="${colors.leftLeg}" stroke="#888" stroke-width="1"/>
+            <path d="M 35 90 L 35 153 C 35 162 48 162 48 153 L 48 97 C 48 96 49 95 50 95 L 50 90 Z" fill="${colors.leftLeg}" stroke="#888" stroke-width="1"/>
             
-            <rect x="53" y="75" width="10" height="65" fill="${colors.rightLeg}" stroke="#888" stroke-width="1"/>
+            <path d="M 50 90 L 50 95 C 51 95 52 96 52 97 L 52 153 C 52 162 65 162 65 153 L 65 90 Z" fill="${colors.rightLeg}" stroke="#888" stroke-width="1"/>
             
             <text x="50" y="80" text-anchor="middle" fill="#ccc" font-size="10">BODY MAP</text>
         </svg>
