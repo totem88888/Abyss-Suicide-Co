@@ -1382,9 +1382,10 @@ async function renderMap() {
             return;
         }
         
-        snap.forEach(d => {
-            contentEl.appendChild(renderMapCard(d));
-        });
+        for (const d of snap.docs) {
+            const cardNode = await renderMapCard(d); // await 필요
+            contentEl.appendChild(cardNode);
+        }
     } catch(e){
         console.error(e);
         contentEl.innerHTML = '<div class="card">맵 로드 실패</div>';
