@@ -2727,6 +2727,37 @@ function attachCommentEventListeners(abyssId) {
     });
 }
 
+async function postDexComment(abyssId, text) {
+    const user = auth.currentUser;
+    if (!user) {
+        showMessage('로그인이 필요합니다.', 'warning');
+        return;
+    }
+    
+    try {
+        // 1. 사용자 정보(이름, 색상)를 가져옵니다.
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        const userData = userDoc.exists() ? userDoc.data() : {};
+        const userName = userData.nickname || '익명';
+        // ⭐ 이 userColor를 댓글 문서에 저장해야 합니다.
+        const userColor = userData.colorHex || '#CCCCCC'; 
+
+        // 2. 댓글을 Firestore에 저장
+        await addDoc(collection(db, 'abyssal_dex', abyssId, 'comments'), {
+            uid: user.uid,
+            name: userName,
+            userColor: userColor, // 색상 정보 함께 저장
+            text: text,
+            createdAt: serverTimestamp(),
+            editedAt: null
+        });
+        
+    } catch(e) {
+        console.error("댓글 등록 실패:", e);
+        showMessage('댓글 등록에 실패했습니다.', 'error');
+    }
+}
+
 /**
  * 현재 로그인된 사용자가 관리자인지 확인합니다.
  * @returns {Promise<boolean>}
