@@ -1913,13 +1913,13 @@ async function renderDex() {
         let html = '';
 
         if (isManager) {
-            html += `<button class="btn" id="addNewAbyssBtn" style="margin-bottom: 20px;">
-                새 심연체 추가 +
-            </button>`;
-        }
-        
-        if (isManager) {
-            document.getElementById('addNewAbyssBtn').onclick = () => createNewAbyss();
+            const addBtn = document.createElement('button');
+            addBtn.className = 'btn';
+            addBtn.style.marginBottom = '20px';
+            addBtn.textContent = '새 심연체 추가 +';
+            addBtn.onclick = () => createNewAbyss();
+
+            contentEl.appendChild(addBtn);
         }
 
         const gridContainer = document.createElement('div');
