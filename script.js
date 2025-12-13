@@ -1512,7 +1512,7 @@ function handleEditFieldChange(data, section, key, value) {
  * @returns {string} 생성된 코드명
  */
 function generateAbyssCode(danger, shape, discoverySeq, derivedSeq) {
-    const dangerCode = DANGER_TYPES[danger] || '';
+    const dangerCode = DANGER_TYPES[danger] || ''
     const shapeCode = shape || '';
     
     // discoverySeq, derivedSeq가 undefined일 경우 0으로 처리하여 오류 방지
@@ -2181,10 +2181,8 @@ function setSectionDisclosure(data, sectionKey, isPublic) {
  * @param {object} [preloadedData=null] 미리 로드된 데이터 (선택 사항)
  */
 async function renderDexDetail(id, isEditMode = false, preloadedData = null) {
-    // ... (데이터 로딩 및 초기 설정 기존과 동일) ...
     let data; 
-    // ...
-
+    
     // 1. 데이터 로딩 로직 (⭐ 이 부분이 누락되었을 가능성이 높습니다)
     if (preloadedData) {
         data = preloadedData;
@@ -2218,6 +2216,7 @@ async function renderDexDetail(id, isEditMode = false, preloadedData = null) {
         return;
     }
 
+    // 3. 오류가 발생했던 라인 (이제 data.basic이 확실히 존재합니다)
     const isManager = await isAdminUser();
     
     const code = generateAbyssCode(
