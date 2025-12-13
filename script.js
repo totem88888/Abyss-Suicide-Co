@@ -1911,7 +1911,7 @@ async function renderDex() {
         contentEl.appendChild(renderSummaryCard(completedCount, totalCount));
 
         let html = '';
-        
+
         if (isManager) {
             html += `<button class="btn" id="addNewAbyssBtn" style="margin-bottom: 20px;">
                 새 심연체 추가 +
@@ -1938,6 +1938,81 @@ async function renderDex() {
     } catch(e) {
         console.error(e);
         contentEl.innerHTML = '<div class="card error">도감 정보를 로드하는 데 실패했습니다.</div>';
+    }
+}
+
+async function createNewAbyss() {
+    showMessage('새 심연체 순서를 계산하고 있습니다...', 'info');
+
+    const abyssCollectionRef = collection(db, 'abyssal_dex');
+    const newDocRef = doc(abyssCollectionRef);
+    const newId = newDocRef.id;
+
+    let nextDiscoverySeq = 1;
+
+    try {
+        const snap = await getDocs(abyssCollectionRef);
+
+        // 파생 제외 최대 discoverySeq 계산
+        nextDiscoverySeq =
+            snap.docs
+                .map(d => d.data()?.basic)
+                .filter(b => b?.danger !== '파생')
+                .reduce((max, b) => Math.max(max, b?.discoverySeq || 0), 0) + 1;
+
+    } catch (e) {
+        console.error("최대 discoverySeq 조회 실패:", e);
+        showMessage('순서 조회 중 오류 발생. 기본값 1을 사용합니다.', 'warning');
+    }
+
+    // 초기 데이터 객체
+    const initialData = {
+        id: newId,
+        basic: {
+            discoverySeq: nextDiscoverySeq,
+            danger: '유광',
+            shape: 'P',
+            name: `새 심연체 ${nextDiscoverySeq}`,
+            derivedSeq: 0,
+            image: '',
+            majorDamage: '',
+            deathChance: '',
+            sanityChance: '',
+            isPublic: {
+                name: false, code: false, danger: false, shape: false, discoverySeq: false,
+                majorDamage: false, deathChance: false, sanityChance: false, image: false
+            }
+        },
+        stats: {
+            strength: 1, health: 1, agility: 1, mind: 1,
+            isPublic: { strength: false, health: false, agility: false, mind: false }
+        },
+        management: {
+            basicInfo: [{ label: '기본 정보', value: '초기 관리 정보', isPublic: false }],
+            collectionInfo: [{ label: '채취 정보', value: '초기 채취 정보', isPublic: false }],
+            otherInfo: [{ label: '기타 정보', value: '초기 기타 정보', isPublic: false }]
+        },
+        logs: [{ title: '기본 일지', content: '기록 시작', createdAt: new Date(), isPublic: true }],
+        comments: [],
+        createdAt: serverTimestamp()
+    };
+
+    // 코드명 생성
+    initialData.basic.code = generateAbyssCode(
+        initialData.basic.danger,
+        initialData.basic.shape,
+        initialData.basic.discoverySeq,
+        initialData.basic.derivedSeq
+    );
+
+    // DB 저장 + 편집 화면 호출
+    try {
+        await setDoc(newDocRef, initialData);
+        showMessage(`새 심연체 [${initialData.basic.code}] 템플릿 추가 완료. 내용을 편집하세요.`, 'info');
+        renderDexDetail(newId, true, initialData);
+    } catch (e) {
+        console.error("새 심연체 추가 실패:", e);
+        showMessage('새 심연체 추가 실패', 'error');
     }
 }
 
