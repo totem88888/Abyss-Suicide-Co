@@ -7,7 +7,8 @@ import {
     getAuth, 
     createUserWithEmailAndPassword, 
     signInWithEmailAndPassword, 
-    signOut, 
+    signOut,
+    updateProfile,
     onAuthStateChanged 
 } from "https://www.gstatic.com/firebasejs/10.6.0/firebase-auth.js";
 import {
