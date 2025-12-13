@@ -476,7 +476,7 @@ onAuthStateChanged(auth, async (user) => {
     currentUser = user;
 
     if (user) {
-        const nickname = user.displayName || '신규 사용자';
+        const nickname = user.displayName || '인턴 사원';
 
         await checkAndCreateSheet(user.uid, nickname);
 
