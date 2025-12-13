@@ -132,6 +132,16 @@ const DANGER_TYPES = {
 
 const SHAPE_TYPES = ['P', 'F', 'O', 'C'];
 
+const BASE_HP = 100;
+const BASE_MP = 50;
+const HP_PER_STR = 15;
+const HP_PER_HEALTH = 20;
+const MP_PER_AGI = 5;
+const MP_PER_MIND = 10;
+const ATTACK_PER_STR = 8;
+const ATTACK_PER_AGI = 5;
+const M_ATTACK_PER_MIND = 10;
+
 function calculateAbyssStats(stats) {
     const str = stats.strength || 0;
     const health = stats.health || 0;
