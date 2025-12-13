@@ -1910,6 +1910,8 @@ async function renderDex() {
         contentEl.innerHTML = '';
         contentEl.appendChild(renderSummaryCard(completedCount, totalCount));
 
+        let html = '';
+        
         if (isManager) {
             html += `<button class="btn" id="addNewAbyssBtn" style="margin-bottom: 20px;">
                 새 심연체 추가 +
