@@ -712,11 +712,12 @@ signupBth.addEventListener('click', async ()=> {
             where('id', '==', id)
         );
         const idSnap = await getDocs(idQuery);
-
+        
         if (!idSnap.empty) {
             signupBoxMsg.textContent = '이미 사용 중인 아이디입니다.';
             return;
         }
+        signupBth.disabled = true;
 
         const cred = await createUserWithEmailAndPassword(auth, email, pw);
         const user = cred.user;
@@ -747,6 +748,8 @@ signupBth.addEventListener('click', async ()=> {
 
         const defaultSheet = createDefaultSheet(uid, nick);
         await setDoc(doc(db, 'sheets', uid), defaultSheet);
+
+        console.log('cred.user:', cred.user, 'uid:', cred.user?.uid);
 
         signupBoxMsg.textContent = '가입 완료. 설정을 진행합니다.';
 
