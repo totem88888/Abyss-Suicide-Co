@@ -3257,7 +3257,7 @@ function renderPersonnelSection(p, nickname, sheetId, isAdmin) {
     const section = document.createElement('div');
     section.className = 'card map-card'; // 기존 카드 스타일 활용
     section.innerHTML = `
-        <h2 style="margin-top:0;">👤 ${nickname}님의 시트 (ID: ${sheetId})</h2>
+        <h2 style="margin-top:0;">👤 ${nickname}님의 시트</h2>
         <div class="personnel-grid">
             <div class="photo-area">
                 <img src="${p.photoUrl}" alt="프로필 사진" style="width:100%; height:auto; aspect-ratio: 3/4; object-fit: cover;">
