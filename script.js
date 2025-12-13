@@ -308,6 +308,12 @@ function calculatePartColor(injury, contamination) {
     return `rgb(${r}, ${g}, ${b})`;
 }
 
+function randomHex(){
+    const r = Math.floor(Math.random() * 256).toString(16).padStart(2, '0');
+    const g = Math.floor(Math.random() * 256).toString(16).padStart(2, '0'); 
+    const b = Math.floor(Math.random() * 256).toString(16).padStart(2, '0');
+    return '#' + r + g + b;
+}
 
 /* =========================================================
    방사형 그래프 만들기
