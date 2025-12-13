@@ -40,7 +40,7 @@ const firebaseConfig = {
     apiKey: "AIzaSyDGmwk9FtwnjUKcH4T6alvMWVQqbhVrqfI",
     authDomain: "abyss-suicide-co.firebaseapp.com",
     projectId: "abyss-suicide-co",
-    storageBucket: "abyss-suicide-co.appspot.com",
+    storageBucket: "abyss-suicide-co.firebasestorage.app",
     messagingSenderId: "711710259422",
     appId: "1:711710259422:web:3c5ba7c93edb3d6d6baa4f"
 };
@@ -878,7 +878,7 @@ function openNewUserCustomization(uid, nickname) {
 
     // 스테이터스 입력 폼 (슬라이더 및 총 포인트 제한 로직은 프론트엔드에서 구현 필요)
     const statsKeys = Object.keys(baseStats || {});
-    let statsForm = `<h3 style="border-bottom: 1px solid #333; padding: 10px 0;">기본 스테이터스 설정 (총 포인트 제한: 50)</h3>`;
+    let statsForm = `<h3 style="border-bottom: 1px solid #333; padding: 10px 0;">기본 스테이터스 설정 (총 포인트 제한: 55)</h3>`;
     let currentTotal = statsKeys.reduce(
         (sum, key) => sum + (baseStats[key] || 1),
         0
@@ -949,10 +949,10 @@ function updateStatPoints() {
     if (!currentPointsEl) return;
 
     currentPointsEl.textContent = totalPoints;
-    currentPointsEl.style.color = totalPoints > 50 ? 'red' : 'lime';
+    currentPointsEl.style.color = totalPoints > 55 ? 'red' : 'lime';
 
     if (saveBtn) {
-        saveBtn.disabled = totalPoints > 50;
+        saveBtn.disabled = totalPoints > 55;
     }
 }
 
@@ -2933,7 +2933,7 @@ function renderStatusSection(s, spiritStat, isAdmin, sheetId) {
             </div>
         </div>
 
-        <h3 style="margin-top:30px;">📊 현재 통계</h3>
+        <h3 style="margin-top:30px;">현재 통계</h3>
         ${renderHorizontalTable('현재 통계', [
             { label:'죽은 횟수', value: s.stats.deaths },
             { label:'탐사를 나간 횟수', value: s.stats.explorations },
@@ -2965,7 +2965,7 @@ function renderHumanIcon(injuries, contaminations) {
 
     // 간단화된 사람 SVG 아이콘
     return `
-        <svg viewBox="0 0 100 150" style="width:100%; max-width:250px; height:auto;">
+        <svg viewBox="0 0 100 170" style="width:100%; max-width:250px; height:400px;">
             <!-- 머리 -->
             <path d="M50 5 A1 1 0 0 0 50 31 A1 1 0 0 0 50 5 Z"
                   fill="${colors.head}" stroke="#888" stroke-width="1"/>
