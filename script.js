@@ -162,19 +162,6 @@ async function isAdminUser() {
     css
 ========================================================= */
 
-const cardStyles = [
-    `width: calc(25% - 15px)`,
-    `aspect-ratio: 1 / 1`,
-    `background-size: cover`,
-    `background-position: center`,
-    `border: 5px solid ${borderColor}`,
-    `position: relative`,
-    `cursor: pointer`,
-    `overflow: hidden`,
-    `transition: all 0.3s`,
-    showImage && imgUrl ? `background-image: url('${imgUrl}')` : `background-color: #555`
-].filter(Boolean).join('; ');
-
 /* =========================================================
     메세지 출력
 ========================================================= */
