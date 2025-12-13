@@ -342,7 +342,7 @@ function drawRadarChart(containerClass, labels, data, max = 5, bgColor = 'rgba(0
         data: {
             labels: labels,
             datasets: [{
-                label: '스탯 레벨',
+                label: '스테이터스 레벨',
                 data: data.map(clamp),
                 backgroundColor: bgColor,
                 borderColor: borderColor,
@@ -380,13 +380,13 @@ function drawRadarChart(containerClass, labels, data, max = 5, bgColor = 'rgba(0
 // 세부 정보 테이블(직원 탭에 넣어야지)
 
 /**
- * 스탯 객체를 받아서 신체/정신 차트 그리기
- * @param {object} stats 스탯 객체
+ * 스테이터스 객체를 받아서 신체/정신 차트 그리기
+ * @param {object} stats 스테이터스 객체
  */
 function initStatsRadarCharts(stats) {
     if (typeof Chart === 'undefined') return console.warn('Chart.js library not loaded');
 
-    // 신체 스탯
+    // 신체 스테이터스
     drawRadarChart(
         'chart-container-1',
         ['근력','민첩','지구력','유연성','시각','청각','상황 인지 능력','반응속도'],
@@ -396,7 +396,7 @@ function initStatsRadarCharts(stats) {
         'rgb(255,99,132)'
     );
 
-    // 정신 스탯
+    // 정신 스테이터스
     drawRadarChart(
         'chart-container-2',
         ['지능','판단력','기억력','정신력','의사 결정 능력','스트레스 내성'],
@@ -876,9 +876,9 @@ function openNewUserCustomization(uid, nickname) {
         <div class="form-row"><label>체중 (kg)</label> <input type="number" id="custWeight" value="${p.weight || 60}"></div>
     `;
 
-    // 스탯 입력 폼 (슬라이더 및 총 포인트 제한 로직은 프론트엔드에서 구현 필요)
+    // 스테이터스 입력 폼 (슬라이더 및 총 포인트 제한 로직은 프론트엔드에서 구현 필요)
     const statsKeys = Object.keys(baseStats || {});
-    let statsForm = `<h3 style="border-bottom: 1px solid #333; padding: 10px 0;">기본 스탯 설정 (총 포인트 제한: 50)</h3>`;
+    let statsForm = `<h3 style="border-bottom: 1px solid #333; padding: 10px 0;">기본 스테이터스 설정 (총 포인트 제한: 50)</h3>`;
     let currentTotal = statsKeys.reduce(
         (sum, key) => sum + (baseStats[key] || 1),
         0
@@ -1230,7 +1230,7 @@ async function openProfileModal(docId, data) {
 
             <div class="stats-grid-2x2">
                 <div class="stats-table-container">
-                    ${renderHorizontalTable('표 1: 신체 스탯', [
+                    ${renderHorizontalTable('표 1: 신체 스테이터스', [
                         { label: '근력', value: data.muscle },
                         { label: '민첩', value: data.agility },
                         { label: '지구력', value: data.endurance },
@@ -1244,7 +1244,7 @@ async function openProfileModal(docId, data) {
                 <div class="chart-container-1" style="width:100%; height:auto; min-height:300px;"></div>
 
                 <div class="stats-table-container">
-                    ${renderHorizontalTable('표 2: 정신 스탯', [
+                    ${renderHorizontalTable('표 2: 정신 스테이터스', [
                         { label: '지능', value: data.intellect },
                         { label: '판단력', value: data.judgment },
                         { label: '기억력', value: data.memory },
@@ -1274,7 +1274,7 @@ async function openProfileModal(docId, data) {
         editArea.appendChild(editBtn);
     }
 
-    // 스탯 차트 렌더링 (기존 스탯 데이터 사용)
+    // 스테이터스 차트 렌더링 (기존 스테이터스 데이터 사용)
     setTimeout(() => initStatsRadarCharts(data), 100);
 }
 
@@ -2090,7 +2090,7 @@ async function renderDexDetail(id, isEditMode = false, preloadedData = null) {
                 <div class="dex-section" id="basicInfoSection" style="flex: 1 1 50%; padding-right: 15px;"></div>
                 <div class="dex-section" id="statsSection" style="flex: 1 1 50%; padding-left: 15px;"></div>
                 <div class="dex-section" id="radarChartSection" style="flex: 1 1 100%; margin-top: 20px;">
-                    <h3>스탯 분포</h3>
+                    <h3>스테이터스 분포</h3>
                     <div id="radarChartContainer" style="width: 100%; height: 400px; margin-top: 10px;"></div>
                 </div>
                 <hr style="flex: 1 1 100%; margin: 20px 0;">
@@ -2291,7 +2291,7 @@ function renderStatsSection(el, data, calculatedStats, isEditMode, isManager) {
     const statsKeys = ['strength', 'health', 'agility', 'mind'];
     const labels = { strength: '근력', health: '건강', agility: '민첩', mind: '정신력' };
 
-    // 스탯 테이블 생성
+    // 스테이터스 테이블 생성
     const statTable = `<table class="info-table" style="width:100%;">
         ${statsKeys.map(key => {
             const value = d[key] || 0;
@@ -2340,7 +2340,7 @@ function renderStatsSection(el, data, calculatedStats, isEditMode, isManager) {
         el.querySelectorAll('.inline-edit-field').forEach(field => {
             field.onchange = e => {
                 handleEditFieldChange(data, e.target.dataset.section, e.target.dataset.key, e.target.value);
-                renderDexDetail(data.id, true); // 스탯 변경 시 전체 상세 화면 갱신
+                renderDexDetail(data.id, true); // 스테이터스 변경 시 전체 상세 화면 갱신
             };
         });
 
@@ -2748,43 +2748,52 @@ function renderMeStatsSection(s, isAdmin, sheetId) {
         .stats-table-container > div:first-child { 
             flex-grow: 1; 
         }
+        .stats-row {
+            display: flex;
+            gap: 20px;
+            flex-wrap: nowrap;
+        }
+        .stats-row > div {
+            flex: 1;
+            min-width: 0;
+        }
+        .stats-table-container {
+            display: flex;
+            flex-direction: column;
+        }
     `;
 
     section.innerHTML = `
         <style>${style}</style>
-        <h2>스탯</h2>
-        <div class="stats-grid-2x2">
-            <div class="stats-table-container">
-                ${renderHorizontalTable('표 1: 신체 스탯', [
-                    { label: '근력', value: s.muscle },
-                    { label: '민첩', value: s.agility },
-                    { label: '지구력', value: s.endurance },
-                    { label: '유연성', value: s.flexibility },
-                    { label: '시각', value: s.visual },
-                    { label: '청각', value: s.auditory },
-                    { label: '상황 인지 능력', value: s.situation },
-                    { label: '반응속도', value: s.reaction },
-                ], isAdmin, true)}
-            </div>
-            
-            <div class="chart-container-1" style="width: 100%; min-height: 300px;"></div>
-            
-            <div class="stats-table-container">
-                ${renderHorizontalTable('표 2: 정신 스탯', [
-                    { label: '지능', value: s.intellect },
-                    { label: '판단력', value: s.judgment },
-                    { label: '기억력', value: s.memory },
-                    { label: '정신력', value: s.spirit },
-                    { label: '의사 결정 능력', value: s.decision },
-                    { label: '스트레스 내성', value: s.stress },
-                ], isAdmin, true)}
-            </div>
-            
-            <div class="chart-container-2" style="width: 100%; min-height: 300px;"></div>
+        <h2>스테이터스</h2>
+    <div class="stats-row">
+        <div class="stats-table-container">
+            ${renderHorizontalTable('표 1: 신체 스테이터스', [
+                { label: '근력', value: s.muscle },
+                { label: '민첩', value: s.agility },
+                { label: '지구력', value: s.endurance },
+                { label: '유연성', value: s.flexibility },
+                { label: '시각', value: s.visual },
+                { label: '청각', value: s.auditory },
+                { label: '상황 인지 능력', value: s.situation },
+                { label: '반응속도', value: s.reaction },
+            ], isAdmin, true)}
         </div>
-
-        ${isAdmin ? `<button class="btn link admin-edit-btn" onclick='openStatsEdit("${sheetId}", ${JSON.stringify(s)})'>스탯 편집</button>` : ''}
-    `;
+        <div class="chart-container-1" style="min-height:300px;"></div>
+        <div class="chart-container-2" style="min-height:300px;"></div>
+        <div class="stats-table-container">
+            ${renderHorizontalTable('표 2: 정신 스테이터스', [
+                { label: '지능', value: s.intellect },
+                { label: '판단력', value: s.judgment },
+                { label: '기억력', value: s.memory },
+                { label: '정신력', value: s.spirit },
+                { label: '의사 결정 능력', value: s.decision },
+                { label: '스트레스 내성', value: s.stress },
+            ], isAdmin, true)}
+        </div>
+    </div>
+    ${isAdmin ? `<button class="btn link admin-edit-btn" onclick='openStatsEdit("${sheetId}", ${JSON.stringify(s)})'>스테이터스 편집</button>` : ''}
+`;
 
     // DOM에 삽입 후 차트 초기화
     setTimeout(() => initStatsRadarCharts(s), 0);
