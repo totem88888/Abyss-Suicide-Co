@@ -155,6 +155,53 @@ onAuthStateChanged(auth, (user) => {
 
 // --- 유틸리티 함수 ---
 
+/**
+ * 특정 UID와 관련된 모든 문서들을 Firestore에서 삭제합니다.
+ * (sheets 컬렉션 및 UID 필드를 사용하는 다른 모든 컬렉션 포함)
+ * * @param {string} uid - 삭제할 사용자 UID
+ * @returns {Promise<void>}
+ */
+async function deleteUserRelatedData(uid) {
+    console.log(`[Cleanup] 사용자 데이터 삭제 시작: ${uid}`);
+
+    // 1. 메인 시트 문서 삭제 (문서 ID가 UID인 경우)
+    const sheetRef = doc(db, 'sheets', uid);
+    try {
+        await deleteDoc(sheetRef);
+        console.log(`[Cleanup] 'sheets/${uid}' 문서 삭제 완료.`);
+    } catch (e) {
+        // 문서가 이미 없거나 삭제 권한 문제일 수 있습니다.
+        console.warn(`[Cleanup] 'sheets/${uid}' 삭제 실패 또는 문서 없음:`, e.message);
+    }
+    
+    // 2. UID 필드를 사용하는 다른 컬렉션에서 문서 삭제
+    // ⭐ 사용자의 데이터가 있을 것으로 예상되는 컬렉션 목록을 여기에 정의해야 합니다.
+    const collectionsToClean = ['users', 'staff', 'sheets']; // 예시 컬렉션
+    
+    for (const collectionName of collectionsToClean) {
+        // 해당 UID를 가진 문서들을 쿼리
+        const q = query(collection(db, collectionName), where('uid', '==', uid));
+        const snapshot = await getDocs(q);
+        
+        const deletePromises = [];
+        
+        snapshot.docs.forEach(d => {
+            // 발견된 모든 문서를 병렬로 삭제하기 위해 Promise 배열에 추가
+            deletePromises.push(deleteDoc(d.ref));
+        });
+        
+        if (deletePromises.length > 0) {
+            console.log(`[Cleanup] '${collectionName}'에서 ${deletePromises.length}개 문서 삭제 중...`);
+            await Promise.all(deletePromises);
+            console.log(`[Cleanup] '${collectionName}' 삭제 완료.`);
+        } else {
+             console.log(`[Cleanup] '${collectionName}'에서 삭제할 문서 없음.`);
+        }
+    }
+    
+    console.log(`[Cleanup] 사용자 ${uid} 관련 모든 데이터 삭제 완료.`);
+}
+
 // [새로 추가해야 할 함수]
 /**
  * 직원 이미지를 Firebase Storage에 업로드합니다.
