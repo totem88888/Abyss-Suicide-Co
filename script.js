@@ -1468,7 +1468,7 @@ async function openMapPopup(mapId, data) {
             <h2>${data.name}</h2>
             <p>${data.description}</p>
             <div class="map-meta">
-                <div class="map-danger">${renderDangerStars(danger)}</div>
+                <div class="map-danger">${renderDangerStars(data.danger)}</div>
                 <div class="map-types">출현: ${Array.isArray(data.types)?data.types.join(', '):data.types||''}</div>
             </div>
         </div>
@@ -1911,13 +1911,19 @@ async function renderDex() {
         contentEl.appendChild(renderSummaryCard(completedCount, totalCount));
 
         if (isManager) {
-            contentEl.appendChild(renderAdminAddButton('새 심연체 추가 +', createNewAbyss));
+            html += `<button class="btn" id="addNewAbyssBtn" style="margin-bottom: 20px;">
+                새 심연체 추가 +
+            </button>`;
+        }
+        
+        if (isManager) {
+            document.getElementById('addNewAbyssBtn').onclick = () => createNewAbyss();
         }
 
         const gridContainer = document.createElement('div');
         gridContainer.className = 'dex-grid';
         gridContainer.style = 'display:flex; flex-wrap:wrap; gap:20px; justify-content:center;';
-
+        
         abyssList.forEach(abyss => {
             const card = renderDexCard(abyss, isManager);
             if (card) {
@@ -1927,10 +1933,6 @@ async function renderDex() {
         });
 
         contentEl.appendChild(gridContainer);
-
-        if (isManager) {
-            contentEl.appendChild(renderAdminAddButton('새 심연체 추가 +', createNewAbyss));
-        }
     } catch(e) {
         console.error(e);
         contentEl.innerHTML = '<div class="card error">도감 정보를 로드하는 데 실패했습니다.</div>';
