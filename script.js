@@ -364,6 +364,169 @@ signupForm.addEventListener('keydown', e => {
     if (e.key === 'Enter') { e.preventDefault(); signupBth.click(); }
 });
 
+/**
+ * 팝업을 열어 신규 사용자에게 인적사항과 스탯을 커스터마이징하도록 요청합니다.
+ * @param {string} uid - 신규 사용자의 UID
+ * @param {string} nickname - 신규 사용자의 닉네임
+ */
+function openNewUserCustomization(uid, nickname) {
+    const defaultData = createDefaultSheet(uid, nickname);
+    const p = defaultData.personnel;
+    const s = defaultData.stats;
+    
+    // 인적사항 입력 폼
+    const personnelForm = `
+        <h3 style="border-bottom: 1px solid #333; padding-bottom: 10px;">기본 인적사항 설정</h3>
+        <p style="color: #aaa;">(${nickname}님을 위한 초기 설정입니다. 이름은 수정 불가능합니다.)</p>
+        <div class="form-row">
+            <label>이름</label> <input type="text" value="${p.name}" disabled>
+        </div>
+        <div class="form-row">
+            <label>성별</label> 
+            <select id="custGender">
+                <option value="남성">남성</option>
+                <option value="여성">여성</option>
+                <option value="미상" ${p.gender === '미상' ? 'selected' : ''}>미상</option>
+            </select>
+        </div>
+        <div class="form-row"><label>나이</label> <input type="number" id="custAge" value="${p.age || 20}"></div>
+        <div class="form-row"><label>키 (cm)</label> <input type="number" id="custHeight" value="${p.height || 170}"></div>
+        <div class="form-row"><label>체중 (kg)</label> <input type="number" id="custWeight" value="${p.weight || 60}"></div>
+    `;
+
+    // 스탯 입력 폼 (슬라이더 및 총 포인트 제한 로직은 프론트엔드에서 구현 필요)
+    const statsKeys = Object.keys(baseStats);
+    let statsForm = `<h3 style="border-bottom: 1px solid #333; padding: 10px 0;">기본 스탯 설정 (총 포인트 제한: 50)</h3>`;
+    let currentTotal = statsKeys.length; // 기본값 14개의 합계
+    statsForm += `<p style="color: yellow; margin-bottom: 15px;">현재 사용 포인트: <span id="currentPoints">${currentTotal}</span> / 50</p>`;
+
+    statsKeys.forEach(key => {
+        const label = mapStatKeyToLabel(key);
+        statsForm += `
+            <div class="form-row stat-row">
+                <label style="width: 150px;">${label}</label>
+                <input type="range" id="stat-${key}" min="1" max="5" value="${baseStats[key] || 1}" class="stat-slider">
+                <span id="value-${key}" class="stat-value">${baseStats[key] || 1}</span>
+            </div>
+        `;
+    });
+    
+    // 팝업 HTML (실제 팝업/모달 라이브러리 사용 가정)
+    const popupContent = `
+        <div class="customization-popup">
+            <h2>캐릭터 생성: 초기 설정</h2>
+            <div style="display: flex; gap: 30px;">
+                <div style="flex: 1;">${personnelForm}</div>
+                <div style="flex: 1;">${statsForm}</div>
+            </div>
+            <button id="saveCustomSheetBtn" class="btn primary" style="width: 100%; margin-top: 20px;">설정 저장 및 시트 시작</button>
+        </div>
+    `;
+
+    // showPopup(popupContent); // 실제 팝업/모달을 띄우는 함수 호출 가정
+    // 임시로 body에 삽입
+    document.body.insertAdjacentHTML('beforeend', `<div id="custModal" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:9999; display:flex; justify-content:center; align-items:center;"><div class="card" style="width: 700px; max-height: 80vh; overflow-y: auto;">${popupContent}</div></div>`);
+
+
+    // 이벤트 리스너 부착
+    document.getElementById('saveCustomSheetBtn').onclick = () => {
+        saveCustomizedSheet(uid, nickname);
+        document.getElementById('custModal')?.remove(); // 팝업 닫기
+    };
+    
+    // 슬라이더 변경 이벤트 처리 (포인트 합계 계산)
+    document.querySelectorAll('.stat-slider').forEach(slider => {
+        slider.addEventListener('input', updateStatPoints);
+    });
+
+    updateStatPoints(); // 초기 포인트 계산
+}
+
+// 스탯 슬라이더 변경 시 포인트 합계를 업데이트하는 헬퍼 함수
+function updateStatPoints() {
+    let totalPoints = 0;
+    document.querySelectorAll('.stat-slider').forEach(slider => {
+        const value = parseInt(slider.value, 10);
+        totalPoints += value;
+        document.getElementById(`value-${slider.id.replace('stat-', '')}`).textContent = value;
+    });
+
+    const currentPointsEl = document.getElementById('currentPoints');
+    if (currentPointsEl) {
+        currentPointsEl.textContent = totalPoints;
+        // 50 포인트 초과 시 경고 표시 (UX 개선 필요)
+        if (totalPoints > 50) {
+            currentPointsEl.style.color = 'red';
+            document.getElementById('saveCustomSheetBtn').disabled = true;
+        } else {
+            currentPointsEl.style.color = 'lime';
+            document.getElementById('saveCustomSheetBtn').disabled = false;
+        }
+    }
+}
+
+// 스탯 키를 한글 레이블로 매핑하는 헬퍼 함수 (renderMeStatsSection의 레이블과 일치)
+function mapStatKeyToLabel(key) {
+    const map = {
+        muscle: '근력', agility: '민첩', endurance: '지구력', flexibility: '유연성', 
+        visual: '시각', auditory: '청각', situation: '상황 인지 능력', reaction: '반응속도', 
+        intellect: '지능', judgment: '판단력', memory: '기억력', spirit: '정신력', 
+        decision: '의사 결정 능력', stress: '스트레스 내성'
+    };
+    return map[key] || key;
+}
+
+/**
+ * 사용자 커스터마이징 결과를 Firestore에 저장하고 시트 렌더링을 시작합니다.
+ * @param {string} uid - 사용자 UID
+ * @param {string} nickname - 사용자 닉네임
+ */
+async function saveCustomizedSheet(uid, nickname) {
+    const initialSheet = createDefaultSheet(uid, nickname);
+    
+    // 1. 인적사항 데이터 수집
+    const personnel = {
+        ...initialSheet.personnel,
+        gender: document.getElementById('custGender').value,
+        age: parseInt(document.getElementById('custAge').value, 10),
+        height: parseInt(document.getElementById('custHeight').value, 10),
+        weight: parseInt(document.getElementById('custWeight').value, 10),
+    };
+    
+    // 2. 스탯 데이터 수집
+    const stats = {};
+    document.querySelectorAll('.stat-slider').forEach(slider => {
+        const key = slider.id.replace('stat-', '');
+        stats[key] = parseInt(slider.value, 10);
+    });
+
+    // 3. 최종 시트 데이터 구성
+    const finalSheetData = {
+        ...initialSheet,
+        personnel: personnel,
+        stats: stats,
+        // 정신력 Max 값 재계산
+        status: {
+            ...initialSheet.status,
+            maxSpirit: (10 * (stats.spirit || 1)) + 50,
+            currentSpirit: (10 * (stats.spirit || 1)) + 50,
+        },
+        updatedAt: serverTimestamp()
+    };
+    
+    try {
+        // ⭐ Firestore에 저장: sheets 컬렉션 아래에 사용자 UID를 문서 ID로 사용
+        await setDoc(doc(db, 'sheets', uid), finalSheetData); 
+        showMessage('캐릭터 시트가 성공적으로 저장되었습니다.', 'success');
+        
+        // 4. 시트 렌더링 시작
+        renderMe(uid); 
+        
+    } catch(e) {
+        console.error("커스터마이징 시트 저장 실패:", e);
+        showMessage('시트 저장에 실패했습니다. 다시 시도해 주세요.', 'error');
+    }
+}
 
 // --- 탭 로드 로직 ---
 
@@ -557,6 +720,104 @@ function drawStatChart(stats = { str:1, vit:1, agi:1, wil:1 }) {
     });
 }
 
+let radarObjs = {}; // 다중 차트 관리를 위한 전역 객체
+
+function initStatsRadarCharts(s) {
+    if (typeof Chart === 'undefined') {
+        console.warn('Chart.js library not loaded or undefined.');
+        return;
+    }
+    
+    // 1. 신체 스탯 데이터
+    const physicalStats = {
+        '근력': s.muscle, '민첩': s.agility, '지구력': s.endurance, 
+        '유연성': s.flexibility, '시각': s.visual, '청각': s.auditory, 
+        '상황 인지 능력': s.situation, '반응속도': s.reaction
+    };
+    
+    // 2. 정신 스탯 데이터
+    const mentalStats = {
+        '지능': s.intellect, '판단력': s.judgment, '기억력': s.memory, 
+        '정신력': s.spirit, '의사 결정 능력': s.decision, '스트레스 내성': s.stress
+    };
+    
+    // 차트 그리기
+    const maxVal = 5; // 현재 시트 데이터는 1~5를 가정
+    
+    // chart-container-1에 신체 스탯 그래프 그리기
+    drawFlexibleRadarChart(
+        'chart-container-1', 
+        Object.keys(physicalStats), 
+        Object.values(physicalStats), 
+        maxVal, 
+        'rgba(255, 99, 132, 0.2)', 
+        'rgb(255, 99, 132)'
+    );
+
+    // chart-container-2에 정신 스탯 그래프 그리기
+    drawFlexibleRadarChart(
+        'chart-container-2', 
+        Object.keys(mentalStats), 
+        Object.values(mentalStats), 
+        maxVal, 
+        'rgba(54, 162, 235, 0.2)', 
+        'rgb(54, 162, 235)'
+    );
+}
+
+function drawFlexibleRadarChart(containerSelector, labels, data, max, bgColor, borderColor) {
+    const container = document.querySelector(`.${containerSelector}`);
+    if (!container) return;
+
+    // 기존 캔버스 제거 및 새 캔버스 생성
+    container.innerHTML = `<canvas id="${containerSelector}-canvas"></canvas>`;
+    const ctx = document.getElementById(`${containerSelector}-canvas`);
+    
+    if (radarObjs[containerSelector]) radarObjs[containerSelector].destroy();
+
+    const clamp = v => Math.max(0, Number(v)); // 음수 방지
+    
+    radarObjs[containerSelector] = new Chart(ctx, {
+        type: 'radar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: '스탯 레벨',
+                data: data.map(clamp),
+                backgroundColor: bgColor,
+                borderColor: borderColor,
+                pointBackgroundColor: borderColor,
+                pointBorderColor: '#fff',
+                pointHoverBackgroundColor: '#fff',
+                pointHoverBorderColor: borderColor
+            }]
+        },
+        options: {
+            responsive: true,
+            aspectRatio: 1,
+            scales: {
+                r: {
+                    min: 0,
+                    max: max,
+                    ticks: {
+                        stepSize: 1, 
+                        color: 'rgba(255, 255, 255, 0.7)',
+                        backdropColor: 'rgba(0, 0, 0, 0.5)'
+                    },
+                    pointLabels: {
+                        color: 'rgba(255, 255, 255, 0.9)',
+                        font: { size: 11 }
+                    },
+                    grid: { color: 'rgba(255, 255, 255, 0.1)' },
+                    angleLines: { color: 'rgba(255, 255, 255, 0.2)' }
+                }
+            },
+            plugins: {
+                legend: { display: false }
+            }
+        }
+    });
+}
 
 async function openProfileModal(docId, data) {
     profileModal.innerHTML = `
@@ -2922,13 +3183,13 @@ async function renderMe(targetSheetId = null) {
         const sheetContainer = document.createElement('div');
         sheetContainer.className = 'char-sheet-container';
         
-        // 2. 인적사항 섹션 렌더링
-        sheetContainer.appendChild(renderPersonnelSection(sheetData.personnel, currentSheetId, isAdmin));
+        // ⭐ 2. 인적사항 섹션 렌더링 (시트 제목을 닉네임으로 설정하기 위해 변수에서 처리)
+        const nickname = sheetData.personnel?.name || currentSheetId; 
+        
+        sheetContainer.appendChild(renderPersonnelSection(sheetData.personnel, nickname, currentSheetId, isAdmin));
         
         // 3. 스탯 섹션 렌더링
-        // 스탯 섹션에는 두 개의 방사형 그래프가 포함됩니다.
-        // 
-       sheetContainer.appendChild(renderMeStatsSection(sheetData.stats, isAdmin, currentSheetId));
+        sheetContainer.appendChild(renderMeStatsSection(sheetData.stats, isAdmin, currentSheetId));
         
         // 4. 인벤토리 섹션 렌더링 (비동기 함수 사용)
         sheetContainer.appendChild(await renderInventorySection(sheetData.inventory, isAdmin, currentSheetId));
@@ -2946,11 +3207,11 @@ async function renderMe(targetSheetId = null) {
 }
 
 // 인적사항 섹션 렌더링
-function renderPersonnelSection(p, sheetId, isAdmin) {
+function renderPersonnelSection(p, nickname, sheetId, isAdmin) {
     const section = document.createElement('div');
     section.className = 'card map-card'; // 기존 카드 스타일 활용
     section.innerHTML = `
-        <h2 style="margin-top:0;">👤 인적사항 (ID: ${sheetId})</h2>
+        h2 style="margin-top:0;">👤 ${nickname}님의 시트 (ID: ${sheetId})</h2>
         <div class="personnel-grid">
             <div class="photo-area">
                 <img src="${p.photoUrl}" alt="프로필 사진" style="width:100%; height:auto; aspect-ratio: 3/4; object-fit: cover;">
@@ -2988,10 +3249,8 @@ function renderMeStatsSection(s, isAdmin, sheetId) {
     section.innerHTML = `
         <h2>💪 스탯</h2>
         <div class="stats-grid">
+            
             <div class="radar-chart-wrap">
-                <div class="chart-container-1">
-                    
-                </div>
                 ${renderHorizontalTable('표 1: 신체 스탯', [
                     { label: '근력', value: s.muscle },
                     { label: '민첩', value: s.agility },
@@ -3002,7 +3261,10 @@ function renderMeStatsSection(s, isAdmin, sheetId) {
                     { label: '상황 인지 능력', value: s.situation },
                     { label: '반응속도', value: s.reaction },
                 ], isAdmin, true)}
+                <div class="chart-container-1" style="width: 100%; height: 300px; margin-top: 15px;"> 
+                    </div>
             </div>
+            
             <div class="radar-chart-wrap">
                 ${renderHorizontalTable('표 2: 정신 스탯', [
                     { label: '지능', value: s.intellect },
@@ -3012,13 +3274,18 @@ function renderMeStatsSection(s, isAdmin, sheetId) {
                     { label: '의사 결정 능력', value: s.decision },
                     { label: '스트레스 내성', value: s.stress },
                 ], isAdmin, true)}
-                <div class="chart-container-2">
-                    
-                </div>
+                <div class="chart-container-2" style="width: 100%; height: 300px; margin-top: 15px;">
+                    </div>
             </div>
         </div>
-        ${isAdmin ? `<button ... onclick="openStatsEdit('${sheetId}', ${JSON.stringify(s)})">스탯 편집</button>` : ''}
+        ${isAdmin ? `<button class="btn link admin-edit-btn" onclick="openStatsEdit('${sheetId}', ${JSON.stringify(s)})">스탯 편집</button>` : ''}
     `;
+    
+    // 차트 초기화 함수 호출 (실제 DOM 요소가 삽입된 후 실행)
+    setTimeout(() => {
+        initStatsRadarCharts(s);
+    }, 0); 
+    
     return section;
 }
 
@@ -3105,7 +3372,8 @@ function renderStatusSection(s, spiritStat, isAdmin, sheetId) {
     if (totalInjury > 100) physicalStatusText = '심각';
     if (totalInjury === 0 && totalContamination === 0) physicalStatusText = '여유로움';
 
-
+    const humanIconHtml = renderHumanIcon(s.injuries, s.contaminations);
+    
     section.innerHTML = `
         <h2>⚕️ 현재 상태</h2>
 
@@ -3135,8 +3403,7 @@ function renderStatusSection(s, spiritStat, isAdmin, sheetId) {
             </div>
             
             <div class="human-icon-container">
-                
-            </div>
+                ${humanIconHtml} </div>
             
             <div class="injury-list right-side">
                 ${renderInjuryBlock(['torso'], s, mapKeyToLabel)}
@@ -3158,6 +3425,37 @@ function renderStatusSection(s, spiritStat, isAdmin, sheetId) {
         ${isAdmin ? `<button class="btn link admin-edit-btn" onclick="openStatusEdit(sheetId, ${JSON.stringify(s)})">상태 및 통계 편집</button>` : ''}
     `;
     return section;
+}
+
+function renderHumanIcon(injuries, contaminations) {
+    // calculatePartColor 함수를 사용하여 부위별 색상을 계산합니다.
+    const colors = {
+        head: calculatePartColor(injuries.head, contaminations.head),
+        torso: calculatePartColor(injuries.torso, contaminations.torso),
+        leftArm: calculatePartColor(injuries.leftArm, contaminations.leftArm),
+        rightArm: calculatePartColor(injuries.rightArm, contaminations.rightArm),
+        leftLeg: calculatePartColor(injuries.leftLeg, contaminations.leftLeg),
+        rightLeg: calculatePartColor(injuries.rightLeg, contaminations.rightLeg),
+    };
+    
+    // 단순화된 사람 모양 SVG
+    return `
+        <svg viewBox="0 0 100 150" style="width: 150px; height: 225px;">
+            <circle cx="50" cy="15" r="10" fill="${colors.head}" stroke="#888" stroke-width="1"/>
+            
+            <rect x="35" y="25" width="30" height="50" fill="${colors.torso}" stroke="#888" stroke-width="1"/>
+            
+            <path d="M 35 35 L 20 60 L 15 90 L 25 90 L 35 60 Z" fill="${colors.leftArm}" stroke="#888" stroke-width="1"/>
+            
+            <path d="M 65 35 L 80 60 L 85 90 L 75 90 L 65 60 Z" fill="${colors.rightArm}" stroke="#888" stroke-width="1"/>
+            
+            <rect x="37" y="75" width="10" height="65" fill="${colors.leftLeg}" stroke="#888" stroke-width="1"/>
+            
+            <rect x="53" y="75" width="10" height="65" fill="${colors.rightLeg}" stroke="#888" stroke-width="1"/>
+            
+            <text x="50" y="80" text-anchor="middle" fill="#ccc" font-size="10">BODY MAP</text>
+        </svg>
+    `;
 }
 
 // 부상도 상세 단락을 렌더링하는 함수 (5-2)
