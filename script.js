@@ -726,26 +726,24 @@ signupBth.addEventListener('click', async ()=> {
             displayName: nick
         });
 
-        await Promise.all([
-            setDoc(doc(db, 'users', uid), {
-                email,
-                id,
-                nickname: nick,
-                colorHex: randomHex(),
-                decorations: [],
-                silver: 0,
-                createdAt: serverTimestamp()
-            }),
-            setDoc(doc(db, 'staff', uid), {
-                uid,
-                name: nick,
-                status: 'alive',
-                image: '',
-                silver: 0,
-                desc: '',
-                updatedAt: serverTimestamp()
-            })
-        ]);
+        await setDoc(doc(db, 'users', uid), {
+            email,
+            id,
+            nickname: nick,
+            colorHex: randomHex(),
+            decorations: [],
+            silver: 0,
+            createdAt: serverTimestamp()
+        });
+        await setDoc(doc(db, 'staff', uid), {
+            uid,
+            name: nick,
+            status: 'alive',
+            image: '',
+            silver: 0,
+            desc: '',
+            updatedAt: serverTimestamp()
+        });
 
         const defaultSheet = createDefaultSheet(uid, nick);
         await setDoc(doc(db, 'sheets', uid), defaultSheet);
@@ -883,7 +881,7 @@ function openNewUserCustomization(uid, nickname) {
         (sum, key) => sum + (baseStats[key] || 1),
         0
     );
-    statsForm += `<p style="color: yellow; margin-bottom: 15px;">현재 사용 포인트: <span id="currentPoints">${currentTotal}</span> / 50</p>`;
+    statsForm += `<p style="color: yellow; margin-bottom: 15px;">현재 사용 포인트: <span id="currentPoints">${currentTotal}</span> / 55</p>`;
 
     statsKeys.forEach(key => {
         const label = mapStatKeyToLabel(key);
