@@ -88,6 +88,25 @@ const DEFAULT_PROFILE_IMAGE = './images/default-profile.png';
 
 let currentUser = null;
 
+const baseStats = {
+    // 신체 스탯 (renderMeStatsSection의 표 1 참고)
+    muscle: 1, 
+    agility: 1,
+    endurance: 1,
+    flexibility: 1,
+    visual: 1,
+    auditory: 1,
+    situation: 1,
+    reaction: 1,
+    // 정신 스탯 (renderMeStatsSection의 표 2 참고)
+    intellect: 1,
+    judgment: 1,
+    memory: 1,
+    spirit: 1,
+    decision: 1,
+    stress: 1
+};
+
 // 인증 상태 변화 감지 및 currentUser 설정
 onAuthStateChanged(auth, async user => { // ✅ 콜백 함수를 async로 변경
     currentUser = user;
@@ -2727,16 +2746,30 @@ async function isAdminUser() {
 }
 
 /**
- * 현재 로그인된 사용자 ID (시트 ID로 사용)를 반환합니다.
+ * 현재 로그인된 사용자의 UID를 반환합니다.
+ * onAuthStateChanged 이벤트가 완료될 때까지 기다려 로그인 상태를 확정합니다.
  * @returns {Promise<string|null>}
  */
 async function getCurrentUserSheetId() {
-    // onAuthStateChanged는 비동기적으로 사용하기 어려우므로,
-    // auth.currentUser를 직접 사용하거나, 랩핑된 Promise를 사용해야 함.
-    const user = auth.currentUser;
-    return user ? user.uid : null;
+    // 1. 현재 사용자 객체를 즉시 확인
+    let user = auth.currentUser;
+    
+    // 2. 만약 사용자 객체가 없으면, 인증 상태가 변경될 때까지 기다리는 Promise를 생성
+    if (!user) {
+        return new Promise((resolve) => {
+            // onAuthStateChanged는 첫 로딩 시에도 즉시 호출됩니다.
+            const unsubscribe = onAuthStateChanged(auth, (u) => {
+                // 구독 해제
+                unsubscribe(); 
+                // 유저가 있으면 UID 반환, 없으면 null 반환
+                resolve(u ? u.uid : null); 
+            });
+        });
+    }
+    
+    // 3. 이미 로그인된 상태라면 바로 UID 반환
+    return user.uid;
 }
-
 /**
  * 특정 시트 ID에 대한 데이터를 Firestore에서 가져옵니다.
  * 'sheets' 컬렉션에 모든 데이터가 저장되어 있다고 가정합니다.
@@ -3169,7 +3202,7 @@ function createDefaultSheet(uid, nickname) {
         // 5. 현재 상태
         status: {
             currentSpirit: 60,
-            maxSpirit: (10 * 1) + 50,
+            maxSpirit: (10 * (baseStats.spirit || 1)) + 50,
             injuries: { ...initialInjuryState },
             contaminations: { ...initialInjuryState },
             currentContamination: 0, 
