@@ -1003,10 +1003,9 @@ function openNewUserCustomization(uid, nickname) {
     const saveBtn = document.getElementById('saveCustomSheetBtn');
     if (saveBtn) {
         saveBtn.addEventListener('click', () => {
-            if (typeof saveCustomizedSheet === 'function') {
-                saveCustomizedSheet(uid, nickname);
-            }
-            document.getElementById('custModal')?.remove(); // 팝업 닫기
+            const data = collectCustomizationData();
+            saveCustomizedSheet(uid, nickname, data);
+            document.getElementById('custModal')?.remove();
         });
     }
     
@@ -1016,6 +1015,21 @@ function openNewUserCustomization(uid, nickname) {
     });
 
     updateStatPoints(); // 초기 포인트 계산
+}
+
+function collectCustomizationData() {
+    const gender = document.getElementById('custGender').value;
+    const age = Number(document.getElementById('custAge').value);
+    const height = Number(document.getElementById('custHeight').value);
+    const weight = Number(document.getElementById('custWeight').value);
+
+    const stats = {};
+    document.querySelectorAll('.stat-slider').forEach(slider => {
+        const key = slider.id.replace('stat-', '');
+        stats[key] = Number(slider.value);
+    });
+
+    return { gender, age, height, weight, stats };
 }
 
 // 포인트 계산
@@ -2360,6 +2374,50 @@ async function renderDexDetail(id, isEditMode = false, preloadedData = null) {
 
     const commentCard = renderCommentCard({ id, dbCollection: 'abyssal_dex' });
     containerEl.appendChild(commentCard)
+}
+
+function renderDisclosurePresetHtml() {
+    return `
+        <div style="
+            margin-bottom: 15px;
+            border: 1px dashed var(--muted);
+            padding: 10px;
+            border-radius: 5px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        ">
+            <strong>전체 공개/비공개 프리셋:</strong>
+
+            <button class="btn-xs primary disclosure-preset-btn" data-section="basic" data-public="true">
+                기본 정보 공개
+            </button>
+            <button class="btn-xs danger disclosure-preset-btn" data-section="basic" data-public="false">
+                기본 정보 비공개
+            </button>
+
+            <button class="btn-xs primary disclosure-preset-btn" data-section="stats" data-public="true">
+                스탯 공개
+            </button>
+            <button class="btn-xs danger disclosure-preset-btn" data-section="stats" data-public="false">
+                스탯 비공개
+            </button>
+
+            <button class="btn-xs primary disclosure-preset-btn" data-section="management" data-public="true">
+                관리 정보 공개
+            </button>
+            <button class="btn-xs danger disclosure-preset-btn" data-section="management" data-public="false">
+                관리 정보 비공개
+            </button>
+
+            <button class="btn-xs primary disclosure-preset-btn" data-section="logs" data-public="true">
+                연구 일지 공개
+            </button>
+            <button class="btn-xs danger disclosure-preset-btn" data-section="logs" data-public="false">
+                연구 일지 비공개
+            </button>
+        </div>
+    `;
 }
 
 async function loadAbyssData(id, preloadedData = null) {
