@@ -1505,7 +1505,9 @@ async function renderProfileCard(docId, data, container) {
     closeBtn.style.position = 'absolute';
     closeBtn.style.top = '10px';
     closeBtn.style.right = '10px';
-    closeBtn.addEventListener('click', () => { container.removeChild(card); });
+    closeBtn.addEventListener('click', () => {
+        if (container.contains(wrap)) container.removeChild(wrap);
+    });
     card.appendChild(closeBtn);
 
     // 프로필 정보
@@ -1808,7 +1810,6 @@ async function openMapPopup(mapId, containerId = 'mapMainContainer') {
 
     container.innerHTML = '';
 
-    // 래퍼 생성
     const wrap = document.createElement('div');
     wrap.className = 'map-detail-wrap';
     wrap.style.display = 'grid';
@@ -1816,7 +1817,6 @@ async function openMapPopup(mapId, containerId = 'mapMainContainer') {
     wrap.style.gridTemplateRows = 'auto auto';
     wrap.style.gap = '20px';
 
-    // infoSection
     const infoSection = document.createElement('div');
     infoSection.className = 'map-info';
     infoSection.innerHTML = `
@@ -1826,14 +1826,15 @@ async function openMapPopup(mapId, containerId = 'mapMainContainer') {
         <div>위험도: ${renderDangerStars(data.danger || 1)}</div>
         <div>출현: ${Array.isArray(data.types)?data.types.join(', '):data.types||''}</div>
     `;
+
     if (await isAdminUser()) {
         const editBtn = document.createElement('button');
         editBtn.textContent = '편집';
+        // 기존 popup 대신 inline edit 호출
         editBtn.addEventListener('click', () => openMapInlineEdit(mapId, data));
         infoSection.appendChild(editBtn);
     }
 
-    // grid + teams
     const gridTeamsSection = document.createElement('div');
     gridTeamsSection.style.display = 'flex';
     gridTeamsSection.style.gap = '20px';
@@ -1868,11 +1869,9 @@ async function openMapPopup(mapId, containerId = 'mapMainContainer') {
     gridTeamsSection.appendChild(gridContainer);
     gridTeamsSection.appendChild(teamsContainer);
 
-    // comments
     const commentsSection = document.createElement('div');
     commentsSection.appendChild(renderCommentCard({ id: mapId, dbCollection: 'maps' }));
 
-    // wrap에 append
     wrap.appendChild(infoSection);
     wrap.appendChild(gridTeamsSection);
     wrap.appendChild(commentsSection);
