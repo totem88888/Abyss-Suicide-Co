@@ -23,7 +23,8 @@ import {
     query,
     where,
     updateDoc,
-    deleteDoc
+    deleteDoc,
+    onSnapshot
 } from "https://www.gstatic.com/firebasejs/10.6.0/firebase-firestore.js";
 import { 
     getStorage, 
@@ -1473,25 +1474,52 @@ async function openProfileModal(docId, data, container) {
         container.style.background = 'rgba(0,0,0,0.6)';
         container.style.overflow = 'auto';
         container.style.zIndex = '9999';
-        container.style.padding = '20px';
+        container.style.display = 'flex';
+        container.style.justifyContent = 'center';
+        container.style.alignItems = 'flex-start';
+        container.style.padding = '40px 20px';
         document.body.appendChild(container);
     }
 
     const card = document.createElement('div');
     card.className = 'card profile-card';
+    card.style.background = '#1a1a1a';
+    card.style.padding = '20px';
+    card.style.borderRadius = '8px';
+    card.style.maxWidth = '800px';
+    card.style.width = '100%';
+    card.style.position = 'relative';
+    card.style.boxShadow = '0 4px 12px rgba(0,0,0,0.5)';
+
+    // 뒤로가기 버튼
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = 'X';
+    closeBtn.style.position = 'absolute';
+    closeBtn.style.top = '10px';
+    closeBtn.style.right = '10px';
+    closeBtn.style.background = '#ff4c4c';
+    closeBtn.style.border = 'none';
+    closeBtn.style.padding = '5px 10px';
+    closeBtn.style.color = '#fff';
+    closeBtn.style.cursor = 'pointer';
+    closeBtn.style.borderRadius = '4px';
+    closeBtn.addEventListener('click', () => {
+        document.body.removeChild(container);
+    });
+    card.appendChild(closeBtn);
 
     const style = `
-        .stats-row { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 20px; }
+        .stats-row { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 20px; margin-top:20px; }
         .stats-table-container { display: flex; flex-direction: column; height: 100%; }
         .chart-container { min-height: 300px; }
         .edit-area { margin-top: 10px; }
     `;
 
-    card.innerHTML = `
+    card.innerHTML += `
         <style>${style}</style>
-        <div class="profile-top">
+        <div class="profile-top" style="display:flex; gap:20px; align-items:center;">
             <div class="profile-img-wrap">
-                <img class="profile-img" src="${p.image || ''}">
+                <img class="profile-img" src="${p.image || ''}" style="width:120px; height:120px; object-fit:cover; border-radius:8px;">
             </div>
             <div class="profile-info">
                 <p><span class="label">이름</span> ${p.name || ''}</p>
@@ -1552,7 +1580,6 @@ async function openProfileModal(docId, data, container) {
 
 // 수정 버튼 눌렀을 때
 async function openInlineEdit(docId, data, cardEl) {
-    // 카드 안에서 editArea를 찾음
     const editArea = cardEl.querySelector(".edit-area") || (() => {
         const div = document.createElement("div");
         div.className = "edit-area";
@@ -1564,29 +1591,33 @@ async function openInlineEdit(docId, data, cardEl) {
     const s = data.stats || {};
 
     editArea.innerHTML = `
-        <div class="edit-grid-inline">
+        <div class="edit-grid-inline" style="display:flex; flex-direction:column; gap:10px; margin-top:15px; padding:10px; background:#222; border-radius:6px;">
+            <button id="closeEditInline" style="align-self:flex-end; background:#ff4c4c; color:#fff; border:none; padding:4px 8px; cursor:pointer; border-radius:4px;">X</button>
             <label>이름</label><input id="editName" value="${p.name || ''}">
             <label>성별</label><input id="editGender" value="${p.gender || ''}">
             <label>나이</label><input id="editAge" value="${p.age || ''}">
             <label>키</label><input id="editHeight" value="${p.height || ''}">
             <label>체중</label><input id="editWeight" value="${p.weight || ''}">
             <label>국적</label><input id="editNationality" value="${p.nationality || ''}">
-
             <label>이미지 파일</label><input id="editImageFile" type="file">
             <label>이미지 URL</label><input id="editImage" value="${p.image || ''}">
-
             <div class="edit-stats-inline">
                 ${Object.keys(s).map(key => `
                     <label>${key}</label>
                     <input id="edit-${key}" value="${s[key] || 0}">
                 `).join('')}
             </div>
-
-            <button id="saveStaffInline">저장</button>
+            <button id="saveStaffInline" style="margin-top:10px;">저장</button>
         </div>
     `;
 
-    document.getElementById("saveStaffInline").addEventListener("click", async () => {
+    // 편집 닫기 버튼
+    editArea.querySelector("#closeEditInline").addEventListener("click", () => {
+        editArea.innerHTML = '';
+    });
+
+    // 저장 버튼
+    editArea.querySelector("#saveStaffInline").addEventListener("click", async () => {
         let finalImg = document.getElementById("editImage").value;
         const file = document.getElementById("editImageFile").files[0];
         if (file) finalImg = await uploadStaffImage(file, docId);
@@ -1615,11 +1646,11 @@ async function openInlineEdit(docId, data, cardEl) {
 
         await updateDoc(doc(db, "sheets", docId), newData);
 
-        // 카드 자체를 갱신
+        // 카드 자체 갱신
         renderStaff(); 
+        editArea.innerHTML = ''; // 편집 영역 닫기
     });
 }
-
 
 /* =========================================================
    맵
@@ -1676,22 +1707,70 @@ async function renderMapCard(mapDoc) {
     el.onmouseenter = () => el.style.transform = 'scale(1.03)';
     el.onmouseleave = () => el.style.transform = 'scale(1)';
 
-    // 탭 메뉴에서 미리보기용 카드
     el.innerHTML = `
         <div class="map-card-inner" data-id="${mapId}">
-            <div class="map-media"><img class="map-img" src="${img}" alt="${name}"></div>
-            <div class="map-main">
+            <!-- 1. 맵 정보 & 설명 -->
+            <div class="map-info-section">
+                <div class="map-media"><img class="map-img" src="${img}" alt="${name}"></div>
                 <h3 class="map-name">${name}</h3>
+                <p class="map-description">${data.description || ''}</p>
                 <div class="map-meta">
                     <div class="map-danger">${renderDangerStars(danger)}</div>
                     <div class="map-types">출현: ${types}</div>
                 </div>
             </div>
+
+            <!-- 2. 맵 격자 / 탐사팀 -->
+            <div class="map-grid-section" style="margin-top:10px;">
+                <div class="map-left-grid"></div>
+                <div class="map-right-teams"></div>
+            </div>
+
+            <!-- 3. 댓글 영역 -->
+            <div class="map-comments-section" style="margin-top:10px;"></div>
         </div>
     `;
 
     // 클릭하면 팝업 열기
     el.addEventListener('click', () => openMapPopup(mapId));
+
+    // 격자 & 팀 표시 초기화
+    const gridContainer = el.querySelector('.map-left-grid');
+    const teamsContainer = el.querySelector('.map-right-teams');
+    const commentsArea = el.querySelector('.map-comments-section');
+
+    // 격자 생성 (rows/cols 기본값)
+    const rows = data.grid?.rows || 8;
+    const cols = data.grid?.cols || 8;
+    gridContainer.style.display = 'grid';
+    gridContainer.style.gridTemplateRows = `repeat(${rows}, 40px)`;
+    gridContainer.style.gridTemplateColumns = `repeat(${cols}, 40px)`;
+    for (let y = 0; y < rows; y++) {
+        for (let x = 0; x < cols; x++) {
+            const cell = document.createElement('div');
+            cell.className = 'grid-cell';
+            cell.dataset.x = x;
+            cell.dataset.y = y;
+            cell.style.border = '1px solid #888';
+            cell.style.position = 'relative';
+            gridContainer.appendChild(cell);
+        }
+    }
+
+    // 탐사팀 목록
+    const recentVisits = Array.isArray(data.visits) ? data.visits : [];
+    for (const v of recentVisits) {
+        const teamEl = document.createElement('div');
+        teamEl.textContent = v.teamName;
+        teamEl.style.color = v.colorHex || '#fff';
+        teamEl.className = 'explore-team';
+        teamEl.addEventListener('click', () => showTeamVisit(v, gridContainer));
+        teamsContainer.appendChild(teamEl);
+    }
+
+    // 댓글 렌더링
+    const commentCard = renderCommentCard({ id: mapId, dbCollection:'maps' });
+    commentsArea.appendChild(commentCard);
 
     return el;
 }
@@ -1720,21 +1799,32 @@ async function openMapPopup(mapId) {
     }
 
     modal.innerHTML = `
-        <div class="popup-top">
-            <img src="${data.image}" class="map-popup-img">
-            <h2>${data.name}</h2>
-            <p>${data.description}</p>
-            <div class="map-meta">
-                <div class="map-danger">${renderDangerStars(data.danger)}</div>
-                <div class="map-types">출현: ${Array.isArray(data.types)?data.types.join(', '):data.types||''}</div>
+        <div class="card map-popup-card" style="position:relative; padding:20px; border-radius:8px; background:#1a1a1a; box-shadow:0 4px 12px rgba(0,0,0,0.5); max-width:800px; margin:40px auto;">
+            <!-- 닫기 버튼 -->
+            <button id="mapPopupCloseBtn" style="position:absolute; top:10px; right:10px; background:#ff4c4c; border:none; border-radius:4px; padding:5px 10px; cursor:pointer; color:#fff;">X</button>
+
+            <div class="popup-top">
+                <img src="${data.image}" class="map-popup-img" style="width:100%; border-radius:6px;">
+                <h2 style="margin:10px 0;">${data.name}</h2>
+                <p>${data.description}</p>
+                <div class="map-meta" style="margin-top:10px;">
+                    <div class="map-danger">${renderDangerStars(data.danger)}</div>
+                    <div class="map-types">출현: ${Array.isArray(data.types)?data.types.join(', '):data.types||''}</div>
+                </div>
             </div>
+            <div class="popup-bottom" style="display:flex; gap:20px; margin-top:20px;">
+                <div class="map-left-grid" style="flex:1;"></div>
+                <div class="map-right-teams" style="flex:1;"></div>
+            </div>
+            <div class="popup-comments-area" style="margin-top:20px;"></div>
         </div>
-        <div class="popup-bottom">
-            <div class="map-left-grid"></div>
-            <div class="map-right-teams"></div>
-        </div>
-        <div class="popup-comments-area"></div>
     `;
+
+    // 뒤로가기 버튼 이벤트
+    const closeBtn = modal.querySelector('#mapPopupCloseBtn');
+    closeBtn.addEventListener('click', () => {
+        document.body.removeChild(modal);
+    });
 
     (async () => {
         if (await isAdminUser()) {
