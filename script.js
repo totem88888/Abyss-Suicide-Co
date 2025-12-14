@@ -1474,6 +1474,11 @@ async function renderProfileCard(docId, data, container) {
         document.body.appendChild(container);
     }
 
+    // 기존 카드 삭제
+    const existingCard = container.querySelector('.profile-card');
+    if (existingCard) container.removeChild(existingCard);
+
+    // 카드 생성
     const card = document.createElement('div');
     card.className = 'card profile-card';
     card.style.background = '#1a1a1a';
@@ -1504,7 +1509,7 @@ async function renderProfileCard(docId, data, container) {
     });
     card.appendChild(closeBtn);
 
-    // 위 단락: 프로필 이미지 + 기본 정보
+    // --- 위 단락: 프로필 이미지 + 기본 정보 ---
     const topSection = document.createElement('div');
     topSection.style.display = 'flex';
     topSection.style.alignItems = 'center';
@@ -1523,7 +1528,7 @@ async function renderProfileCard(docId, data, container) {
     `;
     card.appendChild(topSection);
 
-    // 아래 단락: 스탯표 + 차트 + 편집 버튼
+    // --- 아래 단락: 스탯표 + 차트 + 편집 버튼 ---
     const bottomSection = document.createElement('div');
     bottomSection.style.display = 'flex';
     bottomSection.style.flexDirection = 'column';
@@ -1537,7 +1542,7 @@ async function renderProfileCard(docId, data, container) {
     `;
     bottomSection.innerHTML = `<style>${style}</style>`;
 
-    // 신체/정신 스탯 표
+    // 스탯 표
     const statsRow = document.createElement('div');
     statsRow.className = 'stats-row';
     statsRow.innerHTML = `
@@ -1591,6 +1596,7 @@ async function renderProfileCard(docId, data, container) {
     card.appendChild(bottomSection);
     container.appendChild(card);
 
+    // 차트 초기화
     setTimeout(() => {
         initStatsRadarCharts(s, 'radarChart-physical', 'radarChart-mental');
     }, 100);
@@ -1734,6 +1740,7 @@ async function renderMapCard(mapDoc) {
     const danger = data.danger || 1;
     const types = Array.isArray(data.types) ? data.types.join(', ') : (data.types || '');
 
+    // 카드 생성
     const el = document.createElement('div');
     el.className = 'map-card card';
     el.style.transition = 'transform 0.2s';
@@ -1741,54 +1748,35 @@ async function renderMapCard(mapDoc) {
     el.onmouseleave = () => el.style.transform = 'scale(1)';
 
     el.innerHTML = `
-        <div class="map-card-inner" data-id="${mapId}">
-            <!-- 1. 맵 정보 & 설명 -->
-            <div class="map-info-section">
-                <div class="map-media"><img class="map-img" src="${img}" alt="${name}"></div>
+        <div class="map-card-inner" data-id="${mapId}" style="display:flex; gap:20px; align-items:flex-start;">
+            <!-- 왼쪽: 이미지 -->
+            <div class="map-media" style="flex:1;">
+                <img class="map-img" src="${img}" alt="${name}" style="width:100%; border-radius:8px; object-fit:cover;">
+            </div>
+
+            <!-- 오른쪽: 정보 -->
+            <div class="map-info-section" style="flex:2; display:flex; flex-direction:column; gap:10px;">
                 <h3 class="map-name">${name}</h3>
                 <p class="map-description">${data.description || ''}</p>
-                <div class="map-meta">
+                <div class="map-meta" style="display:flex; gap:10px; align-items:center;">
                     <div class="map-danger">${renderDangerStars(danger)}</div>
                     <div class="map-types">출현: ${types}</div>
                 </div>
-            </div>
 
-            <!-- 2. 맵 격자 / 탐사팀 -->
-            <div class="map-grid-section" style="margin-top:10px;">
-                <div class="map-left-grid"></div>
-                <div class="map-right-teams"></div>
-            </div>
+                <!-- 탐사팀 목록 -->
+                <div class="map-right-teams" style="margin-top:10px;"></div>
 
-            <!-- 3. 댓글 영역 -->
-            <div class="map-comments-section" style="margin-top:10px;"></div>
+                <!-- 댓글 영역 -->
+                <div class="map-comments-section" style="margin-top:10px;"></div>
+            </div>
         </div>
     `;
 
     // 클릭하면 팝업 열기
     el.addEventListener('click', () => openMapPopup(mapId));
 
-    // 격자 & 팀 표시 초기화
-    const gridContainer = el.querySelector('.map-left-grid');
     const teamsContainer = el.querySelector('.map-right-teams');
     const commentsArea = el.querySelector('.map-comments-section');
-
-    // 격자 생성 (rows/cols 기본값)
-    const rows = data.grid?.rows || 8;
-    const cols = data.grid?.cols || 8;
-    gridContainer.style.display = 'grid';
-    gridContainer.style.gridTemplateRows = `repeat(${rows}, 40px)`;
-    gridContainer.style.gridTemplateColumns = `repeat(${cols}, 40px)`;
-    for (let y = 0; y < rows; y++) {
-        for (let x = 0; x < cols; x++) {
-            const cell = document.createElement('div');
-            cell.className = 'grid-cell';
-            cell.dataset.x = x;
-            cell.dataset.y = y;
-            cell.style.border = '1px solid #888';
-            cell.style.position = 'relative';
-            gridContainer.appendChild(cell);
-        }
-    }
 
     // 탐사팀 목록
     const recentVisits = Array.isArray(data.visits) ? data.visits : [];
@@ -1797,22 +1785,35 @@ async function renderMapCard(mapDoc) {
         teamEl.textContent = v.teamName;
         teamEl.style.color = v.colorHex || '#fff';
         teamEl.className = 'explore-team';
-        teamEl.addEventListener('click', () => showTeamVisit(v, gridContainer));
+        teamEl.addEventListener('click', () => showTeamVisit(v, null)); // 격자 제거했으므로 null 전달
         teamsContainer.appendChild(teamEl);
     }
 
     // 댓글 렌더링
-    const commentCard = renderCommentCard({ id: mapId, dbCollection:'maps' });
+    const commentCard = renderCommentCard({ id: mapId, dbCollection: 'maps' });
     commentsArea.appendChild(commentCard);
 
     return el;
 }
 
 // 팝업 렌더링
-async function openMapPopup(mapId) {
+async function openMapPopup(mapId, containerId = 'mapMainContainer') {
     const snap = await getDoc(doc(db, 'maps', mapId));
     if (!snap.exists()) return;
     const data = snap.data();
+
+    let container = document.getElementById(containerId);
+    if (!container) {
+        container = document.createElement('div');
+        container.id = containerId;
+        container.style.display = 'flex';
+        container.style.flexDirection = 'column';
+        container.style.gap = '20px';
+        container.style.padding = '20px';
+        document.body.appendChild(container);
+    }
+
+    container.innerHTML = '';
 
     const card = document.createElement('div');
     card.className = 'map-card card';
@@ -1830,14 +1831,24 @@ async function openMapPopup(mapId) {
     infoSection.innerHTML = `
         <img src="${data.image || DEFAULT_MAP_IMAGE}" class="map-img" style="width:100%; border-radius:6px;">
         <h3 style="margin:10px 0;">${data.name || '이름 없음'}</h3>
-        <p>${data.description}</p>
+        <p>${data.description || ''}</p>
         <div class="map-meta" style="margin-top:10px;">
             <div class="map-danger">위험도: ${renderDangerStars(data.danger || 1)}</div>
             <div class="map-types">출현: ${Array.isArray(data.types)?data.types.join(', '):data.types||''}</div>
         </div>
     `;
 
-    // 격자+탐사팀
+    // 편집 버튼 (관리자 전용)
+    if (await isAdminUser()) {
+        const editBtn = document.createElement('button');
+        editBtn.textContent = '편집';
+        editBtn.className = 'edit-btn';
+        editBtn.style.marginTop = '10px';
+        editBtn.addEventListener('click', () => openMapInlineEdit(mapId, data));
+        infoSection.appendChild(editBtn);
+    }
+
+    // 격자+탐사팀 섹션
     const gridTeamsSection = document.createElement('div');
     gridTeamsSection.className = 'map-section map-grid-teams';
     gridTeamsSection.style.display = 'flex';
@@ -1911,8 +1922,7 @@ async function openMapPopup(mapId) {
     card.appendChild(gridTeamsSection);
     card.appendChild(commentsSection);
 
-    // 화면에 바로 추가
-    document.body.appendChild(card);
+    container.appendChild(card);
 }
 
 // 탐사팀 클릭 시 격자 경로 표시 + 말풍선
@@ -1983,9 +1993,8 @@ function statusText(status){
 
 async function openMapInlineEdit(mapId = null, data = {}) {
     const selector = mapId
-    ? `.map-card-inner[data-id="${mapId}"]`
-    : `.map-card-inner[data-id="new"]`;
-
+        ? `.map-card-inner[data-id="${mapId}"]`
+        : `.map-card-inner[data-id="new"]`;
     const cardInner = document.querySelector(selector);
     if (!cardInner) return;
 
@@ -2013,24 +2022,20 @@ async function openMapInlineEdit(mapId = null, data = {}) {
                     <div class="map-head" style="flex-direction: column; align-items: flex-start;">
                         <label class="muted">이름</label>
                         <input id="editMapName" class="form-control-inline" value="${data.name || ''}">
-                        
                         <div class="map-meta" style="margin-top:10px;">
                             <label class="muted">위험도 (1~5)</label>
                             <input id="editMapDanger" type="number" min="1" max="5" value="${currentDanger}" style="width:50px;">
                             <span id="dangerStars" class="muted"></span>
                         </div>
-
                         <div class="map-meta" style="margin-top:10px;">
                             <label class="muted">출현 타입 (쉼표 구분)</label>
                             <input id="editMapTypes" value="${currentTypes}" placeholder="예: 불, 물, 풀">
                         </div>
                     </div>
-
                     <div style="margin-top:20px;">
                         <label class="muted">설명</label>
                         <textarea id="editMapDesc" rows="6" style="width:100%;">${data.description || ''}</textarea>
                     </div>
-
                     <div style="margin-top:15px; display:flex; gap:10px; border-top:1px solid rgba(255,255,255,0.05); padding-top:10px;">
                         <button id="saveMapInline" class="btn primary">저장</button>
                         <button id="cancelMapInline" class="btn link">취소</button>
@@ -2041,31 +2046,43 @@ async function openMapInlineEdit(mapId = null, data = {}) {
         </div>
     `;
 
-    const updateDangerStars = (value) => {
+    const imgPreview = cardInner.querySelector('.map-img-preview');
+    const inputs = {
+        image: document.getElementById("editMapImage"),
+        file: document.getElementById("editMapImageFile"),
+        danger: document.getElementById("editMapDanger"),
+        name: document.getElementById("editMapName"),
+        types: document.getElementById("editMapTypes"),
+        desc: document.getElementById("editMapDesc")
+    };
+
+    const updateDangerStars = value => {
         const starsEl = cardInner.querySelector("#dangerStars");
-        if (!starsEl) return;
-        const danger = Math.min(5, Math.max(1, Number(value) || 1));
-        starsEl.textContent = renderDangerStars(danger);
+        if (starsEl) starsEl.textContent = renderDangerStars(Math.min(5, Math.max(1, Number(value) || 1)));
     };
     updateDangerStars(currentDanger);
 
-    const imgPreview = cardInner.querySelector('.map-img-preview');
-    const imgUrlInput = document.getElementById("editMapImage");
-    const imgFileInput = document.getElementById("editMapImageFile");
-    const dangerInput = document.getElementById("editMapDanger");
-    const nameInput = document.getElementById("editMapName");
-    const typesInput = document.getElementById("editMapTypes");
-    const descInput = document.getElementById("editMapDesc");
+    // 이미지 미리보기
+    inputs.image.addEventListener('input', () => { imgPreview.src = inputs.image.value; inputs.file.value = ''; });
+    inputs.file.addEventListener('change', e => {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = ev => imgPreview.src = ev.target.result;
+            reader.readAsDataURL(file);
+            inputs.image.value = '';
+        } else if (!inputs.image.value) imgPreview.src = '';
+    });
+    inputs.danger.addEventListener('input', e => updateDangerStars(e.target.value));
 
     const collectFormData = async () => {
-        let finalImg = imgUrlInput.value;
-        const file = imgFileInput.files[0];
-        if (file) finalImg = await uploadMapImage(file, mapId);
+        let finalImg = inputs.image.value;
+        if (inputs.file.files[0]) finalImg = await uploadMapImage(inputs.file.files[0], mapId);
         return {
-            name: nameInput.value,
-            danger: Number(dangerInput.value),
-            types: typesInput.value.split(',').map(t => t.trim()).filter(t => t),
-            description: descInput.value,
+            name: inputs.name.value,
+            danger: Number(inputs.danger.value),
+            types: inputs.types.value.split(',').map(t => t.trim()).filter(t => t),
+            description: inputs.desc.value,
             image: finalImg,
             updatedAt: serverTimestamp()
         };
@@ -2076,134 +2093,71 @@ async function openMapInlineEdit(mapId = null, data = {}) {
             const newData = await collectFormData();
             await updateDoc(doc(db, "maps", mapId), newData);
             updateDangerStars(newData.danger);
-        } catch(e) {
-            console.error(e);
-            showMessage('자동 저장 실패', 'error');
-        }
+        } catch(e) { console.error(e); showMessage('자동 저장 실패', 'error'); }
     };
 
-    // 이벤트: 입력 시 자동 저장 (1초 딜레이)
     let saveTimeout;
-    const autoSaveHandler = () => {
-        clearTimeout(saveTimeout);
-        saveTimeout = setTimeout(saveData, 1000);
+    const autoSaveHandler = () => { clearTimeout(saveTimeout); saveTimeout = setTimeout(saveData, 1000); };
+    Object.values(inputs).forEach(el => el.addEventListener('input', autoSaveHandler));
+    Object.values(inputs).forEach(el => el.addEventListener('change', autoSaveHandler));
+
+    const btns = {
+        save: document.getElementById("saveMapInline"),
+        cancel: document.getElementById("cancelMapInline"),
+        delete: document.getElementById("deleteMapInline")
     };
 
-    [imgUrlInput, imgFileInput, dangerInput, nameInput, typesInput, descInput].forEach(el => {
-        el.addEventListener('input', autoSaveHandler);
-        el.addEventListener('change', autoSaveHandler);
+    btns.save?.addEventListener('click', async () => { await saveData(); renderMap(); });
+    btns.cancel?.addEventListener('click', () => { cardInner.innerHTML = originalContent; renderMap(); });
+    btns.delete?.addEventListener('click', async () => {
+        if (await showConfirm(`정말로 맵 '${data.name}'을 삭제하시겠습니까?`)) {
+            try { await deleteDoc(doc(db, "maps", mapId)); showMessage('맵 삭제 완료', 'info'); renderMap(); }
+            catch(e) { console.error(e); showMessage('맵 삭제 실패', 'error'); }
+        }
     });
 
-    // 이미지 미리보기
-    imgUrlInput.addEventListener('input', () => { imgPreview.src = imgUrlInput.value; imgFileInput.value = ''; });
-    imgFileInput.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = (ev) => imgPreview.src = ev.target.result;
-            reader.readAsDataURL(file);
-            imgUrlInput.value = '';
-        } else if (!imgUrlInput.value) imgPreview.src = '';
-    });
-
-    dangerInput.addEventListener('input', (e) => updateDangerStars(e.target.value));
-
-    const saveBtn = document.getElementById("saveMapInline");
-    if (saveBtn) {
-        saveBtn.addEventListener('click', async () => {
-            await saveData();
-            renderMap();
-        });
-    }
-
-    const cancelBtn = document.getElementById("cancelMapInline");
-    if (cancelBtn) {
-        cancelBtn.addEventListener('click', () => {
-            cardInner.innerHTML = originalContent;
-            renderMap();
-        });
-    }
-
-    const deleteBtn = document.getElementById("deleteMapInline");
-    if (deleteBtn) {
-        deleteBtn.addEventListener('click', async () => {
-            if (await showConfirm(`정말로 맵 '${data.name}'을 삭제하시겠습니까?`)) {
-                try {
-                    await deleteDoc(doc(db, "maps", mapId));
-                    showMessage('맵 삭제 완료', 'info');
-                    renderMap();
-                } catch(e) {
-                    console.error(e);
-                    showMessage('맵 삭제 실패', 'error');
-                }
-            }
-        });
-    }
-
-    // 페이지 벗어날 때 자동 저장
     window.addEventListener('beforeunload', saveData);
 }
 
 async function openNewMapInlineEdit() {
-    const tempId = 'new_map_' + Date.now();
     const tempEl = document.createElement('div');
     tempEl.className = 'map-card card';
-    tempEl.id = tempId;
+    tempEl.id = 'new_map_' + Date.now();
     tempEl.style.marginBottom = '20px';
-    
-    // 맵 추가 버튼 바로 아래에 삽입
+
     const mapAddBtn = document.getElementById('addMapBtn');
-    if (!mapAddBtn) {
-        contentEl.prepend(tempEl);
-    } else {
-        mapAddBtn.after(tempEl);
-    }
+    (mapAddBtn ? mapAddBtn.after(tempEl) : contentEl.prepend(tempEl));
 
-    // 초기값
-    const defaultImage = '';
     const defaultDanger = 1;
-
-    // 편집 폼 렌더링
     tempEl.innerHTML = `
         <div class="map-card-inner" data-id="new">
             <div class="map-edit-form">
                 <h4>새 맵 생성</h4>
                 <div class="map-card-inner map-edit-layout">
                     <div class="map-media">
-                        <img class="map-img map-img-preview" src="${defaultImage}" alt="맵 이미지 미리보기">
-                        <div style="margin-top: 10px;">
-                            <label class="muted" style="display:block; margin-bottom: 5px; font-size:13px;">이미지 URL</label>
-                            <input id="newMapImage" value="" placeholder="이미지 URL">
-                        </div>
-                        <div style="margin-top: 10px;">
-                            <label class="muted" style="display:block; margin-bottom: 5px; font-size:13px;">이미지 파일 업로드</label>
-                            <input id="newMapImageFile" type="file" accept="image/*">
-                        </div>
+                        <img class="map-img map-img-preview" src="" alt="맵 이미지 미리보기">
+                        <div style="margin-top:10px;"><label class="muted">이미지 URL</label><input id="newMapImage" placeholder="이미지 URL"></div>
+                        <div style="margin-top:10px;"><label class="muted">이미지 파일 업로드</label><input id="newMapImageFile" type="file" accept="image/*"></div>
                     </div>
-                    
                     <div class="map-main">
                         <div class="map-head" style="flex-direction: column; align-items: flex-start;">
                             <label class="muted">이름</label>
-                            <input id="newMapName" class="form-control-inline" placeholder="맵 이름" style="font-size: 1.2em; font-weight: bold; color: var(--accent); margin-bottom: 10px;">
-                            
-                            <div class="map-meta" style="text-align: left; width: 100%;">
-                                <label class="muted" style="display:block;">위험도 (1~5)</label>
-                                <input id="newMapDanger" type="number" min="1" max="5" value="${defaultDanger}" class="form-control-inline" style="width: 50px;">
-                                <span class="muted" id="dangerStars">${renderDangerStars(defaultDanger)}</span>
+                            <input id="newMapName" class="form-control-inline" placeholder="맵 이름">
+                            <div class="map-meta" style="margin-top:10px;">
+                                <label class="muted">위험도 (1~5)</label>
+                                <input id="newMapDanger" type="number" min="1" max="5" value="${defaultDanger}" style="width:50px;">
+                                <span id="dangerStars">${renderDangerStars(defaultDanger)}</span>
                             </div>
-                            
-                            <div class="map-meta" style="text-align: left; width: 100%; margin-top: 10px;">
-                                <label class="muted" style="display:block;">출현 타입 (쉼표 구분)</label>
-                                <input id="newMapTypes" class="form-control-inline" value="" placeholder="예: 불, 물, 풀">
+                            <div class="map-meta" style="margin-top:10px;">
+                                <label class="muted">출현 타입 (쉼표 구분)</label>
+                                <input id="newMapTypes" class="form-control-inline" placeholder="예: 불, 물, 풀">
                             </div>
                         </div>
-
-                        <div style="margin-top: 20px;">
+                        <div style="margin-top:20px;">
                             <label class="muted">설명</label>
-                            <textarea id="newMapDesc" rows="6" class="form-control-inline" style="width: 100%; height: auto; min-height: 120px; resize: vertical; margin-top: 5px;" placeholder="맵에 대한 설명을 입력하세요."></textarea>
+                            <textarea id="newMapDesc" rows="6" style="width:100%; min-height:120px; resize:vertical;"></textarea>
                         </div>
-
-                        <div style="margin-top: 25px; display: flex; gap: 10px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 15px;">
+                        <div style="margin-top:15px; display:flex; gap:10px; border-top:1px solid rgba(255,255,255,0.05); padding-top:10px;">
                             <button id="saveNewMapInline" class="btn primary">생성</button>
                             <button id="cancelNewMapInline" class="btn link">취소</button>
                         </div>
@@ -2213,7 +2167,7 @@ async function openNewMapInlineEdit() {
         </div>
     `;
 
-    const imgPreviewEl = tempEl.querySelector('.map-img-preview');
+    const imgPreview = tempEl.querySelector('.map-img-preview');
     const imgUrlInput = tempEl.querySelector('#newMapImage');
     const imgFileInput = tempEl.querySelector('#newMapImageFile');
     const dangerInput = tempEl.querySelector('#newMapDanger');
@@ -2223,64 +2177,38 @@ async function openNewMapInlineEdit() {
         if (starsEl) starsEl.textContent = renderDangerStars(Number(e.target.value) || 1);
     });
 
-    imgUrlInput.addEventListener('input', () => {
-        imgPreviewEl.src = imgUrlInput.value;
-        imgFileInput.value = '';
-    });
-
+    imgUrlInput.addEventListener('input', () => { imgPreview.src = imgUrlInput.value; imgFileInput.value = ''; });
     imgFileInput.addEventListener('change', e => {
         const file = e.target.files[0];
         if (file) {
             const reader = new FileReader();
-            reader.onload = e => imgPreviewEl.src = e.target.result;
+            reader.onload = ev => imgPreview.src = ev.target.result;
             reader.readAsDataURL(file);
             imgUrlInput.value = '';
-        } else if (!imgUrlInput.value) imgPreviewEl.src = '';
+        } else imgPreview.src = '';
     });
 
-    // 저장
-    const saveBtn = tempEl.querySelector('#saveNewMapInline');
-    if (saveBtn) {
-        saveBtn.addEventListener('click', async () => {
-            if (!tempEl.querySelector('#newMapName').value) {
-                showMessage('맵 이름을 입력해주세요.', 'error');
-                return;
-            }
+    tempEl.querySelector('#saveNewMapInline')?.addEventListener('click', async () => {
+        if (!tempEl.querySelector('#newMapName').value) return showMessage('맵 이름을 입력해주세요.', 'error');
+        try {
+            const newDocRef = doc(collection(db, "maps"));
+            let finalImg = imgUrlInput.value;
+            if (imgFileInput.files[0]) finalImg = await uploadMapImage(imgFileInput.files[0], newDocRef.id);
+            const typesArray = tempEl.querySelector('#newMapTypes').value.split(',').map(t => t.trim()).filter(t => t);
+            await setDoc(newDocRef, {
+                name: tempEl.querySelector('#newMapName').value,
+                danger: Number(dangerInput.value),
+                types: typesArray,
+                description: tempEl.querySelector('#newMapDesc').value,
+                image: finalImg,
+                createdAt: serverTimestamp()
+            });
+            showMessage('새 맵 생성 완료', 'info');
+            renderMap();
+        } catch(e) { console.error(e); showMessage('새 맵 생성 실패', 'error'); }
+    });
 
-            try {
-                const newDocRef = doc(collection(db, "maps"));
-                const newMapId = newDocRef.id;
-                let finalImg = imgUrlInput.value;
-                const file = imgFileInput.files[0];
-                if (file) finalImg = await uploadMapImage(file, newMapId);
-
-                const typesArray = tempEl.querySelector('#newMapTypes').value
-                    .split(',')
-                    .map(t => t.trim())
-                    .filter(t => t);
-
-                await setDoc(newDocRef, {
-                    name: tempEl.querySelector('#newMapName').value,
-                    danger: Number(dangerInput.value),
-                    types: typesArray,
-                    description: tempEl.querySelector('#newMapDesc').value,
-                    image: finalImg,
-                    createdAt: serverTimestamp()
-                });
-
-                showMessage('새 맵 생성 완료', 'info');
-                renderMap();
-            } catch(e) {
-                console.error(e);
-                showMessage('새 맵 생성 실패', 'error');
-            }
-        });
-    }
-
-    const cancelBtn = tempEl.querySelector('#cancelNewMapInline');
-    if (cancelBtn) {
-        cancelBtn.addEventListener('click', () => tempEl.remove());
-    }
+    tempEl.querySelector('#cancelNewMapInline')?.addEventListener('click', () => tempEl.remove());
 }
 
 /* =========================================================
