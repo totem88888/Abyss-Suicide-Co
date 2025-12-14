@@ -1290,26 +1290,37 @@ async function updateStaffRank() {
 async function renderStaff() {
     contentEl.innerHTML = `
         <div class="card">
-        <div class="muted">직원 목록</div>
-        <div id="staffList" class="staff-grid"></div>
+            <div class="muted">직원 목록</div>
+            <div id="staffList" class="staff-grid"></div>
         </div>
     `;
 
     const listEl = document.getElementById("staffList");
-    const snap = await getDocs(collection(db, "staff"));
+    const snap = await getDocs(collection(db, "sheets"));
     listEl.innerHTML = "";
 
     snap.forEach(docSnap => {
-        const f = docSnap.data();
+        const sheet = docSnap.data();
+        const p = sheet.personnel;
+        const s = sheet.stats;
+
         const item = document.createElement("div");
         item.className = "staff-thumb";
 
-        item.addEventListener('click', () => openProfileModal(docSnap.id, f));
+        item.addEventListener('click', () =>
+            openProfileModal(docSnap.id, sheet)
+        );
 
         item.innerHTML = `
-            <div class="thumb-img" style="background-image:url('${f.image || ''}'); aspect-ratio: 3 / 4; background-size: cover; background-position: center;"></div>
-            <div class="thumb-name">${f.name}</div>
+            <div class="thumb-img"
+                style="background-image:url('${p.photoUrl || ''}');
+                       aspect-ratio: 3 / 4;
+                       background-size: cover;
+                       background-position: center;">
+            </div>
+            <div class="thumb-name">${p.name || '이름 없음'}</div>
         `;
+
         listEl.appendChild(item);
     });
 }
@@ -1381,7 +1392,6 @@ async function openProfileModal(docId, data) {
     editBtn.addEventListener('click', () => openInlineEdit(docId, data));
     editArea.appendChild(editBtn);
 }
-
 
     // 스테이터스 차트 렌더링 (기존 스테이터스 데이터 사용)
     setTimeout(() => initStatsRadarCharts(data), 100);
@@ -1480,6 +1490,7 @@ async function renderMap() {
         
         if (await isAdminUser()) {
             const addBtn = document.createElement('button');
+            addBtn.id = 'addMapBtn';
             addBtn.className = 'btn';
             addBtn.textContent = '새 맵 추가';
             addBtn.style.marginBottom = '20px';
@@ -1869,9 +1880,14 @@ async function openNewMapInlineEdit() {
     tempEl.className = 'map-card card';
     tempEl.id = tempId;
     tempEl.style.marginBottom = '20px';
-
+    
     // 맵 추가 버튼 바로 아래에 삽입
-    const mapAddBtn = contentEl.querySelector('.btn');
+    const mapAddBtn = document.getElementById('addMapBtn');
+    if (!mapAddBtn) {
+        contentEl.prepend(tempEl);
+    } else {
+        mapAddBtn.after(tempEl);
+    }
     contentEl.insertBefore(tempEl, mapAddBtn.nextSibling);
 
     // 초기값
