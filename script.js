@@ -2352,9 +2352,7 @@ async function renderDexDetail(id, isEditMode = false, preloadedData = null) {
                 <div class="dex-section" id="logsSection" style="flex: 1 1 50%; padding-left: 15px;"></div>
             </div>
             <hr style="margin: 30px 0;">
-            <div class="dex-comments-area" data-id="${id}">
-                ${renderCommentCard({ id, dbCollection: 'abyssal_dex' })}
-            </div>
+            <div class="dex-comments-area" data-id="${id}"></div>
         </div>
     `;
 
