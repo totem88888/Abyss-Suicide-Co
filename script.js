@@ -1423,7 +1423,7 @@ async function renderStaff() {
     contentEl.innerHTML = `
         <div class="card">
             <div class="muted">직원 목록</div>
-            <div id="staffList" class="staff-grid"></div>
+            <div id="staffList" class="staff-grid" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:20px;"></div>
         </div>
     `;
 
@@ -1437,6 +1437,7 @@ async function renderStaff() {
 
         const item = document.createElement("div");
         item.className = "staff-thumb";
+        item.style.cursor = "pointer";
 
         item.addEventListener("click", () => {
             renderProfileCard(docSnap.id, sheet);
@@ -1447,9 +1448,10 @@ async function renderStaff() {
                  style="background-image:url('${p.photoUrl || p.image || ''}');
                         aspect-ratio:3/4;
                         background-size:cover;
-                        background-position:center;">
+                        background-position:center;
+                        border-radius:8px;">
             </div>
-            <div class="thumb-name">${p.name || '이름 없음'}</div>
+            <div class="thumb-name" style="text-align:center; margin-top:5px;">${p.name || '이름 없음'}</div>
         `;
 
         listEl.appendChild(item);
@@ -1679,10 +1681,11 @@ async function openInlineEdit(docId, data, cardEl) {
 // 일단 맵을 열 게 한 다
 async function renderMap() {
     contentEl.innerHTML = '<div class="card muted">맵 로딩중...</div>';
+
     try {
         const snap = await getDocs(collection(db, 'maps'));
         contentEl.innerHTML = '';
-        
+
         if (await isAdminUser()) {
             const addBtn = document.createElement('button');
             addBtn.id = 'addMapBtn';
@@ -1690,7 +1693,7 @@ async function renderMap() {
             addBtn.textContent = '새 맵 추가';
             addBtn.style.marginBottom = '20px';
             addBtn.addEventListener('click', () => openNewMapInlineEdit());
-            contentEl.appendChild(addBtn);;
+            contentEl.appendChild(addBtn);
         }
 
         if (snap.empty) {
@@ -1700,11 +1703,20 @@ async function renderMap() {
             contentEl.appendChild(emptyCard);
             return;
         }
-        
+
+        // wrapper/grid 생성
+        const gridWrap = document.createElement('div');
+        gridWrap.style.display = 'grid';
+        gridWrap.style.gridTemplateColumns = 'repeat(auto-fit, minmax(250px, 1fr))';
+        gridWrap.style.gap = '20px';
+
         for (const d of snap.docs) {
             const cardNode = await renderMapCard(d); // await 필요
-            contentEl.appendChild(cardNode);
+            gridWrap.appendChild(cardNode);
         }
+
+        contentEl.appendChild(gridWrap);
+
     } catch(e){
         console.error(e);
         contentEl.innerHTML = '<div class="card">맵 로드 실패</div>';
