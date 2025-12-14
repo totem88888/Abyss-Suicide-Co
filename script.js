@@ -1456,13 +1456,11 @@ async function renderStaff() {
     });
 }
 
-
 // 세부적 프로필
 async function renderProfileCard(docId, data, container) {
     const p = data.personnel || {};
     const s = data.stats || {};
 
-    // container 없으면 새 div 생성
     if (!container) {
         container = document.createElement('div');
         container.id = 'profileCardContainer';
@@ -1474,17 +1472,25 @@ async function renderProfileCard(docId, data, container) {
         document.body.appendChild(container);
     }
 
-    // 기존 카드 삭제
+    // 기존 카드 제거
     const existingCard = container.querySelector('.profile-card');
     if (existingCard) container.removeChild(existingCard);
 
-    // 카드 생성
+    // 카드 래퍼
+    const wrap = document.createElement('div');
+    wrap.className = 'profile-card-wrap';
+    wrap.style.display = 'grid';
+    wrap.style.gridTemplateColumns = '1fr 1fr';
+    wrap.style.gridTemplateRows = 'auto auto';
+    wrap.style.gap = '20px';
+    wrap.style.width = '100%';
+    wrap.style.maxWidth = '800px';
+
     const card = document.createElement('div');
-    card.className = 'card profile-card';
+    card.className = 'profile-card';
     card.style.background = '#1a1a1a';
     card.style.padding = '20px';
     card.style.borderRadius = '8px';
-    card.style.maxWidth = '800px';
     card.style.width = '100%';
     card.style.position = 'relative';
     card.style.boxShadow = '0 4px 12px rgba(0,0,0,0.5)';
@@ -1492,111 +1498,86 @@ async function renderProfileCard(docId, data, container) {
     card.style.flexDirection = 'column';
     card.style.gap = '20px';
 
-    // 닫기 버튼
     const closeBtn = document.createElement('button');
     closeBtn.textContent = 'X';
     closeBtn.style.position = 'absolute';
     closeBtn.style.top = '10px';
     closeBtn.style.right = '10px';
-    closeBtn.style.background = '#ff4c4c';
-    closeBtn.style.border = 'none';
-    closeBtn.style.padding = '5px 10px';
-    closeBtn.style.color = '#fff';
-    closeBtn.style.cursor = 'pointer';
-    closeBtn.style.borderRadius = '4px';
-    closeBtn.addEventListener('click', () => {
-        container.removeChild(card);
-    });
+    closeBtn.addEventListener('click', () => { container.removeChild(card); });
     card.appendChild(closeBtn);
 
-    // --- 위 단락: 프로필 이미지 + 기본 정보 ---
+    // 프로필 정보
     const topSection = document.createElement('div');
     topSection.style.display = 'flex';
-    topSection.style.alignItems = 'center';
     topSection.style.gap = '20px';
     topSection.innerHTML = `
-        <div class="profile-img-wrap">
-            <img class="profile-img" src="${p.image || ''}" style="width:120px; height:120px; object-fit:cover; border-radius:8px;">
-        </div>
-        <div class="profile-info">
-            <p><span class="label">이름</span> ${p.name || ''}</p>
-            <p><span class="label">성별</span> ${p.gender || ''}</p>
-            <p><span class="label">나이</span> ${p.age || ''}</p>
-            <p><span class="label">키/체중</span> ${p.height || '-'} / ${p.weight || '-'}</p>
-            <p><span class="label">국적</span> ${p.nationality || ''}</p>
+        <div><img src="${p.image || ''}" style="width:120px;height:120px;object-fit:cover;border-radius:8px;"></div>
+        <div>
+            <p>이름: ${p.name || ''}</p>
+            <p>성별: ${p.gender || ''}</p>
+            <p>나이: ${p.age || ''}</p>
+            <p>키/체중: ${p.height || '-'} / ${p.weight || '-'}</p>
+            <p>국적: ${p.nationality || ''}</p>
         </div>
     `;
     card.appendChild(topSection);
 
-    // --- 아래 단락: 스탯표 + 차트 + 편집 버튼 ---
+    // 스탯 / 차트 / 편집
     const bottomSection = document.createElement('div');
     bottomSection.style.display = 'flex';
     bottomSection.style.flexDirection = 'column';
     bottomSection.style.gap = '20px';
 
-    const style = `
-        .stats-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-        .stats-table-container { display: flex; flex-direction: column; }
-        .chart-container { min-height: 300px; }
-        .edit-area { margin-top: 10px; }
-    `;
-    bottomSection.innerHTML = `<style>${style}</style>`;
-
-    // 스탯 표
     const statsRow = document.createElement('div');
-    statsRow.className = 'stats-row';
+    statsRow.style.display = 'grid';
+    statsRow.style.gridTemplateColumns = '1fr 1fr';
+    statsRow.style.gap = '20px';
+
     statsRow.innerHTML = `
-        <div class="stats-table-container">
-            ${await renderHorizontalTable('표 1: 신체 스테이터스', [
-                { label: '근력', value: s.muscle },
-                { label: '민첩', value: s.agility },
-                { label: '지구력', value: s.endurance },
-                { label: '유연성', value: s.flexibility },
-                { label: '시각', value: s.visual },
-                { label: '청각', value: s.auditory },
-                { label: '상황 인지', value: s.situation },
-                { label: '반응속도', value: s.reaction },
-            ], await isAdminUser(), true)}
-        </div>
-        <div class="stats-table-container">
-            ${await renderHorizontalTable('표 2: 정신 스테이터스', [
-                { label: '지능', value: s.intellect },
-                { label: '판단력', value: s.judgment },
-                { label: '기억력', value: s.memory },
-                { label: '정신력', value: s.spirit },
-                { label: '의사결정', value: s.decision },
-                { label: '스트레스', value: s.stress },
-            ], await isAdminUser(), true)}
-        </div>
+        <div>${await renderHorizontalTable('신체', [
+            { label: '근력', value: s.muscle },
+            { label: '민첩', value: s.agility },
+            { label: '지구력', value: s.endurance },
+            { label: '유연성', value: s.flexibility },
+            { label: '시각', value: s.visual },
+            { label: '청각', value: s.auditory },
+            { label: '상황 인지', value: s.situation },
+            { label: '반응속도', value: s.reaction }
+        ], await isAdminUser(), true)}</div>
+        <div>${await renderHorizontalTable('정신', [
+            { label: '지능', value: s.intellect },
+            { label: '판단력', value: s.judgment },
+            { label: '기억력', value: s.memory },
+            { label: '정신력', value: s.spirit },
+            { label: '의사결정', value: s.decision },
+            { label: '스트레스', value: s.stress }
+        ], await isAdminUser(), true)}</div>
     `;
+
     bottomSection.appendChild(statsRow);
 
-    // 레이더 차트
     const chartRow = document.createElement('div');
     chartRow.style.display = 'flex';
     chartRow.style.gap = '20px';
     chartRow.innerHTML = `
-        <div class="chart-container" id="radarChart-physical"></div>
-        <div class="chart-container" id="radarChart-mental"></div>
+        <div id="radarChart-physical" style="width:100%;height:300px;"></div>
+        <div id="radarChart-mental" style="width:100%;height:300px;"></div>
     `;
     bottomSection.appendChild(chartRow);
 
-    // 편집 버튼
     if (await isAdminUser()) {
         const editBtn = document.createElement('button');
-        editBtn.className = 'edit-btn';
         editBtn.textContent = '편집';
         editBtn.addEventListener('click', () => openInlineEdit(docId, data, card));
         const editArea = document.createElement('div');
-        editArea.className = 'edit-area';
         editArea.appendChild(editBtn);
         bottomSection.appendChild(editArea);
     }
 
     card.appendChild(bottomSection);
-    container.appendChild(card);
+    wrap.appendChild(card);
+    container.appendChild(wrap);
 
-    // 차트 초기화
     setTimeout(() => {
         initStatsRadarCharts(s, 'radarChart-physical', 'radarChart-mental');
     }, 100);
@@ -1808,121 +1789,83 @@ async function openMapPopup(mapId, containerId = 'mapMainContainer') {
         container.id = containerId;
         container.style.display = 'flex';
         container.style.flexDirection = 'column';
-        container.style.gap = '20px';
         container.style.padding = '20px';
+        container.style.gap = '20px';
         document.body.appendChild(container);
     }
 
     container.innerHTML = '';
 
-    const card = document.createElement('div');
-    card.className = 'map-card card';
-    card.style.padding = '20px';
-    card.style.borderRadius = '8px';
-    card.style.background = '#1a1a1a';
-    card.style.color = '#fff';
-    card.style.marginBottom = '20px';
-    card.style.boxShadow = '0 4px 12px rgba(0,0,0,0.5)';
+    // 래퍼 생성
+    const wrap = document.createElement('div');
+    wrap.className = 'map-detail-wrap';
+    wrap.style.display = 'grid';
+    wrap.style.gridTemplateColumns = '1fr 1fr';
+    wrap.style.gridTemplateRows = 'auto auto';
+    wrap.style.gap = '20px';
 
-    // 구역 설명
+    // infoSection
     const infoSection = document.createElement('div');
-    infoSection.className = 'map-section map-info';
-    infoSection.style.marginBottom = '20px';
+    infoSection.className = 'map-info';
     infoSection.innerHTML = `
-        <img src="${data.image || DEFAULT_MAP_IMAGE}" class="map-img" style="width:100%; border-radius:6px;">
-        <h3 style="margin:10px 0;">${data.name || '이름 없음'}</h3>
+        <img src="${data.image || DEFAULT_MAP_IMAGE}" style="width:100%; border-radius:6px;">
+        <h3>${data.name || '이름 없음'}</h3>
         <p>${data.description || ''}</p>
-        <div class="map-meta" style="margin-top:10px;">
-            <div class="map-danger">위험도: ${renderDangerStars(data.danger || 1)}</div>
-            <div class="map-types">출현: ${Array.isArray(data.types)?data.types.join(', '):data.types||''}</div>
-        </div>
+        <div>위험도: ${renderDangerStars(data.danger || 1)}</div>
+        <div>출현: ${Array.isArray(data.types)?data.types.join(', '):data.types||''}</div>
     `;
-
-    // 편집 버튼 (관리자 전용)
     if (await isAdminUser()) {
         const editBtn = document.createElement('button');
         editBtn.textContent = '편집';
-        editBtn.className = 'edit-btn';
-        editBtn.style.marginTop = '10px';
         editBtn.addEventListener('click', () => openMapInlineEdit(mapId, data));
         infoSection.appendChild(editBtn);
     }
 
-    // 격자+탐사팀 섹션
+    // grid + teams
     const gridTeamsSection = document.createElement('div');
-    gridTeamsSection.className = 'map-section map-grid-teams';
     gridTeamsSection.style.display = 'flex';
     gridTeamsSection.style.gap = '20px';
-    gridTeamsSection.style.marginBottom = '20px';
 
     const gridContainer = document.createElement('div');
-    gridContainer.className = 'map-left-grid';
     gridContainer.style.flex = '1';
-    const teamsContainer = document.createElement('div');
-    teamsContainer.className = 'map-right-teams';
-    teamsContainer.style.flex = '1';
-
     const rows = data.grid?.rows || 8;
     const cols = data.grid?.cols || 8;
     gridContainer.style.display = 'grid';
     gridContainer.style.gridTemplateRows = `repeat(${rows}, 40px)`;
     gridContainer.style.gridTemplateColumns = `repeat(${cols}, 40px)`;
+
     for (let y = 0; y < rows; y++) {
         for (let x = 0; x < cols; x++) {
             const cell = document.createElement('div');
             cell.className = 'grid-cell';
-            cell.dataset.x = x;
-            cell.dataset.y = y;
             cell.style.border = '1px solid #888';
-            cell.style.position = 'relative';
             gridContainer.appendChild(cell);
         }
     }
 
-    const recentVisits = Array.isArray(data.visits) ? data.visits : [];
-    for (const v of recentVisits) {
+    const teamsContainer = document.createElement('div');
+    teamsContainer.style.flex = '1';
+    for (const v of data.visits || []) {
         const teamEl = document.createElement('div');
         teamEl.textContent = v.teamName;
         teamEl.style.color = v.colorHex || '#fff';
         teamEl.className = 'explore-team';
-        teamEl.style.cursor = 'pointer';
-        teamEl.addEventListener('click', () => showTeamVisit(v, gridContainer));
         teamsContainer.appendChild(teamEl);
-    }
-
-    if (recentVisits.length > 5) {
-        const moreBtn = document.createElement('button');
-        moreBtn.textContent = '더보기';
-        moreBtn.className = 'link';
-        moreBtn.addEventListener('click', () => {
-            teamsContainer.innerHTML = '';
-            for (const v of recentVisits) {
-                const teamEl = document.createElement('div');
-                teamEl.textContent = v.teamName;
-                teamEl.style.color = v.colorHex || '#fff';
-                teamEl.className = 'explore-team';
-                teamEl.addEventListener('click', () => showTeamVisit(v, gridContainer));
-                teamsContainer.appendChild(teamEl);
-            }
-        });
-        teamsContainer.appendChild(moreBtn);
     }
 
     gridTeamsSection.appendChild(gridContainer);
     gridTeamsSection.appendChild(teamsContainer);
 
-    // 댓글
+    // comments
     const commentsSection = document.createElement('div');
-    commentsSection.className = 'map-section map-comments';
-    const commentCard = renderCommentCard({ id: mapId, dbCollection: 'maps' });
-    commentsSection.appendChild(commentCard);
+    commentsSection.appendChild(renderCommentCard({ id: mapId, dbCollection: 'maps' }));
 
-    // 카드 조립
-    card.appendChild(infoSection);
-    card.appendChild(gridTeamsSection);
-    card.appendChild(commentsSection);
+    // wrap에 append
+    wrap.appendChild(infoSection);
+    wrap.appendChild(gridTeamsSection);
+    wrap.appendChild(commentsSection);
 
-    container.appendChild(card);
+    container.appendChild(wrap);
 }
 
 // 탐사팀 클릭 시 격자 경로 표시 + 말풍선
