@@ -2468,40 +2468,43 @@ async function renderDexDetail(id, isEditMode = false, preloadedData = null) {
                         개방률: ${disclosurePercent}%
                     </div>
                     ${isManager ? `<button class="btn ${isEditMode ? 'warning' : ''}" id="toggleEditMode">
-                        ${isEditMode ? '저장 및 편집 종료' : '편집'}
-                    </button>` : ''}
+                        ${isEditMode ? '저장 및 편집 종료' : '편집'}</button>` : ''}
                     ${isManager && !isEditMode ? `<button class="btn danger" id="deleteAbyssBtn">심연체 삭제</button>` : ''}
                 </div>
             </div>
             ${isManager && isEditMode ? renderDisclosurePresetHtml() : ''}
-            <div class="dex-sections-container" style="display: flex; flex-wrap: wrap;">
-                <div class="dex-section" id="basicInfoSection" style="flex: 1 1 50%; padding-right: 15px;"></div>
-                <div class="dex-section" id="statsSection" style="flex: 1 1 50%; padding-left: 15px;"></div>
-                <div class="dex-section" id="radarChartSection" style="flex: 1 1 100%; margin-top: 20px;">
-                    <h3>스테이터스 분포</h3>
-                    <div id="radarChartContainer" style="width: 100%; height: 400px; margin-top: 10px;"></div>
+
+            <div class="dex-sections-grid" style="
+                display: grid; 
+                grid-template-columns: 1fr 1fr; 
+                grid-template-rows: auto auto; 
+                gap: 20px;
+            ">
+                <div id="basicInfoSection" style="grid-column: 1; grid-row: 1;"></div>
+                <div id="statsSection" style="grid-column: 2; grid-row: 1;"></div>
+                <div id="radarChartSection" style="grid-column: 1; grid-row: 2;">
+                    <h3>스탯 분포</h3>
+                    <div id="radarChartContainer" style="width: 100%; height: 300px;"></div>
                 </div>
-                <hr style="flex: 1 1 100%; margin: 20px 0;">
-                <div class="dex-section" id="managementSection" style="flex: 1 1 50%; padding-right: 15px;"></div>
-                <div class="dex-section" id="logsSection" style="flex: 1 1 50%; padding-left: 15px;"></div>
+                <div id="managementSection" style="grid-column: 2; grid-row: 2;"></div>
             </div>
+
             <hr style="margin: 30px 0;">
+            <div id="logsSection"></div>
             <div class="dex-comments-area" data-id="${id}"></div>
         </div>
     `;
 
     const commentsArea = contentEl.querySelector('.dex-comments-area');
-    commentsArea.appendChild(
-        renderCommentCard({ id, dbCollection: 'abyssal_dex' })
-    );
+    commentsArea.appendChild(renderCommentCard({ id, dbCollection: 'abyssal_dex' }));
 
     // 섹션 렌더링
     renderBasicInfoSection(document.getElementById('basicInfoSection'), data, isEditMode, isManager);
     renderStatsSection(document.getElementById('statsSection'), data, calculatedStats, isEditMode, isManager);
     renderManagementSection(document.getElementById('managementSection'), data, isEditMode, isManager);
     renderLogsSection(document.getElementById('logsSection'), data, isEditMode, isManager);
-    drawRadarChart('radarChartContainer', Object.keys(calculatedStats), Object.values(calculatedStats), 5, 'rgba(0,0,0,0.1)', 'var(--accent)'
-);
+
+    drawRadarChart('radarChartContainer', Object.keys(calculatedStats), Object.values(calculatedStats), 5, 'rgba(0,0,0,0.1)', 'var(--accent)');
 
     // 이벤트
     const backBtn = document.getElementById('backToDexList');
