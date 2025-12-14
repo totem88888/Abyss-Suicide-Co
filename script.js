@@ -1265,18 +1265,32 @@ async function renderMain() {
 
     createMainUICards();
 
+    // 카드 안의 요소 레퍼런스 가져오기
+    const abyssFlowEl = document.getElementById('abyssFlow');
+    const staffStatusEl = document.getElementById('staffStatus');
+    const staffScheduleEl = document.getElementById('staffSchedule');
+    const staffRankEl = document.getElementById('staffRank');
+    const todayEventEl = document.getElementById('todayEvent');
+
     try {
-        await updateAbyssFlow(); // 심연 기류
-        await updateStaffStatusAndSchedule(); // 일정 및 상태
-        await updateStaffRank(); // 순위
-        document.getElementById('todayEvent').textContent = '이벤트 데이터 없음'; // 임시
+        await updateAbyssFlow(abyssFlowEl);
+        await updateStaffStatusAndSchedule(staffStatusEl, staffScheduleEl);
+        await updateStaffRank(staffRankEl);
+        if(todayEventEl) todayEventEl.textContent = '이벤트 데이터 없음';
     } catch(e) {
         console.error(e);
         contentEl.innerHTML += `<div class="card muted">데이터 로드 실패</div>`;
     }
+
+    // 1분마다 실시간 갱신
+    setInterval(() => {
+        updateStaffStatusAndSchedule(staffStatusEl, staffScheduleEl);
+        updateStaffRank(staffRankEl);
+        updateAbyssFlow(abyssFlowEl);
+    }, 60 * 1000);
 }
 
-// 얜 카드만 넣어여
+// 카드만 넣는 함수
 function createMainUICards() {
     const flowCard = document.createElement('div');
     flowCard.className = 'card';
@@ -1305,7 +1319,7 @@ function createMainUICards() {
 }
 
 // 심연 기류
-async function updateAbyssFlow() {
+async function updateAbyssFlow(abyssFlowEl) {
     if (!abyssFlowEl) return;
 
     const todayKey = getTodayKey();
@@ -1337,17 +1351,14 @@ async function updateAbyssFlow() {
     }
 }
 
-// 일정 & 상태
-// 실시간 + 요일 자동 갱신용
-async function updateStaffStatusAndSchedule() {
+// 직원 상태 & 일정
+async function updateStaffStatusAndSchedule(staffStatusEl, staffScheduleEl) {
     try {
-        // 유저 상태 통계
         const usersSnap = await getDocs(collection(db, 'users'));
         let alive = 0, missing = 0, dead = 0, contaminated = 0;
 
         usersSnap.forEach(docu => {
-            const d = docu.data();
-            const s = d.status || 'alive';
+            const s = docu.data().status || 'alive';
             if (s === 'alive') alive++;
             else if (s === 'missing') missing++;
             else if (s === 'dead') dead++;
@@ -1355,24 +1366,18 @@ async function updateStaffStatusAndSchedule() {
         });
 
         if (staffStatusEl) {
-            staffStatusEl.innerHTML = `
-                <div>생존: ${alive} | 실종: ${missing} | 오염: ${contaminated} | 사망: ${dead}</div>
-            `;
+            staffStatusEl.innerHTML = `생존: ${alive} | 실종: ${missing} | 오염: ${contaminated} | 사망: ${dead}`;
         }
 
-        // 현재 요일 확인
         const dayNames = ['일요일','월요일','화요일','수요일','목요일','금요일','토요일'];
         const todayName = dayNames[new Date().getDay()];
 
-        // 일정 로드
         const schedSnap = await getDoc(doc(db, 'schedule', 'days'));
         if (staffScheduleEl) {
             if (schedSnap.exists()) {
                 const daysData = schedSnap.data().days || {};
                 const todayList = daysData[todayName] || [];
-                staffScheduleEl.innerHTML = todayList.length > 0
-                    ? todayList.map(t => `<div>${t}</div>`).join('')
-                    : `${todayName} 일정 없음`;
+                staffScheduleEl.innerHTML = todayList.length ? todayList.map(t => `<div>${t}</div>`).join('') : `${todayName} 일정 없음`;
             } else {
                 staffScheduleEl.textContent = '스케줄 데이터 없음';
             }
@@ -1384,12 +1389,8 @@ async function updateStaffStatusAndSchedule() {
     }
 }
 
-// 실시간 갱신: 1분마다 체크
-updateStaffStatusAndSchedule(); // 초기 로드
-setInterval(updateStaffStatusAndSchedule, 60 * 1000);
-
-// 직원 순위 계산 
-async function updateStaffRank() {
+// 직원 순위
+async function updateStaffRank(staffRankEl) {
     if (!staffRankEl) return;
 
     const usersSnap = await getDocs(collection(db, 'users'));
@@ -1409,9 +1410,7 @@ async function updateStaffRank() {
         }
     });
 
-    staffRankEl.innerHTML = `
-        <div>은화: ${topSilverName} (${maxSilver}) | 생존왕: ${topSurvivorName} (${minDeath})</div>
-    `;
+    staffRankEl.innerHTML = `은화: ${topSilverName} (${maxSilver}) | 생존왕: ${topSurvivorName} (${minDeath})`;
 }
 
 /* =========================================================
@@ -1462,23 +1461,29 @@ async function openProfileModal(docId, data, container) {
     const p = data.personnel || {};
     const s = data.stats || {};
 
+    // container 없으면 새 모달 생성
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'profileModalContainer';
+        container.style.position = 'fixed';
+        container.style.top = '0';
+        container.style.left = '0';
+        container.style.width = '100%';
+        container.style.height = '100%';
+        container.style.background = 'rgba(0,0,0,0.6)';
+        container.style.overflow = 'auto';
+        container.style.zIndex = '9999';
+        container.style.padding = '20px';
+        document.body.appendChild(container);
+    }
+
     const card = document.createElement('div');
     card.className = 'card profile-card';
 
     const style = `
-        .stats-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr 1fr 1fr;
-            gap: 20px;
-        }
-        .stats-table-container {
-            display: flex;
-            flex-direction: column;
-            height: 100%;
-        }
-        .chart-container {
-            min-height: 300px;
-        }
+        .stats-row { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 20px; }
+        .stats-table-container { display: flex; flex-direction: column; height: 100%; }
+        .chart-container { min-height: 300px; }
         .edit-area { margin-top: 10px; }
     `;
 
@@ -1540,7 +1545,6 @@ async function openProfileModal(docId, data, container) {
         card.querySelector(".edit-area").appendChild(editBtn);
     }
 
-    // 레이더 차트 초기화
     setTimeout(() => {
         initStatsRadarCharts(s, 'radarChart-physical', 'radarChart-mental');
     }, 100);
@@ -1698,6 +1702,23 @@ async function openMapPopup(mapId) {
     if (!snap.exists()) return;
     const data = snap.data();
 
+    // modal 요소 가져오기 또는 생성
+    let modal = document.getElementById('mapPopupModal');
+    if (!modal) {
+        modal = document.createElement('div');
+        modal.id = 'mapPopupModal';
+        modal.style.position = 'fixed';
+        modal.style.top = '0';
+        modal.style.left = '0';
+        modal.style.width = '100%';
+        modal.style.height = '100%';
+        modal.style.background = 'rgba(0,0,0,0.6)';
+        modal.style.overflow = 'auto';
+        modal.style.zIndex = '9999';
+        modal.style.padding = '20px';
+        document.body.appendChild(modal);
+    }
+
     modal.innerHTML = `
         <div class="popup-top">
             <img src="${data.image}" class="map-popup-img">
@@ -1722,12 +1743,10 @@ async function openMapPopup(mapId) {
             editBtn.textContent = '편집';
             editBtn.className = 'btn';
             editBtn.style.marginLeft = '10px';
-
             editBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
                 openMapInlineEdit(mapId, data);
             });
-
             popupTop.appendChild(editBtn);
         }
     })();
@@ -1762,20 +1781,17 @@ async function openMapPopup(mapId) {
         teamEl.textContent = v.teamName;
         teamEl.style.color = v.colorHex || '#fff';
         teamEl.className = 'explore-team';
-
         teamEl.addEventListener('click', () => showTeamVisit(v, gridContainer));
-
         teamsContainer.appendChild(teamEl);
     }
 
-    if(visits.length > 5){
+    if(recentVisits.length > 5){
         const moreBtn = document.createElement('button');
         moreBtn.textContent = '더보기';
         moreBtn.className = 'link';
-
         moreBtn.addEventListener('click', () => {
             teamsContainer.innerHTML = '';
-            for(const v of sortedVisits){
+            for(const v of recentVisits){
                 const teamEl = document.createElement('div');
                 teamEl.textContent = v.teamName;
                 teamEl.style.color = v.colorHex || '#fff';
@@ -1784,11 +1800,9 @@ async function openMapPopup(mapId) {
                 teamsContainer.appendChild(teamEl);
             }
         });
-
         teamsContainer.appendChild(moreBtn);
     }
 
-    // 댓글 단락
     const commentCard = renderCommentCard({ id: mapId, dbCollection:'maps' });
     commentsArea.appendChild(commentCard);
 }
@@ -3132,6 +3146,7 @@ async function renderMe(targetSheetId = null) {
 function renderPersonnelSection(p, nickname, sheetId, isAdmin) {
     const section = document.createElement('div');
     section.className = 'card map-card';
+    section.id = `personnel-section-${sheetId}`; // 편집 모드 참조용
 
     section.innerHTML = `
         <h2 style="margin-top:0;">${nickname}님의 시트</h2>
@@ -3160,16 +3175,84 @@ function renderPersonnelSection(p, nickname, sheetId, isAdmin) {
                 ], isAdmin)}
             </div>
         </div>
-        ${isAdmin ? `<button class="btn link admin-edit-btn" onclick='openPersonnelEdit("${sheetId}", ${JSON.stringify(p)})'>인적사항 편집</button>` : ''}
     `;
-    
+
+    if (isAdmin) {
+        const editBtn = document.createElement('button');
+        editBtn.className = 'btn link admin-edit-btn';
+        editBtn.textContent = '인적사항 편집';
+        editBtn.addEventListener('click', () => openPersonnelEdit(sheetId, p));
+        section.appendChild(editBtn);
+    }
+
     return section;
+}
+
+function openPersonnelEdit(sheetId, p) {
+    const container = document.getElementById(`personnel-section-${sheetId}`);
+    if (!container) return;
+
+    container.innerHTML = `
+        <h2>${p.name}님의 인적사항 편집</h2>
+        <div class="edit-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+            <label>이름: <input type="text" id="edit-name" value="${p.name}"></label>
+            <label>성별: <input type="text" id="edit-gender" value="${p.gender}"></label>
+            <label>나이: <input type="number" id="edit-age" value="${p.age}"></label>
+            <label>키(cm): <input type="number" id="edit-height" value="${p.height}"></label>
+            <label>체중(kg): <input type="number" id="edit-weight" value="${p.weight}"></label>
+            <label>국적: <input type="text" id="edit-nationality" value="${p.nationality}"></label>
+            <label>학력: <input type="text" id="edit-education" value="${p.education}"></label>
+            <label>경력: <input type="text" id="edit-career" value="${p.career}"></label>
+            <label>가족관계: <input type="text" id="edit-family" value="${p.family}"></label>
+            <label>연락처: <input type="text" id="edit-contact" value="${p.contact}"></label>
+            <label>결혼 여부: <input type="text" id="edit-marriage" value="${p.marriage}"></label>
+            <label>병력: <input type="text" id="edit-medical" value="${p.medical}"></label>
+            <label>범죄 전과: <input type="text" id="edit-criminal" value="${p.criminal}"></label>
+            <label>비고: <textarea id="edit-etc">${p.etc}</textarea></label>
+        </div>
+        <button class="btn primary" id="save-personnel">저장</button>
+        <button class="btn link" id="cancel-personnel">취소</button>
+    `;
+
+    container.querySelector('#cancel-personnel').onclick = () => {
+        renderPersonnelSection(p, p.name, sheetId, true); // 원래 렌더링
+    };
+
+    container.querySelector('#save-personnel').onclick = async () => {
+        const updated = {
+            ...p,
+            name: document.getElementById('edit-name').value,
+            gender: document.getElementById('edit-gender').value,
+            age: parseInt(document.getElementById('edit-age').value),
+            height: parseInt(document.getElementById('edit-height').value),
+            weight: parseInt(document.getElementById('edit-weight').value),
+            nationality: document.getElementById('edit-nationality').value,
+            education: document.getElementById('edit-education').value,
+            career: document.getElementById('edit-career').value,
+            family: document.getElementById('edit-family').value,
+            contact: document.getElementById('edit-contact').value,
+            marriage: document.getElementById('edit-marriage').value,
+            medical: document.getElementById('edit-medical').value,
+            criminal: document.getElementById('edit-criminal').value,
+            etc: document.getElementById('edit-etc').value
+        };
+
+        try {
+            await saveSheetData(sheetId, { personnel: updated });
+            renderPersonnelSection(updated, updated.name, sheetId, true);
+            showMessage('인적사항이 저장되었습니다.', 'success');
+        } catch(e) {
+            console.error(e);
+            showMessage('저장 실패', 'error');
+        }
+    };
 }
 
 // 스텟
 function renderMeStatsSection(s, isAdmin, sheetId) {
     const section = document.createElement('div');
     section.className = 'card map-card';
+    section.id = `stats-section-${sheetId}`;
 
     const style = `
         .stats-grid-2x2 {
@@ -3198,43 +3281,46 @@ function renderMeStatsSection(s, isAdmin, sheetId) {
             flex: 1;
             min-width: 0;
         }
-        .stats-table-container {
-            display: flex;
-            flex-direction: column;
-        }
     `;
 
     section.innerHTML = `
         <style>${style}</style>
         <h2>스테이터스</h2>
-    <div class="stats-row">
-        <div class="stats-table-container">
-            ${renderHorizontalTable('표 1: 신체 스테이터스', [
-                { label: '근력', value: s.muscle },
-                { label: '민첩', value: s.agility },
-                { label: '지구력', value: s.endurance },
-                { label: '유연성', value: s.flexibility },
-                { label: '시각', value: s.visual },
-                { label: '청각', value: s.auditory },
-                { label: '상황 인지 능력', value: s.situation },
-                { label: '반응속도', value: s.reaction },
-            ], isAdmin, true)}
+        <div class="stats-row">
+            <div class="stats-table-container">
+                ${renderHorizontalTable('표 1: 신체 스테이터스', [
+                    { label: '근력', value: s.muscle },
+                    { label: '민첩', value: s.agility },
+                    { label: '지구력', value: s.endurance },
+                    { label: '유연성', value: s.flexibility },
+                    { label: '시각', value: s.visual },
+                    { label: '청각', value: s.auditory },
+                    { label: '상황 인지 능력', value: s.situation },
+                    { label: '반응속도', value: s.reaction },
+                ], isAdmin, true)}
+            </div>
+            <div class="chart-container-1" style="min-height:300px;"></div>
+            <div class="chart-container-2" style="min-height:300px;"></div>
+            <div class="stats-table-container">
+                ${renderHorizontalTable('표 2: 정신 스테이터스', [
+                    { label: '지능', value: s.intellect },
+                    { label: '판단력', value: s.judgment },
+                    { label: '기억력', value: s.memory },
+                    { label: '정신력', value: s.spirit },
+                    { label: '의사 결정 능력', value: s.decision },
+                    { label: '스트레스 내성', value: s.stress },
+                ], isAdmin, true)}
+            </div>
         </div>
-        <div class="chart-container-1" style="min-height:300px;"></div>
-        <div class="chart-container-2" style="min-height:300px;"></div>
-        <div class="stats-table-container">
-            ${renderHorizontalTable('표 2: 정신 스테이터스', [
-                { label: '지능', value: s.intellect },
-                { label: '판단력', value: s.judgment },
-                { label: '기억력', value: s.memory },
-                { label: '정신력', value: s.spirit },
-                { label: '의사 결정 능력', value: s.decision },
-                { label: '스트레스 내성', value: s.stress },
-            ], isAdmin, true)}
-        </div>
-    </div>
-    ${isAdmin ? `<button class="btn link admin-edit-btn" onclick='openStatsEdit("${sheetId}", ${JSON.stringify(s)})'>스테이터스 편집</button>` : ''}
-`;
+    `;
+
+    if (isAdmin) {
+        const editBtn = document.createElement('button');
+        editBtn.className = 'btn link admin-edit-btn';
+        editBtn.textContent = '스테이터스 편집';
+        editBtn.addEventListener('click', () => openStatsEdit(sheetId, s));
+        section.appendChild(editBtn);
+    }
 
     // DOM에 삽입 후 차트 초기화
     setTimeout(() => initStatsRadarCharts(s), 0);
@@ -3242,9 +3328,42 @@ function renderMeStatsSection(s, isAdmin, sheetId) {
     return section;
 }
 
+function openStatsEdit(sheetId, s) {
+    const container = document.getElementById(`stats-section-${sheetId}`);
+    if (!container) return;
+
+    container.innerHTML = `<h2>스탯 편집</h2>
+        <div class="stats-edit-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+            ${Object.keys(s).map(key => `
+                <label>${key}: <input type="number" id="edit-${key}" value="${s[key]}"></label>
+            `).join('')}
+        </div>
+        <button class="btn primary" id="save-stats">저장</button>
+        <button class="btn link" id="cancel-stats">취소</button>
+    `;
+
+    container.querySelector('#cancel-stats').onclick = () => renderMeStatsSection(s, true, sheetId);
+
+    container.querySelector('#save-stats').onclick = async () => {
+        const updated = {};
+        Object.keys(s).forEach(key => {
+            updated[key] = parseInt(document.getElementById(`edit-${key}`).value);
+        });
+        try {
+            await saveSheetData(sheetId, { stats: updated });
+            renderMeStatsSection(updated, true, sheetId);
+            showMessage('스탯이 저장되었습니다.', 'success');
+        } catch(e) {
+            console.error(e);
+            showMessage('저장 실패', 'error');
+        }
+    };
+}
+
 async function renderInventorySection(inv, isAdmin, sheetId) {
     const section = document.createElement('div');
     section.className = 'card map-card';
+    section.id = `inventory-section-${sheetId}`;
 
     // 각 아이템 설명을 병렬로 가져오기 (desc가 있으면 바로 사용)
     const itemPromises = inv.items.map(item => item.desc ? Promise.resolve(item.desc) : fetchItemDescription(item.name));
@@ -3286,17 +3405,67 @@ async function renderInventorySection(inv, isAdmin, sheetId) {
                 ${itemRows}
             </tbody>
         </table>
-
-        ${isAdmin ? `<button class="btn link admin-edit-btn" onclick='openInventoryEdit("${sheetId}", ${JSON.stringify(inv)})'>인벤토리 편집</button>` : ''}
     `;
 
+    if (isAdmin) {
+        const editBtn = document.createElement('button');
+        editBtn.className = 'btn link admin-edit-btn';
+        editBtn.textContent = '인벤토리 편집';
+        editBtn.addEventListener('click', () => openInventoryEdit(sheetId, inv));
+        section.appendChild(editBtn);
+    }
+
     return section;
+}
+
+function openInventoryEdit(sheetId, inv) {
+    const container = document.getElementById(`inventory-section-${sheetId}`);
+    if (!container) return;
+
+    let itemInputs = inv.items.map((item, idx) => `
+        <div style="display:flex; gap:10px; margin-bottom:5px;">
+            <input type="text" value="${item.name}" placeholder="이름" id="inv-name-${idx}" style="flex:2;">
+            <input type="text" value="${item.desc || ''}" placeholder="설명" id="inv-desc-${idx}" style="flex:3;">
+            <input type="number" value="${item.count}" placeholder="수량" id="inv-count-${idx}" style="flex:1;">
+        </div>
+    `).join('');
+
+    container.innerHTML = `
+        <h2>인벤토리 편집</h2>
+        <div style="margin-bottom:10px; font-weight:bold;">
+            소지한 은화: <input type="number" value="${inv.silver}" id="inv-silver" style="width:80px;">
+        </div>
+        <div>${itemInputs}</div>
+        <button class="btn primary" id="save-inventory">저장</button>
+        <button class="btn link" id="cancel-inventory">취소</button>
+    `;
+
+    container.querySelector('#cancel-inventory').onclick = () => renderInventorySection(inv, true, sheetId);
+
+    container.querySelector('#save-inventory').onclick = async () => {
+        const updatedItems = inv.items.map((item, idx) => ({
+            name: document.getElementById(`inv-name-${idx}`).value,
+            desc: document.getElementById(`inv-desc-${idx}`).value,
+            count: parseInt(document.getElementById(`inv-count-${idx}`).value)
+        }));
+        const updatedSilver = parseInt(document.getElementById('inv-silver').value);
+
+        try {
+            await saveSheetData(sheetId, { inventory: { items: updatedItems, silver: updatedSilver } });
+            renderInventorySection({ items: updatedItems, silver: updatedSilver }, true, sheetId);
+            showMessage('인벤토리가 저장되었습니다.', 'success');
+        } catch(e) {
+            console.error(e);
+            showMessage('저장 실패', 'error');
+        }
+    };
 }
 
 // 부위랑 통계
 function renderStatusSection(s, spiritStat, isAdmin, sheetId) {
     const section = document.createElement('div');
     section.className = 'card map-card';
+    section.id = `status-section-${sheetId}`;
 
     const injuryParts = [
         'head', 'neck', 'leftEye', 'rightEye', 
@@ -3327,7 +3496,6 @@ function renderStatusSection(s, spiritStat, isAdmin, sheetId) {
         .human-icon-container { display:flex; justify-content:center; align-items:center; background: rgba(255,255,255,0.05); }
     `;
 
-    // 부위별 라벨에 의수 표시 추가
     const mapKeyToLabelWithProsthetics = {};
     injuryParts.forEach(key => {
         const prosthetic = s.status?.prosthetics?.[key] ? ' (의수)' : '';
@@ -3385,11 +3553,62 @@ function renderStatusSection(s, spiritStat, isAdmin, sheetId) {
             { label:'현재 체력', value: s.currentHP },
             { label:'현재 정신력', value: s.currentSpirit },
         ], isAdmin, true)}
-
-        ${isAdmin ? `<button class="btn link admin-edit-btn" onclick='openStatusEdit("${sheetId}", ${JSON.stringify(s)})'>상태 및 통계 편집</button>` : ''}
     `;
 
+    if (isAdmin) {
+        const editBtn = document.createElement('button');
+        editBtn.className = 'btn link admin-edit-btn';
+        editBtn.textContent = '상태 및 통계 편집';
+        editBtn.addEventListener('click', () => openStatusEdit(sheetId, s));
+        section.appendChild(editBtn);
+    }
+
     return section;
+}
+
+function openStatusEdit(sheetId, s) {
+    const container = document.getElementById(`status-section-${sheetId}`);
+    if (!container) return;
+
+    const editableStats = {
+        currentHP: s.currentHP,
+        currentSpirit: s.currentSpirit,
+        currentContamination: s.currentContamination,
+        currentErosion: s.currentErosion,
+        ...s.stats
+    };
+
+    const statsInputs = Object.keys(editableStats).map(key => `
+        <label style="display:flex; justify-content:space-between; margin-bottom:5px;">
+            ${key}: <input type="number" value="${editableStats[key]}" id="status-${key}" style="width:100px;">
+        </label>
+    `).join('');
+
+    container.innerHTML = `
+        <h2>상태 및 통계 편집</h2>
+        ${statsInputs}
+        <button class="btn primary" id="save-status">저장</button>
+        <button class="btn link" id="cancel-status">취소</button>
+    `;
+
+    container.querySelector('#cancel-status').onclick = () => renderStatusSection(s, s.spiritStat, true, sheetId);
+
+    container.querySelector('#save-status').onclick = async () => {
+        const updatedStats = {};
+        Object.keys(editableStats).forEach(key => {
+            updatedStats[key] = parseInt(document.getElementById(`status-${key}`).value);
+        });
+
+        try {
+            const updatedS = { ...s, ...updatedStats };
+            await saveSheetData(sheetId, { stats: updatedS.stats, currentHP: updatedS.currentHP, currentSpirit: updatedS.currentSpirit, currentContamination: updatedS.currentContamination, currentErosion: updatedS.currentErosion });
+            renderStatusSection(updatedS, updatedS.spiritStat, true, sheetId);
+            showMessage('상태 및 통계가 저장되었습니다.', 'success');
+        } catch(e) {
+            console.error(e);
+            showMessage('저장 실패', 'error');
+        }
+    };
 }
 
 // 사람 모양을 만들어 주다
