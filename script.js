@@ -932,10 +932,23 @@ function showLoggedInUI(){
 function renderAuthArea(user){
     logOutEl.innerHTML = '';
     if (!user) return;
+
     const btn = document.createElement('button');
     btn.className = 'btn';
     btn.textContent = '로그아웃';
-    btn.addEventListener('click', ()=> signOut(auth));
+
+    btn.addEventListener('click', async () => {
+        await signOut(auth);
+
+        // 로그아웃 시 갱신
+        document.getElementById('miniProfile').textContent = '로그인 필요';
+        document.getElementById('systemInfo').textContent = '불러오는 중...';
+
+        if (staffRankEl) staffRankEl.innerHTML = '';
+        if (staffStatusEl) staffStatusEl.innerHTML = '';
+        if (staffScheduleEl) staffScheduleEl.innerHTML = '';
+    });
+
     logOutEl.appendChild(btn);
 }
 
@@ -1109,6 +1122,109 @@ async function saveCustomizedSheet(uid, nickname, data) {
 }
 
 /* =========================================================
+   사이드 바
+========================================================= */
+
+// 햄버거 메뉴 열기/닫기
+const sidebar = document.getElementById('sidebar');
+const menuToggle = document.getElementById('menuToggle');
+
+menuToggle.addEventListener('click', () => {
+    sidebar.classList.toggle('show');
+});
+
+let unsubscribeMiniProfile = null;
+
+function subscribeMiniProfile() {
+    const el = document.getElementById('miniProfile');
+    if (!el) return;
+
+    const uid = auth.currentUser?.uid;
+    if (!uid) {
+        el.textContent = '로그인 필요';
+        return;
+    }
+
+    // 중복 구독 방지
+    if (unsubscribeMiniProfile) unsubscribeMiniProfile();
+
+    const userRef = doc(db, 'users', uid);
+    unsubscribeMiniProfile = onSnapshot(userRef, snap => {
+        if (!snap.exists()) {
+            el.textContent = '유저 정보 없음';
+            return;
+        }
+
+        const d = snap.data();
+        const name = d.nickname || uid;
+        const silver = d.silver || 0;
+
+        el.innerHTML = `
+            <div><strong>${name}</strong></div>
+            <div class="muted">은화 ${silver}</div>
+        `;
+    }, err => {
+        console.error(err);
+        el.textContent = '정보 로드 실패';
+    });
+}
+
+let unsubscribeSystemStats = null;
+
+function subscribeSystemStats() {
+    const el = document.getElementById('systemInfo');
+    if (!el) return;
+
+    if (unsubscribeSystemStats) unsubscribeSystemStats();
+
+    const usersRef = collection(db, 'users');
+
+    unsubscribeSystemStats = onSnapshot(usersRef, snap => {
+        let alive = 0, missing = 0, dead = 0, contaminated = 0;
+        let maxSilver = 0, richName = '-';
+
+        snap.forEach(docu => {
+            const d = docu.data();
+
+            switch (d.status) {
+                case 'dead': dead++; break;
+                case 'missing': missing++; break;
+                case 'contaminated': contaminated++; break;
+                default: alive++;
+            }
+
+            const silver = d.silver || 0;
+            if (silver > maxSilver) {
+                maxSilver = silver;
+                richName = d.nickname || docu.id;
+            }
+        });
+
+        el.innerHTML = `
+            <div>생존 ${alive} / 실종 ${missing}</div>
+            <div>오염 ${contaminated} / 사망 ${dead}</div>
+            <div class="muted">최고 은화: ${richName} (${maxSilver})</div>
+        `;
+    }, err => {
+        console.error(err);
+        el.textContent = '시스템 통계 실패';
+    });
+}
+
+function initSidebarRealtime() {
+    startClock();
+    subscribeMiniProfile();
+    subscribeSystemStats();
+}
+
+initSidebarRealtime();
+
+function cleanupSidebarSubscriptions() {
+    if (unsubscribeMiniProfile) unsubscribeMiniProfile();
+    if (unsubscribeSystemStats) unsubscribeSystemStats();
+}
+
+/* =========================================================
     탭 메뉴 로드
 ========================================================= */
 
@@ -1222,41 +1338,55 @@ async function updateAbyssFlow() {
 }
 
 // 일정 & 상태
+// 실시간 + 요일 자동 갱신용
 async function updateStaffStatusAndSchedule() {
-    const usersSnap = await getDocs(collection(db, 'users'));
-    let alive=0, missing=0, dead=0, contaminated=0;
+    try {
+        // 유저 상태 통계
+        const usersSnap = await getDocs(collection(db, 'users'));
+        let alive = 0, missing = 0, dead = 0, contaminated = 0;
 
-    usersSnap.forEach(docu => {
-        const d = docu.data();
-        const s = d.status || 'alive';
-        if (s === 'alive') alive++;
-        else if (s === 'missing') missing++;
-        else if (s === 'dead') dead++;
-        else if (s === 'contaminated') contaminated++;
-    });
+        usersSnap.forEach(docu => {
+            const d = docu.data();
+            const s = d.status || 'alive';
+            if (s === 'alive') alive++;
+            else if (s === 'missing') missing++;
+            else if (s === 'dead') dead++;
+            else if (s === 'contaminated') contaminated++;
+        });
 
-    if (staffStatusEl) {
-        staffStatusEl.innerHTML = `
-            <div>생존: ${alive} | 실종: ${missing} | 오염: ${contaminated} | 사망: ${dead}</div>
-        `;
-    }
-
-    // 일정 로드
-    const daySnap = await getDoc(doc(db, 'system', 'day'));
-    let currentDay = daySnap.exists() ? (daySnap.data().currentDay || 1) : 1;
-    const schedSnap = await getDoc(doc(db, 'schedule', 'days'));
-
-    if (staffScheduleEl) {
-        if (schedSnap.exists()) {
-            const daysData = schedSnap.data().days || {};
-            // 현재 요일 / 일차에 맞게 조정 필요
-            const todayList = daysData['월요일'] || [];
-            staffScheduleEl.innerHTML = todayList.length > 0 ? todayList.map(t => `<div>${t}</div>`).join('') : `월요일 일정 없음`;
-        } else {
-            staffScheduleEl.textContent = '스케줄 데이터 없음';
+        if (staffStatusEl) {
+            staffStatusEl.innerHTML = `
+                <div>생존: ${alive} | 실종: ${missing} | 오염: ${contaminated} | 사망: ${dead}</div>
+            `;
         }
+
+        // 현재 요일 확인
+        const dayNames = ['일요일','월요일','화요일','수요일','목요일','금요일','토요일'];
+        const todayName = dayNames[new Date().getDay()];
+
+        // 일정 로드
+        const schedSnap = await getDoc(doc(db, 'schedule', 'days'));
+        if (staffScheduleEl) {
+            if (schedSnap.exists()) {
+                const daysData = schedSnap.data().days || {};
+                const todayList = daysData[todayName] || [];
+                staffScheduleEl.innerHTML = todayList.length > 0
+                    ? todayList.map(t => `<div>${t}</div>`).join('')
+                    : `${todayName} 일정 없음`;
+            } else {
+                staffScheduleEl.textContent = '스케줄 데이터 없음';
+            }
+        }
+    } catch(e) {
+        console.error("updateStaffStatusAndSchedule failed:", e);
+        if(staffStatusEl) staffStatusEl.textContent = '상태 불러오기 실패';
+        if(staffScheduleEl) staffScheduleEl.textContent = '스케줄 불러오기 실패';
     }
 }
+
+// 실시간 갱신: 1분마다 체크
+updateStaffStatusAndSchedule(); // 초기 로드
+setInterval(updateStaffStatusAndSchedule, 60 * 1000);
 
 // 직원 순위 계산 
 async function updateStaffRank() {
@@ -1328,78 +1458,104 @@ async function renderStaff() {
 
 
 // 세부적 프로필
-async function openProfileModal(docId, data) {
+async function openProfileModal(docId, data, container) {
     const p = data.personnel || {};
     const s = data.stats || {};
 
-    profileModal.innerHTML = `
-        <div class="modal-content profile-wide">
-            <button id="closeProfile" class="back-btn">← 돌아가기</button>
+    const card = document.createElement('div');
+    card.className = 'card profile-card';
 
-            <div class="profile-top">
-                <div class="profile-img-wrap">
-                    <img class="profile-img" src="${p.image || ''}">
-                </div>
-                <div class="profile-info">
-                    <p><span class="label">이름</span> ${p.name || ''}</p>
-                    <p><span class="label">성별</span> ${p.gender || ''}</p>
-                    <p><span class="label">나이</span> ${p.age || ''}</p>
-                    <p><span class="label">키/체중</span> ${p.height || '-'} / ${p.weight || '-'}</p>
-                    <p><span class="label">국적</span> ${p.nationality || ''}</p>
-                </div>
-            </div>
-
-            <div class="stats-grid-2x2">
-                <div class="stats-table-container">
-                    ${renderHorizontalTable('신체 스테이터스', [
-                        { label: '근력', value: s.muscle },
-                        { label: '민첩', value: s.agility },
-                        { label: '지구력', value: s.endurance },
-                        { label: '유연성', value: s.flexibility },
-                        { label: '시각', value: s.visual },
-                        { label: '청각', value: s.auditory },
-                        { label: '상황 인지', value: s.situation },
-                        { label: '반응속도', value: s.reaction },
-                    ], await isAdminUser(), true)}
-                </div>
-
-                <div class="stats-table-container">
-                    ${renderHorizontalTable('정신 스테이터스', [
-                        { label: '지능', value: s.intellect },
-                        { label: '판단력', value: s.judgment },
-                        { label: '기억력', value: s.memory },
-                        { label: '정신력', value: s.spirit },
-                        { label: '의사결정', value: s.decision },
-                        { label: '스트레스', value: s.stress },
-                    ], await isAdminUser(), true)}
-                </div>
-            </div>
-
-            <div id="editArea"></div>
-        </div>
+    const style = `
+        .stats-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr;
+            gap: 20px;
+        }
+        .stats-table-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+        }
+        .chart-container {
+            min-height: 300px;
+        }
+        .edit-area { margin-top: 10px; }
     `;
 
-    profileModal.showModal();
-    document.getElementById("closeProfile")
-        ?.addEventListener("click", () => profileModal.close());
+    card.innerHTML = `
+        <style>${style}</style>
+        <div class="profile-top">
+            <div class="profile-img-wrap">
+                <img class="profile-img" src="${p.image || ''}">
+            </div>
+            <div class="profile-info">
+                <p><span class="label">이름</span> ${p.name || ''}</p>
+                <p><span class="label">성별</span> ${p.gender || ''}</p>
+                <p><span class="label">나이</span> ${p.age || ''}</p>
+                <p><span class="label">키/체중</span> ${p.height || '-'} / ${p.weight || '-'}</p>
+                <p><span class="label">국적</span> ${p.nationality || ''}</p>
+            </div>
+        </div>
+
+        <div class="stats-row">
+            <div class="stats-table-container">
+                ${await renderHorizontalTable('표 1: 신체 스테이터스', [
+                    { label: '근력', value: s.muscle },
+                    { label: '민첩', value: s.agility },
+                    { label: '지구력', value: s.endurance },
+                    { label: '유연성', value: s.flexibility },
+                    { label: '시각', value: s.visual },
+                    { label: '청각', value: s.auditory },
+                    { label: '상황 인지', value: s.situation },
+                    { label: '반응속도', value: s.reaction },
+                ], await isAdminUser(), true)}
+            </div>
+
+            <div class="chart-container" id="radarChart-physical"></div>
+            <div class="chart-container" id="radarChart-mental"></div>
+
+            <div class="stats-table-container">
+                ${await renderHorizontalTable('표 2: 정신 스테이터스', [
+                    { label: '지능', value: s.intellect },
+                    { label: '판단력', value: s.judgment },
+                    { label: '기억력', value: s.memory },
+                    { label: '정신력', value: s.spirit },
+                    { label: '의사결정', value: s.decision },
+                    { label: '스트레스', value: s.stress },
+                ], await isAdminUser(), true)}
+            </div>
+        </div>
+
+        <div class="edit-area"></div>
+    `;
+
+    container.innerHTML = '';
+    container.appendChild(card);
 
     if (await isAdminUser()) {
         const editBtn = document.createElement("button");
         editBtn.className = "edit-btn";
         editBtn.textContent = "편집";
-        editBtn.addEventListener("click", () =>
-            openInlineEdit(docId, data)
-        );
-        document.getElementById("editArea").appendChild(editBtn);
+        editBtn.addEventListener("click", () => openInlineEdit(docId, data, card));
+        card.querySelector(".edit-area").appendChild(editBtn);
     }
 
-    setTimeout(() => initStatsRadarCharts(data), 100);
+    // 레이더 차트 초기화
+    setTimeout(() => {
+        initStatsRadarCharts(s, 'radarChart-physical', 'radarChart-mental');
+    }, 100);
 }
 
-
 // 수정 버튼 눌렀을 때
-async function openInlineEdit(docId, data) {
-    const editArea = document.getElementById("editArea");
+async function openInlineEdit(docId, data, cardEl) {
+    // 카드 안에서 editArea를 찾음
+    const editArea = cardEl.querySelector(".edit-area") || (() => {
+        const div = document.createElement("div");
+        div.className = "edit-area";
+        cardEl.appendChild(div);
+        return div;
+    })();
+
     const p = data.personnel || {};
     const s = data.stats || {};
 
@@ -1455,10 +1611,11 @@ async function openInlineEdit(docId, data) {
 
         await updateDoc(doc(db, "sheets", docId), newData);
 
-        openProfileModal(docId, { ...data, ...newData });
-        renderStaff();
+        // 카드 자체를 갱신
+        renderStaff(); 
     });
 }
+
 
 /* =========================================================
    맵
@@ -1530,17 +1687,16 @@ async function renderMapCard(mapDoc) {
     `;
 
     // 클릭하면 팝업 열기
-    el.addEventListener('click', () => openMapPopup(mapId, data));
-
+    el.addEventListener('click', () => openMapPopup(mapId));
 
     return el;
 }
 
 // 팝업 렌더링
-async function openMapPopup(mapId, data) {
-    const modal = document.createElement('div');
-    modal.className = 'map-popup';
-    document.body.appendChild(modal);
+async function openMapPopup(mapId) {
+    const snap = await getDoc(doc(db, 'maps', mapId));
+    if (!snap.exists()) return;
+    const data = snap.data();
 
     modal.innerHTML = `
         <div class="popup-top">
@@ -1597,6 +1753,8 @@ async function openMapPopup(mapId, data) {
             gridContainer.appendChild(cell);
         }
     }
+
+    const recentVisits = Array.isArray(data.visits) ? data.visits : [];
 
     // 탐사팀 목록
     for(const v of recentVisits) {
@@ -1701,8 +1859,12 @@ function statusText(status){
     }
 }
 
-async function openMapInlineEdit(mapId, data) {
-    const cardInner = document.querySelector(`.map-card-inner[data-id="${mapId}"]`);
+async function openMapInlineEdit(mapId = null, data = {}) {
+    const selector = mapId
+    ? `.map-card-inner[data-id="${mapId}"]`
+    : `.map-card-inner[data-id="new"]`;
+
+    const cardInner = document.querySelector(selector);
     if (!cardInner) return;
 
     const originalContent = cardInner.innerHTML;
