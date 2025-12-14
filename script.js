@@ -1458,26 +1458,19 @@ async function renderStaff() {
 
 
 // 세부적 프로필
-async function openProfileModal(docId, data, container) {
+async function renderProfileCard(docId, data, container) {
     const p = data.personnel || {};
     const s = data.stats || {};
 
-    // container 없으면 새 모달 생성
+    // container 없으면 새 div 생성
     if (!container) {
         container = document.createElement('div');
-        container.id = 'profileModalContainer';
-        container.style.position = 'fixed';
-        container.style.top = '0';
-        container.style.left = '0';
-        container.style.width = '100%';
-        container.style.height = '100%';
-        container.style.background = 'rgba(0,0,0,0.6)';
-        container.style.overflow = 'auto';
-        container.style.zIndex = '9999';
+        container.id = 'profileCardContainer';
         container.style.display = 'flex';
-        container.style.justifyContent = 'center';
-        container.style.alignItems = 'flex-start';
-        container.style.padding = '40px 20px';
+        container.style.flexDirection = 'column';
+        container.style.alignItems = 'center';
+        container.style.padding = '20px';
+        container.style.gap = '20px';
         document.body.appendChild(container);
     }
 
@@ -1490,8 +1483,11 @@ async function openProfileModal(docId, data, container) {
     card.style.width = '100%';
     card.style.position = 'relative';
     card.style.boxShadow = '0 4px 12px rgba(0,0,0,0.5)';
+    card.style.display = 'flex';
+    card.style.flexDirection = 'column';
+    card.style.gap = '20px';
 
-    // 뒤로가기 버튼
+    // 닫기 버튼
     const closeBtn = document.createElement('button');
     closeBtn.textContent = 'X';
     closeBtn.style.position = 'absolute';
@@ -1504,74 +1500,96 @@ async function openProfileModal(docId, data, container) {
     closeBtn.style.cursor = 'pointer';
     closeBtn.style.borderRadius = '4px';
     closeBtn.addEventListener('click', () => {
-        document.body.removeChild(container);
+        container.removeChild(card);
     });
     card.appendChild(closeBtn);
 
+    // 위 단락: 프로필 이미지 + 기본 정보
+    const topSection = document.createElement('div');
+    topSection.style.display = 'flex';
+    topSection.style.alignItems = 'center';
+    topSection.style.gap = '20px';
+    topSection.innerHTML = `
+        <div class="profile-img-wrap">
+            <img class="profile-img" src="${p.image || ''}" style="width:120px; height:120px; object-fit:cover; border-radius:8px;">
+        </div>
+        <div class="profile-info">
+            <p><span class="label">이름</span> ${p.name || ''}</p>
+            <p><span class="label">성별</span> ${p.gender || ''}</p>
+            <p><span class="label">나이</span> ${p.age || ''}</p>
+            <p><span class="label">키/체중</span> ${p.height || '-'} / ${p.weight || '-'}</p>
+            <p><span class="label">국적</span> ${p.nationality || ''}</p>
+        </div>
+    `;
+    card.appendChild(topSection);
+
+    // 아래 단락: 스탯표 + 차트 + 편집 버튼
+    const bottomSection = document.createElement('div');
+    bottomSection.style.display = 'flex';
+    bottomSection.style.flexDirection = 'column';
+    bottomSection.style.gap = '20px';
+
     const style = `
-        .stats-row { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 20px; margin-top:20px; }
-        .stats-table-container { display: flex; flex-direction: column; height: 100%; }
+        .stats-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .stats-table-container { display: flex; flex-direction: column; }
         .chart-container { min-height: 300px; }
         .edit-area { margin-top: 10px; }
     `;
+    bottomSection.innerHTML = `<style>${style}</style>`;
 
-    card.innerHTML += `
-        <style>${style}</style>
-        <div class="profile-top" style="display:flex; gap:20px; align-items:center;">
-            <div class="profile-img-wrap">
-                <img class="profile-img" src="${p.image || ''}" style="width:120px; height:120px; object-fit:cover; border-radius:8px;">
-            </div>
-            <div class="profile-info">
-                <p><span class="label">이름</span> ${p.name || ''}</p>
-                <p><span class="label">성별</span> ${p.gender || ''}</p>
-                <p><span class="label">나이</span> ${p.age || ''}</p>
-                <p><span class="label">키/체중</span> ${p.height || '-'} / ${p.weight || '-'}</p>
-                <p><span class="label">국적</span> ${p.nationality || ''}</p>
-            </div>
+    // 신체/정신 스탯 표
+    const statsRow = document.createElement('div');
+    statsRow.className = 'stats-row';
+    statsRow.innerHTML = `
+        <div class="stats-table-container">
+            ${await renderHorizontalTable('표 1: 신체 스테이터스', [
+                { label: '근력', value: s.muscle },
+                { label: '민첩', value: s.agility },
+                { label: '지구력', value: s.endurance },
+                { label: '유연성', value: s.flexibility },
+                { label: '시각', value: s.visual },
+                { label: '청각', value: s.auditory },
+                { label: '상황 인지', value: s.situation },
+                { label: '반응속도', value: s.reaction },
+            ], await isAdminUser(), true)}
         </div>
-
-        <div class="stats-row">
-            <div class="stats-table-container">
-                ${await renderHorizontalTable('표 1: 신체 스테이터스', [
-                    { label: '근력', value: s.muscle },
-                    { label: '민첩', value: s.agility },
-                    { label: '지구력', value: s.endurance },
-                    { label: '유연성', value: s.flexibility },
-                    { label: '시각', value: s.visual },
-                    { label: '청각', value: s.auditory },
-                    { label: '상황 인지', value: s.situation },
-                    { label: '반응속도', value: s.reaction },
-                ], await isAdminUser(), true)}
-            </div>
-
-            <div class="chart-container" id="radarChart-physical"></div>
-            <div class="chart-container" id="radarChart-mental"></div>
-
-            <div class="stats-table-container">
-                ${await renderHorizontalTable('표 2: 정신 스테이터스', [
-                    { label: '지능', value: s.intellect },
-                    { label: '판단력', value: s.judgment },
-                    { label: '기억력', value: s.memory },
-                    { label: '정신력', value: s.spirit },
-                    { label: '의사결정', value: s.decision },
-                    { label: '스트레스', value: s.stress },
-                ], await isAdminUser(), true)}
-            </div>
+        <div class="stats-table-container">
+            ${await renderHorizontalTable('표 2: 정신 스테이터스', [
+                { label: '지능', value: s.intellect },
+                { label: '판단력', value: s.judgment },
+                { label: '기억력', value: s.memory },
+                { label: '정신력', value: s.spirit },
+                { label: '의사결정', value: s.decision },
+                { label: '스트레스', value: s.stress },
+            ], await isAdminUser(), true)}
         </div>
-
-        <div class="edit-area"></div>
     `;
+    bottomSection.appendChild(statsRow);
 
-    container.innerHTML = '';
-    container.appendChild(card);
+    // 레이더 차트
+    const chartRow = document.createElement('div');
+    chartRow.style.display = 'flex';
+    chartRow.style.gap = '20px';
+    chartRow.innerHTML = `
+        <div class="chart-container" id="radarChart-physical"></div>
+        <div class="chart-container" id="radarChart-mental"></div>
+    `;
+    bottomSection.appendChild(chartRow);
 
+    // 편집 버튼
     if (await isAdminUser()) {
-        const editBtn = document.createElement("button");
-        editBtn.className = "edit-btn";
-        editBtn.textContent = "편집";
-        editBtn.addEventListener("click", () => openInlineEdit(docId, data, card));
-        card.querySelector(".edit-area").appendChild(editBtn);
+        const editBtn = document.createElement('button');
+        editBtn.className = 'edit-btn';
+        editBtn.textContent = '편집';
+        editBtn.addEventListener('click', () => openInlineEdit(docId, data, card));
+        const editArea = document.createElement('div');
+        editArea.className = 'edit-area';
+        editArea.appendChild(editBtn);
+        bottomSection.appendChild(editArea);
     }
+
+    card.appendChild(bottomSection);
+    container.appendChild(card);
 
     setTimeout(() => {
         initStatsRadarCharts(s, 'radarChart-physical', 'radarChart-mental');
@@ -1590,28 +1608,44 @@ async function openInlineEdit(docId, data, cardEl) {
     const p = data.personnel || {};
     const s = data.stats || {};
 
+    // 카드 스타일과 통일
     editArea.innerHTML = `
-        <div class="edit-grid-inline" style="display:flex; flex-direction:column; gap:10px; margin-top:15px; padding:10px; background:#222; border-radius:6px;">
-            <button id="closeEditInline" style="align-self:flex-end; background:#ff4c4c; color:#fff; border:none; padding:4px 8px; cursor:pointer; border-radius:4px;">X</button>
-            <label>이름</label><input id="editName" value="${p.name || ''}">
-            <label>성별</label><input id="editGender" value="${p.gender || ''}">
-            <label>나이</label><input id="editAge" value="${p.age || ''}">
-            <label>키</label><input id="editHeight" value="${p.height || ''}">
-            <label>체중</label><input id="editWeight" value="${p.weight || ''}">
-            <label>국적</label><input id="editNationality" value="${p.nationality || ''}">
-            <label>이미지 파일</label><input id="editImageFile" type="file">
-            <label>이미지 URL</label><input id="editImage" value="${p.image || ''}">
-            <div class="edit-stats-inline">
+        <div class="edit-card" style="
+            display:flex; 
+            flex-direction:column; 
+            gap:15px; 
+            margin-top:15px; 
+            padding:15px; 
+            background:#222; 
+            border-radius:8px;
+            box-shadow:0 2px 6px rgba(0,0,0,0.5);
+        ">
+            <!-- 상단 단락: 기본 정보 -->
+            <div class="edit-top" style="display:flex; flex-direction:column; gap:8px;">
+                <button id="closeEditInline" style="align-self:flex-end; background:#ff4c4c; color:#fff; border:none; padding:4px 8px; cursor:pointer; border-radius:4px;">X</button>
+                <label>이름</label><input id="editName" value="${p.name || ''}">
+                <label>성별</label><input id="editGender" value="${p.gender || ''}">
+                <label>나이</label><input id="editAge" value="${p.age || ''}">
+                <label>키</label><input id="editHeight" value="${p.height || ''}">
+                <label>체중</label><input id="editWeight" value="${p.weight || ''}">
+                <label>국적</label><input id="editNationality" value="${p.nationality || ''}">
+                <label>이미지 파일</label><input id="editImageFile" type="file">
+                <label>이미지 URL</label><input id="editImage" value="${p.image || ''}">
+            </div>
+
+            <!-- 하단 단락: 스탯 편집 -->
+            <div class="edit-stats-inline" style="display:flex; flex-direction:column; gap:6px; margin-top:10px;">
                 ${Object.keys(s).map(key => `
                     <label>${key}</label>
                     <input id="edit-${key}" value="${s[key] || 0}">
                 `).join('')}
             </div>
-            <button id="saveStaffInline" style="margin-top:10px;">저장</button>
+
+            <button id="saveStaffInline" style="margin-top:10px; background:#4caf50; color:#fff; border:none; padding:6px 12px; cursor:pointer; border-radius:4px;">저장</button>
         </div>
     `;
 
-    // 편집 닫기 버튼
+    // 닫기 버튼
     editArea.querySelector("#closeEditInline").addEventListener("click", () => {
         editArea.innerHTML = '';
     });
@@ -1646,7 +1680,6 @@ async function openInlineEdit(docId, data, cardEl) {
 
         await updateDoc(doc(db, "sheets", docId), newData);
 
-        // 카드 자체 갱신
         renderStaff(); 
         editArea.innerHTML = ''; // 편집 영역 닫기
     });
@@ -1781,78 +1814,50 @@ async function openMapPopup(mapId) {
     if (!snap.exists()) return;
     const data = snap.data();
 
-    // modal 요소 가져오기 또는 생성
-    let modal = document.getElementById('mapPopupModal');
-    if (!modal) {
-        modal = document.createElement('div');
-        modal.id = 'mapPopupModal';
-        modal.style.position = 'fixed';
-        modal.style.top = '0';
-        modal.style.left = '0';
-        modal.style.width = '100%';
-        modal.style.height = '100%';
-        modal.style.background = 'rgba(0,0,0,0.6)';
-        modal.style.overflow = 'auto';
-        modal.style.zIndex = '9999';
-        modal.style.padding = '20px';
-        document.body.appendChild(modal);
-    }
+    const card = document.createElement('div');
+    card.className = 'map-card card';
+    card.style.padding = '20px';
+    card.style.borderRadius = '8px';
+    card.style.background = '#1a1a1a';
+    card.style.color = '#fff';
+    card.style.marginBottom = '20px';
+    card.style.boxShadow = '0 4px 12px rgba(0,0,0,0.5)';
 
-    modal.innerHTML = `
-        <div class="card map-popup-card" style="position:relative; padding:20px; border-radius:8px; background:#1a1a1a; box-shadow:0 4px 12px rgba(0,0,0,0.5); max-width:800px; margin:40px auto;">
-            <!-- 닫기 버튼 -->
-            <button id="mapPopupCloseBtn" style="position:absolute; top:10px; right:10px; background:#ff4c4c; border:none; border-radius:4px; padding:5px 10px; cursor:pointer; color:#fff;">X</button>
-
-            <div class="popup-top">
-                <img src="${data.image}" class="map-popup-img" style="width:100%; border-radius:6px;">
-                <h2 style="margin:10px 0;">${data.name}</h2>
-                <p>${data.description}</p>
-                <div class="map-meta" style="margin-top:10px;">
-                    <div class="map-danger">${renderDangerStars(data.danger)}</div>
-                    <div class="map-types">출현: ${Array.isArray(data.types)?data.types.join(', '):data.types||''}</div>
-                </div>
-            </div>
-            <div class="popup-bottom" style="display:flex; gap:20px; margin-top:20px;">
-                <div class="map-left-grid" style="flex:1;"></div>
-                <div class="map-right-teams" style="flex:1;"></div>
-            </div>
-            <div class="popup-comments-area" style="margin-top:20px;"></div>
+    // 구역 설명
+    const infoSection = document.createElement('div');
+    infoSection.className = 'map-section map-info';
+    infoSection.style.marginBottom = '20px';
+    infoSection.innerHTML = `
+        <img src="${data.image || DEFAULT_MAP_IMAGE}" class="map-img" style="width:100%; border-radius:6px;">
+        <h3 style="margin:10px 0;">${data.name || '이름 없음'}</h3>
+        <p>${data.description}</p>
+        <div class="map-meta" style="margin-top:10px;">
+            <div class="map-danger">위험도: ${renderDangerStars(data.danger || 1)}</div>
+            <div class="map-types">출현: ${Array.isArray(data.types)?data.types.join(', '):data.types||''}</div>
         </div>
     `;
 
-    // 뒤로가기 버튼 이벤트
-    const closeBtn = modal.querySelector('#mapPopupCloseBtn');
-    closeBtn.addEventListener('click', () => {
-        document.body.removeChild(modal);
-    });
+    // 격자+탐사팀
+    const gridTeamsSection = document.createElement('div');
+    gridTeamsSection.className = 'map-section map-grid-teams';
+    gridTeamsSection.style.display = 'flex';
+    gridTeamsSection.style.gap = '20px';
+    gridTeamsSection.style.marginBottom = '20px';
 
-    (async () => {
-        if (await isAdminUser()) {
-            const popupTop = modal.querySelector('.popup-top');
-            const editBtn = document.createElement('button');
-            editBtn.textContent = '편집';
-            editBtn.className = 'btn';
-            editBtn.style.marginLeft = '10px';
-            editBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                openMapInlineEdit(mapId, data);
-            });
-            popupTop.appendChild(editBtn);
-        }
-    })();
+    const gridContainer = document.createElement('div');
+    gridContainer.className = 'map-left-grid';
+    gridContainer.style.flex = '1';
+    const teamsContainer = document.createElement('div');
+    teamsContainer.className = 'map-right-teams';
+    teamsContainer.style.flex = '1';
 
-    const gridContainer = modal.querySelector('.map-left-grid');
-    const teamsContainer = modal.querySelector('.map-right-teams');
-    const commentsArea = modal.querySelector('.popup-comments-area');
-
-    // 격자 생성
     const rows = data.grid?.rows || 8;
     const cols = data.grid?.cols || 8;
     gridContainer.style.display = 'grid';
     gridContainer.style.gridTemplateRows = `repeat(${rows}, 40px)`;
     gridContainer.style.gridTemplateColumns = `repeat(${cols}, 40px)`;
-    for(let y=0; y<rows; y++){
-        for(let x=0; x<cols; x++){
+    for (let y = 0; y < rows; y++) {
+        for (let x = 0; x < cols; x++) {
             const cell = document.createElement('div');
             cell.className = 'grid-cell';
             cell.dataset.x = x;
@@ -1864,24 +1869,23 @@ async function openMapPopup(mapId) {
     }
 
     const recentVisits = Array.isArray(data.visits) ? data.visits : [];
-
-    // 탐사팀 목록
-    for(const v of recentVisits) {
+    for (const v of recentVisits) {
         const teamEl = document.createElement('div');
         teamEl.textContent = v.teamName;
         teamEl.style.color = v.colorHex || '#fff';
         teamEl.className = 'explore-team';
+        teamEl.style.cursor = 'pointer';
         teamEl.addEventListener('click', () => showTeamVisit(v, gridContainer));
         teamsContainer.appendChild(teamEl);
     }
 
-    if(recentVisits.length > 5){
+    if (recentVisits.length > 5) {
         const moreBtn = document.createElement('button');
         moreBtn.textContent = '더보기';
         moreBtn.className = 'link';
         moreBtn.addEventListener('click', () => {
             teamsContainer.innerHTML = '';
-            for(const v of recentVisits){
+            for (const v of recentVisits) {
                 const teamEl = document.createElement('div');
                 teamEl.textContent = v.teamName;
                 teamEl.style.color = v.colorHex || '#fff';
@@ -1893,8 +1897,22 @@ async function openMapPopup(mapId) {
         teamsContainer.appendChild(moreBtn);
     }
 
-    const commentCard = renderCommentCard({ id: mapId, dbCollection:'maps' });
-    commentsArea.appendChild(commentCard);
+    gridTeamsSection.appendChild(gridContainer);
+    gridTeamsSection.appendChild(teamsContainer);
+
+    // 댓글
+    const commentsSection = document.createElement('div');
+    commentsSection.className = 'map-section map-comments';
+    const commentCard = renderCommentCard({ id: mapId, dbCollection: 'maps' });
+    commentsSection.appendChild(commentCard);
+
+    // 카드 조립
+    card.appendChild(infoSection);
+    card.appendChild(gridTeamsSection);
+    card.appendChild(commentsSection);
+
+    // 화면에 바로 추가
+    document.body.appendChild(card);
 }
 
 // 탐사팀 클릭 시 격자 경로 표시 + 말풍선
