@@ -1439,7 +1439,7 @@ async function renderStaff() {
         item.className = "staff-thumb";
 
         item.addEventListener("click", () => {
-            openProfileModal(docSnap.id, sheet);
+            renderProfileCard(docSnap.id, sheet);
         });
 
         item.innerHTML = `
