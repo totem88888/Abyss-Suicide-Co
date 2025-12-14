@@ -2358,6 +2358,11 @@ async function renderDexDetail(id, isEditMode = false, preloadedData = null) {
         </div>
     `;
 
+    const commentsArea = contentEl.querySelector('.dex-comments-area');
+    commentsArea.appendChild(
+        renderCommentCard({ id, dbCollection: 'abyssal_dex' })
+    );
+
     // 섹션 렌더링
     renderBasicInfoSection(document.getElementById('basicInfoSection'), data, isEditMode, isManager);
     renderStatsSection(document.getElementById('statsSection'), data, calculatedStats, isEditMode, isManager);
