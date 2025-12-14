@@ -947,95 +947,109 @@ function renderAuthArea(user){
 function openNewUserCustomization(uid, nickname) {
     const defaultData = createDefaultSheet(uid, nickname);
     const p = defaultData.personnel;
-    const s = defaultData.stats;
-    
-    // 인적사항 입력 폼
-    const personnelForm = `
-        <h3 style="border-bottom: 1px solid #333; padding-bottom: 10px;">기본 인적사항 설정</h3>
-        <p style="color: #aaa;">(${nickname}님을 위한 초기 설정입니다. 이름은 수정 불가능합니다.)</p>
-        <div class="form-row">
-            <label>이름</label> <input type="text" value="${p.name}" disabled>
-        </div>
-        <div class="form-row">
-            <label>성별</label> 
-            <select id="custGender">
-                <option value="남성">남성</option>
-                <option value="여성">여성</option>
-            </select>
-        </div>
-        <div class="form-row"><label>나이</label> <input type="number" id="custAge" value="${p.age || 20}"></div>
-        <div class="form-row"><label>키 (cm)</label> <input type="number" id="custHeight" value="${p.height || 170}"></div>
-        <div class="form-row"><label>체중 (kg)</label> <input type="number" id="custWeight" value="${p.weight || 60}"></div>
+
+    const statsKeys = Object.keys(baseStats || {});
+    let statsForm = `
+        <h3 style="border-bottom: 1px solid #333; padding: 10px 0;">
+            기본 스테이터스 설정 (총 포인트 제한: 55)
+        </h3>
+        <p style="color: yellow;">
+            현재 사용 포인트: <span id="currentPoints">0</span> / 55
+        </p>
     `;
 
-    // 스테이터스 입력 폼 (슬라이더 및 총 포인트 제한 로직은 프론트엔드에서 구현 필요)
-    const statsKeys = Object.keys(baseStats || {});
-    let statsForm = `<h3 style="border-bottom: 1px solid #333; padding: 10px 0;">기본 스테이터스 설정 (총 포인트 제한: 55)</h3>`;
-    let currentTotal = statsKeys.reduce(
-        (sum, key) => sum + (baseStats[key] || 1),
-        0
-    );
-    statsForm += `<p style="color: yellow; margin-bottom: 15px;">현재 사용 포인트: <span id="currentPoints">${currentTotal}</span> / 55</p>`;
-
     statsKeys.forEach(key => {
-        const label = mapStatKeyToLabel(key);
         statsForm += `
             <div class="form-row stat-row">
-                <label style="width: 150px;">${label}</label>
-                <input type="range" id="stat-${key}" min="1" max="5" value="${baseStats[key] || 1}" class="stat-slider">
-                <span id="value-${key}" class="stat-value">${baseStats[key] || 1}</span>
+                <label style="width:150px;">${mapStatKeyToLabel(key)}</label>
+                <input type="range"
+                       id="stat-${key}"
+                       min="1"
+                       max="5"
+                       value="${baseStats[key] || 1}"
+                       class="stat-slider">
+                <span id="value-${key}">${baseStats[key] || 1}</span>
             </div>
         `;
     });
-    
-    // 팝업 HTML (실제 팝업/모달 라이브러리 사용 가정)
-    const popupContent = `
-        <div class="customization-popup">
-            <h2>캐릭터 생성: 초기 설정</h2>
-            <div style="display: flex; gap: 30px;">
-                <div style="flex: 1;">${personnelForm}</div>
-                <div style="flex: 1;">${statsForm}</div>
+
+    document.body.insertAdjacentHTML('beforeend', `
+        <div id="custModal" style="position:fixed; inset:0; background:rgba(0,0,0,.8); z-index:9999;
+             display:flex; justify-content:center; align-items:center;">
+            <div class="card" style="width:700px; max-height:80vh; overflow-y:auto;">
+                <h2>캐릭터 생성</h2>
+
+                <div class="form-row"><label>이름</label>
+                    <input type="text" value="${p.name}" disabled>
+                </div>
+
+                <div class="form-row"><label>성별</label>
+                    <select id="custGender">
+                        <option value="남성">남성</option>
+                        <option value="여성">여성</option>
+                    </select>
+                </div>
+
+                <div class="form-row"><label>나이</label>
+                    <input type="number" id="custAge" value="${p.age || 20}">
+                </div>
+
+                <div class="form-row"><label>키</label>
+                    <input type="number" id="custHeight" value="${p.height || 170}">
+                </div>
+
+                <div class="form-row"><label>체중</label>
+                    <input type="number" id="custWeight" value="${p.weight || 60}">
+                </div>
+
+                ${statsForm}
+
+                <button id="saveCustomSheetBtn" class="btn primary" style="width:100%; margin-top:20px;">
+                    설정 저장
+                </button>
             </div>
-            <button id="saveCustomSheetBtn" class="btn primary" style="width: 100%; margin-top: 20px;">설정 저장 및 시트 시작</button>
         </div>
-    `;
+    `);
 
-    // showPopup(popupContent); // 실제 팝업/모달을 띄우는 함수 호출 가정
-    // 임시로 body에 삽입
-    document.body.insertAdjacentHTML('beforeend', `<div id="custModal" style="position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:9999; display:flex; justify-content:center; align-items:center;"><div class="card" style="width: 700px; max-height: 80vh; overflow-y: auto;">${popupContent}</div></div>`);
-
-
-    // 이벤트 리스너 부착
-    const saveBtn = document.getElementById('saveCustomSheetBtn');
-    if (saveBtn) {
-        saveBtn.addEventListener('click', () => {
-            const data = collectCustomizationData();
-            saveCustomizedSheet(uid, nickname, data);
-            document.getElementById('custModal')?.remove();
-        });
-    }
-    
-    // 슬라이더 변경 이벤트 처리 (포인트 합계 계산)
     document.querySelectorAll('.stat-slider').forEach(slider => {
         slider.addEventListener('input', updateStatPoints);
     });
+    updateStatPoints();
 
-    updateStatPoints(); // 초기 포인트 계산
+    document.getElementById('saveCustomSheetBtn').addEventListener('click', async () => {
+        const data = collectCustomizationData();
+
+        if (data.totalPoints > 55) {
+            showMessage('스탯 포인트가 초과되었습니다.', 'error');
+            return;
+        }
+
+        await saveCustomizedSheet(uid, nickname, data);
+        document.getElementById('custModal')?.remove();
+    });
 }
 
 function collectCustomizationData() {
-    const gender = document.getElementById('custGender').value;
-    const age = Number(document.getElementById('custAge').value);
-    const height = Number(document.getElementById('custHeight').value);
-    const weight = Number(document.getElementById('custWeight').value);
-
     const stats = {};
+    let totalPoints = 0;
+
     document.querySelectorAll('.stat-slider').forEach(slider => {
         const key = slider.id.replace('stat-', '');
-        stats[key] = Number(slider.value);
+        const val = Number(slider.value) || 1;
+        stats[key] = val;
+        totalPoints += val;
     });
 
-    return { gender, age, height, weight, stats };
+    return {
+        personnel: {
+            gender: document.getElementById('custGender').value,
+            age: Number(document.getElementById('custAge').value),
+            height: Number(document.getElementById('custHeight').value),
+            weight: Number(document.getElementById('custWeight').value)
+        },
+        stats,
+        totalPoints
+    };
 }
 
 // 포인트 계산
@@ -1066,49 +1080,31 @@ function updateStatPoints() {
 }
 
 // 시트값 저장
-async function saveCustomizedSheet(uid, nickname) {
+async function saveCustomizedSheet(uid, nickname, data) {
     const initialSheet = createDefaultSheet(uid, nickname);
-    
-    const $ = id => document.getElementById(id);
-
-    const personnel = {
-        ...initialSheet.personnel,
-        gender: $('custGender')?.value || initialSheet.personnel.gender,
-        age: parseInt($('custAge')?.value, 10) || initialSheet.personnel.age,
-        height: parseInt($('custHeight')?.value, 10) || initialSheet.personnel.height,
-        weight: parseInt($('custWeight')?.value, 10) || initialSheet.personnel.weight,
-    };
-    
-    const stats = {
-        ...initialSheet.stats
-    };
-
-    document.querySelectorAll('.stat-slider').forEach(slider => {
-        const key = slider.id.replace('stat-', '');
-        stats[key] = parseInt(slider.value, 10) || 1;
-    });
 
     const finalSheetData = {
         ...initialSheet,
-        personnel: personnel,
-        stats: stats,
+        personnel: {
+            ...initialSheet.personnel,
+            ...data.personnel
+        },
+        stats: data.stats,
         status: {
             ...initialSheet.status,
-            maxSpirit: (10 * (stats.spirit || 1)) + 50,
-            currentSpirit: (10 * (stats.spirit || 1)) + 50,
+            maxSpirit: 10 * (data.stats.spirit || 1) + 50,
+            currentSpirit: 10 * (data.stats.spirit || 1) + 50
         },
         updatedAt: serverTimestamp()
     };
-    
+
     try {
-        await setDoc(doc(db, 'sheets', uid), finalSheetData); 
-        showMessage('캐릭터 시트가 성공적으로 저장되었습니다.', 'success');
-        
-        renderMe(); 
-        
-    } catch(e) {
-        console.error("커스터마이징 시트 저장 실패:", e);
-        showMessage('시트 저장에 실패했습니다. 다시 시도해 주세요.', 'error');
+        await setDoc(doc(db, 'sheets', uid), finalSheetData);
+        showMessage('캐릭터 시트 저장 완료', 'success');
+        renderMe();
+    } catch (e) {
+        console.error(e);
+        showMessage('시트 저장 실패', 'error');
     }
 }
 
@@ -1307,22 +1303,21 @@ async function renderStaff() {
 
     snap.forEach(docSnap => {
         const sheet = docSnap.data();
-        const p = sheet.personnel;
-        const s = sheet.stats;
+        const p = sheet.personnel || {};
 
         const item = document.createElement("div");
         item.className = "staff-thumb";
 
-        item.addEventListener('click', () =>
-            openProfileModal(docSnap.id, sheet)
-        );
+        item.addEventListener("click", () => {
+            openProfileModal(docSnap.id, sheet);
+        });
 
         item.innerHTML = `
             <div class="thumb-img"
-                style="background-image:url('${p.photoUrl || ''}');
-                       aspect-ratio: 3 / 4;
-                       background-size: cover;
-                       background-position: center;">
+                 style="background-image:url('${p.photoUrl || p.image || ''}');
+                        aspect-ratio:3/4;
+                        background-size:cover;
+                        background-position:center;">
             </div>
             <div class="thumb-name">${p.name || '이름 없음'}</div>
         `;
@@ -1331,51 +1326,53 @@ async function renderStaff() {
     });
 }
 
+
 // 세부적 프로필
 async function openProfileModal(docId, data) {
+    const p = data.personnel || {};
+    const s = data.stats || {};
+
     profileModal.innerHTML = `
         <div class="modal-content profile-wide">
             <button id="closeProfile" class="back-btn">← 돌아가기</button>
 
             <div class="profile-top">
                 <div class="profile-img-wrap">
-                    <img class="profile-img" src="${data.image || ''}" alt="">
+                    <img class="profile-img" src="${p.image || ''}">
                 </div>
                 <div class="profile-info">
-                    <p><span class="label">이름</span> ${data.name || ''}</p>
-                    <p><span class="label">성별</span> ${data.gender || ''}</p>
-                    <p><span class="label">나이</span> ${data.age || ''}</p>
-                    <p><span class="label">키/체중</span> ${data.height || '-'}cm / ${data.weight || '-'}kg</p>
-                    <p><span class="label">국적</span> ${data.nationality || ''}</p>
+                    <p><span class="label">이름</span> ${p.name || ''}</p>
+                    <p><span class="label">성별</span> ${p.gender || ''}</p>
+                    <p><span class="label">나이</span> ${p.age || ''}</p>
+                    <p><span class="label">키/체중</span> ${p.height || '-'} / ${p.weight || '-'}</p>
+                    <p><span class="label">국적</span> ${p.nationality || ''}</p>
                 </div>
             </div>
 
             <div class="stats-grid-2x2">
                 <div class="stats-table-container">
-                    ${renderHorizontalTable('표 1: 신체 스테이터스', [
-                        { label: '근력', value: data.muscle },
-                        { label: '민첩', value: data.agility },
-                        { label: '지구력', value: data.endurance },
-                        { label: '유연성', value: data.flexibility },
-                        { label: '시각', value: data.visual },
-                        { label: '청각', value: data.auditory },
-                        { label: '상황 인지 능력', value: data.situation },
-                        { label: '반응속도', value: data.reaction },
-                    ], isAdminUser(), true)}
+                    ${renderHorizontalTable('신체 스테이터스', [
+                        { label: '근력', value: s.muscle },
+                        { label: '민첩', value: s.agility },
+                        { label: '지구력', value: s.endurance },
+                        { label: '유연성', value: s.flexibility },
+                        { label: '시각', value: s.visual },
+                        { label: '청각', value: s.auditory },
+                        { label: '상황 인지', value: s.situation },
+                        { label: '반응속도', value: s.reaction },
+                    ], await isAdminUser(), true)}
                 </div>
-                <div class="chart-container-1" style="width:100%; height:auto; min-height:300px;"></div>
 
                 <div class="stats-table-container">
-                    ${renderHorizontalTable('표 2: 정신 스테이터스', [
-                        { label: '지능', value: data.intellect },
-                        { label: '판단력', value: data.judgment },
-                        { label: '기억력', value: data.memory },
-                        { label: '정신력', value: data.spirit },
-                        { label: '의사 결정 능력', value: data.decision },
-                        { label: '스트레스 내성', value: data.stress },
-                    ], isAdminUser(), true)}
+                    ${renderHorizontalTable('정신 스테이터스', [
+                        { label: '지능', value: s.intellect },
+                        { label: '판단력', value: s.judgment },
+                        { label: '기억력', value: s.memory },
+                        { label: '정신력', value: s.spirit },
+                        { label: '의사결정', value: s.decision },
+                        { label: '스트레스', value: s.stress },
+                    ], await isAdminUser(), true)}
                 </div>
-                <div class="chart-container-2" style="width:100%; height:auto; min-height:300px;"></div>
             </div>
 
             <div id="editArea"></div>
@@ -1383,104 +1380,84 @@ async function openProfileModal(docId, data) {
     `;
 
     profileModal.showModal();
-    const closeBtn = document.getElementById("closeProfile");
-    if (closeBtn) {
-        closeBtn.addEventListener('click', () => profileModal.close());
+    document.getElementById("closeProfile")
+        ?.addEventListener("click", () => profileModal.close());
+
+    if (await isAdminUser()) {
+        const editBtn = document.createElement("button");
+        editBtn.className = "edit-btn";
+        editBtn.textContent = "편집";
+        editBtn.addEventListener("click", () =>
+            openInlineEdit(docId, data)
+        );
+        document.getElementById("editArea").appendChild(editBtn);
     }
 
-    // 관리자 편집 버튼
-    const editArea = document.getElementById("editArea");
-    const isAdmin = await isAdminUser();
-    if (isAdmin) {
-    const editBtn = document.createElement("button");
-    editBtn.textContent = "편집";
-    editBtn.className = "edit-btn";
-    editBtn.addEventListener('click', () => openInlineEdit(docId, data));
-    editArea.appendChild(editBtn);
-}
-
-    // 스테이터스 차트 렌더링 (기존 스테이터스 데이터 사용)
     setTimeout(() => initStatsRadarCharts(data), 100);
 }
+
 
 // 수정 버튼 눌렀을 때
 async function openInlineEdit(docId, data) {
     const editArea = document.getElementById("editArea");
+    const p = data.personnel || {};
+    const s = data.stats || {};
 
-    // 1. 편집용 HTML 생성
     editArea.innerHTML = `
         <div class="edit-grid-inline">
-            <label>이름</label><input id="editName" value="${data.name || ''}">
-            <label>성별</label><input id="editGender" value="${data.gender || ''}">
-            <label>나이</label><input id="editAge" value="${data.age || ''}">
-            <label>키/체중</label><input id="editHeight" value="${data.height || ''}">
-            <label>국적</label><input id="editNationality" value="${data.nationality || ''}">
+            <label>이름</label><input id="editName" value="${p.name || ''}">
+            <label>성별</label><input id="editGender" value="${p.gender || ''}">
+            <label>나이</label><input id="editAge" value="${p.age || ''}">
+            <label>키</label><input id="editHeight" value="${p.height || ''}">
+            <label>체중</label><input id="editWeight" value="${p.weight || ''}">
+            <label>국적</label><input id="editNationality" value="${p.nationality || ''}">
 
-            <label>이미지 업로드</label><input id="editImageFile" type="file" accept="image/*">
-            <label>이미지 URL</label><input id="editImage" value="${data.image || ''}">
+            <label>이미지 파일</label><input id="editImageFile" type="file">
+            <label>이미지 URL</label><input id="editImage" value="${p.image || ''}">
 
             <div class="edit-stats-inline">
-                <label>근력</label><input id="editMuscle" value="${data.muscle || 0}">
-                <label>민첩</label><input id="editAgility" value="${data.agility || 0}">
-                <label>지구력</label><input id="editEndurance" value="${data.endurance || 0}">
-                <label>유연성</label><input id="editFlexibility" value="${data.flexibility || 0}">
-                <label>시각</label><input id="editVisual" value="${data.visual || 0}">
-                <label>청각</label><input id="editAuditory" value="${data.auditory || 0}">
-                <label>상황 인지 능력</label><input id="editSituation" value="${data.situation || 0}">
-                <label>반응속도</label><input id="editReaction" value="${data.reaction || 0}">
-                
-                <label>지능</label><input id="editIntellect" value="${data.intellect || 0}">
-                <label>판단력</label><input id="editJudgment" value="${data.judgment || 0}">
-                <label>기억력</label><input id="editMemory" value="${data.memory || 0}">
-                <label>정신력</label><input id="editSpirit" value="${data.spirit || 0}">
-                <label>의사 결정 능력</label><input id="editDecision" value="${data.decision || 0}">
-                <label>스트레스 내성</label><input id="editStress" value="${data.stress || 0}">
+                ${Object.keys(s).map(key => `
+                    <label>${key}</label>
+                    <input id="edit-${key}" value="${s[key] || 0}">
+                `).join('')}
             </div>
 
             <button id="saveStaffInline">저장</button>
         </div>
     `;
 
-    // 2. 저장 버튼 이벤트
-    const saveBtn = document.getElementById("saveStaffInline");
-    if(saveBtn) {
-        saveBtn.addEventListener('click', async () => {
-            let finalImg = document.getElementById("editImage").value;
-            const file = document.getElementById("editImageFile").files[0];
+    document.getElementById("saveStaffInline").addEventListener("click", async () => {
+        let finalImg = document.getElementById("editImage").value;
+        const file = document.getElementById("editImageFile").files[0];
+        if (file) finalImg = await uploadStaffImage(file, docId);
 
-            if (file) finalImg = await uploadStaffImage(file, docId);
+        const newPersonnel = {
+            ...p,
+            name: editName.value,
+            gender: editGender.value,
+            age: Number(editAge.value),
+            height: Number(editHeight.value),
+            weight: Number(editWeight.value),
+            nationality: editNationality.value,
+            image: finalImg
+        };
 
-            const newData = {
-                name: document.getElementById("editName").value,
-                gender: document.getElementById("editGender").value,
-                age: document.getElementById("editAge").value,
-                height: document.getElementById("editHeight").value,
-                nationality: document.getElementById("editNationality").value,
-                image: finalImg,
-                muscle: Number(document.getElementById("editMuscle").value),
-                agility: Number(document.getElementById("editAgility").value),
-                endurance: Number(document.getElementById("editEndurance").value),
-                flexibility: Number(document.getElementById("editFlexibility").value),
-                visual: Number(document.getElementById("editVisual").value),
-                auditory: Number(document.getElementById("editAuditory").value),
-                situation: Number(document.getElementById("editSituation").value),
-                reaction: Number(document.getElementById("editReaction").value),
-                intellect: Number(document.getElementById("editIntellect").value),
-                judgment: Number(document.getElementById("editJudgment").value),
-                memory: Number(document.getElementById("editMemory").value),
-                spirit: Number(document.getElementById("editSpirit").value),
-                decision: Number(document.getElementById("editDecision").value),
-                stress: Number(document.getElementById("editStress").value),
-                updatedAt: serverTimestamp()
-            };
-
-            await updateDoc(doc(db, "staff", docId), newData);
-
-            openProfileModal(docId, { ...data, ...newData });
-            renderStaff();
-            editArea.innerHTML = '';
+        const newStats = {};
+        Object.keys(s).forEach(key => {
+            newStats[key] = Number(document.getElementById(`edit-${key}`).value);
         });
-    }
+
+        const newData = {
+            personnel: newPersonnel,
+            stats: newStats,
+            updatedAt: serverTimestamp()
+        };
+
+        await updateDoc(doc(db, "sheets", docId), newData);
+
+        openProfileModal(docId, { ...data, ...newData });
+        renderStaff();
+    });
 }
 
 /* =========================================================
