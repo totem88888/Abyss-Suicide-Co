@@ -634,6 +634,12 @@ function attachCommentListeners({ el, id, dbCollection }) {
 async function loadCommentPreview({ el, id, dbCollection }) {
     try {
         const snap = await getDocs(collection(db, dbCollection, id, 'comments'));
+
+        if (!id || !dbCollection) {
+            console.error('댓글 로드 실패: 경로 정보 누락', { id, dbCollection });
+            return;
+        }
+
         const arr = [];
         snap.forEach(d => arr.push({ id: d.id, ...d.data() }));
         arr.sort((a,b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
@@ -2347,7 +2353,7 @@ async function renderDexDetail(id, isEditMode = false, preloadedData = null) {
             </div>
             <hr style="margin: 30px 0;">
             <div class="dex-comments-area" data-id="${id}">
-                ${renderCommentCard(id)}
+                ${renderCommentCard({ id, dbCollection: 'abyssal_dex' })}
             </div>
         </div>
     `;
@@ -2387,9 +2393,6 @@ async function renderDexDetail(id, isEditMode = false, preloadedData = null) {
 
         attachDisclosurePresetButtons(data, isEditMode, isManager);
     }
-
-    const commentCard = renderCommentCard({ id, dbCollection: 'abyssal_dex' });
-    containerEl.appendChild(commentCard)
 }
 
 function renderDisclosurePresetHtml() {
