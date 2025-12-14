@@ -1504,8 +1504,11 @@ async function renderMap() {
             contentEl.appendChild(addBtn);;
         }
 
-        if(snap.empty){
-            contentEl.innerHTML += '<div class="card">등록된 맵이 없습니다.</div>';
+        if (snap.empty) {
+            const emptyCard = document.createElement('div');
+            emptyCard.className = 'card';
+            emptyCard.textContent = '등록된 맵이 없습니다.';
+            contentEl.appendChild(emptyCard);
             return;
         }
         
@@ -1894,7 +1897,6 @@ async function openNewMapInlineEdit() {
     } else {
         mapAddBtn.after(tempEl);
     }
-    contentEl.insertBefore(tempEl, mapAddBtn.nextSibling);
 
     // 초기값
     const defaultImage = '';
@@ -1955,32 +1957,25 @@ async function openNewMapInlineEdit() {
     const imgFileInput = tempEl.querySelector('#newMapImageFile');
     const dangerInput = tempEl.querySelector('#newMapDanger');
 
-    // ✅ 이미지 미리보기 & 위험도 별표 업데이트
-    const updatePreviewAndStars = () => {
-        // 별표
-        dangerInput.addEventListener('input', e => {
-            const starsEl = tempEl.querySelector('#dangerStars');
-            if (starsEl) starsEl.textContent = renderDangerStars(Number(e.target.value) || 1);
-        });
+    dangerInput.addEventListener('input', e => {
+        const starsEl = tempEl.querySelector('#dangerStars');
+        if (starsEl) starsEl.textContent = renderDangerStars(Number(e.target.value) || 1);
+    });
 
-        // URL 입력
-        imgUrlInput.addEventListener('input', () => {
-            imgPreviewEl.src = imgUrlInput.value;
-            imgFileInput.value = '';
-        });
+    imgUrlInput.addEventListener('input', () => {
+        imgPreviewEl.src = imgUrlInput.value;
+        imgFileInput.value = '';
+    });
 
-        // 파일 선택
-        imgFileInput.addEventListener('change', e => {
-            const file = e.target.files[0];
-            if (file) {
-                const reader = new FileReader();
-                reader.onload = e => imgPreviewEl.src = e.target.result;
-                reader.readAsDataURL(file);
-                imgUrlInput.value = '';
-            } else if (!imgUrlInput.value) imgPreviewEl.src = '';
-        });
-    };
-    updatePreviewAndStars();
+    imgFileInput.addEventListener('change', e => {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = e => imgPreviewEl.src = e.target.result;
+            reader.readAsDataURL(file);
+            imgUrlInput.value = '';
+        } else if (!imgUrlInput.value) imgPreviewEl.src = '';
+    });
 
     // 저장
     const saveBtn = tempEl.querySelector('#saveNewMapInline');
