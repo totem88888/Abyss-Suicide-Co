@@ -3766,33 +3766,67 @@ function renderMeStatsSection(s, isAdmin, sheetId) {
 
     return section;
 }
-
 function openStatsEdit(sheetId, s) {
     const container = document.getElementById(`stats-section-${sheetId}`);
     if (!container) return;
 
-    container.innerHTML = `<h2>스탯 편집</h2>
-        <div class="stats-edit-grid" style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+    container.innerHTML = `
+        <h2>스탯 편집</h2>
+        <div class="stats-edit-grid" style="display:grid; grid-template-columns:1fr; gap:12px;">
             ${Object.keys(s).map(key => `
-                <label>${key}: <input type="number" id="edit-${key}" value="${s[key]}"></label>
+                <div class="stat-slider-row">
+                    <label>
+                        ${key}
+                        <span id="value-${key}" style="margin-left:8px;">${s[key]}</span>
+                    </label>
+                    <input 
+                        type="range"
+                        id="edit-${key}"
+                        min="0"
+                        max="100"
+                        step="1"
+                        value="${s[key]}"
+                    />
+                </div>
             `).join('')}
         </div>
-        <button class="btn primary" id="save-stats">저장</button>
-        <button class="btn link" id="cancel-stats">취소</button>
+        <div style="margin-top:16px;">
+            <button class="btn primary" id="save-stats">저장</button>
+            <button class="btn link" id="cancel-stats">취소</button>
+        </div>
     `;
 
-    container.querySelector('#cancel-stats').onclick = () => renderMeStatsSection(s, true, sheetId);
+    // 슬라이더 값 실시간 표시
+    Object.keys(s).forEach(key => {
+        const slider = document.getElementById(`edit-${key}`);
+        const valueSpan = document.getElementById(`value-${key}`);
+        slider.oninput = () => {
+            valueSpan.textContent = slider.value;
+        };
+    });
 
+    // 취소 → 즉시 닫기
+    container.querySelector('#cancel-stats').onclick = () => {
+        renderMeStatsSection(s, true, sheetId);
+    };
+
+    // 저장 → 저장 후 닫기
     container.querySelector('#save-stats').onclick = async () => {
         const updated = {};
         Object.keys(s).forEach(key => {
-            updated[key] = parseInt(document.getElementById(`edit-${key}`).value);
+            updated[key] = parseInt(
+                document.getElementById(`edit-${key}`).value
+            );
         });
+
         try {
             await saveSheetData(sheetId, { stats: updated });
-            renderMeStatsSection(updated, true, sheetId);
+            container.replaceWith(
+                renderMeStatsSection(updated, true, sheetId)
+            );
+            
             showMessage('스탯이 저장되었습니다.', 'success');
-        } catch(e) {
+        } catch (e) {
             console.error(e);
             showMessage('저장 실패', 'error');
         }
