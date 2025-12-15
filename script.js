@@ -3226,60 +3226,107 @@ async function renderMe(targetSheetId = null) {
     }
 }
 
+async function writeAdminLog(sheetId, action, detail = {}) {
+    const admin = auth.currentUser;
+    if (!admin) return;
+
+    await addDoc(collection(db, 'adminLogs'), {
+        sheetId,
+        adminUid: admin.uid,
+        action,
+        detail,
+        createdAt: serverTimestamp()
+    });
+}
+
 async function renderAdminControlPanel(sheetData, sheetId) {
     const card = document.createElement('div');
     card.className = 'card admin-control-panel';
 
+    const name = sheetData.personnel?.name || sheetId;
+
     card.innerHTML = `
         <h2>관리자 조작 패널</h2>
+        <p class="muted">대상: <strong>${name}</strong> (${sheetId})</p>
 
         <section>
-            <h3>아이템 지급</h3>
+            <h3>아이템 지급 / 제거</h3>
             <select id="adminItemSelect"></select>
-            <input type="number" id="adminItemCount" value="1" min="1">
-            <button class="btn" id="giveItemBtn">지급</button>
+            <input type="number" id="adminItemCount" value="1">
+            <button id="giveItemBtn">적용</button>
         </section>
 
         <section>
-            <h3>은화</h3>
+            <h3>은화 증감</h3>
             <input type="number" id="adminSilverValue" value="0">
-            <button class="btn" id="giveSilverBtn">지급</button>
+            <button id="giveSilverBtn">적용</button>
         </section>
 
         <section>
-            <h3>정신력</h3>
+            <h3>스탯 증감</h3>
+            <select id="adminStatKey"></select>
+            <input type="number" id="adminStatDelta" value="1">
+            <button id="changeStatBtn">적용</button>
+        </section>
+
+        <section>
+            <h3>정신력 증감</h3>
             <input type="number" id="adminSpiritDelta" value="-10">
-            <button class="btn" id="changeSpiritBtn">차감</button>
+            <button id="changeSpiritBtn">적용</button>
         </section>
 
         <section>
             <h3>부상도</h3>
             <select id="adminInjuryPart"></select>
             <input type="number" id="adminInjuryValue" value="10">
-            <button class="btn" id="addInjuryBtn">증가</button>
+            <button id="addInjuryBtn">적용</button>
         </section>
 
         <section>
             <h3>오염도</h3>
             <input type="number" id="adminContaminationValue" value="5">
-            <button class="btn" id="addContaminationBtn">증가</button>
+            <button id="addContaminationBtn">적용</button>
         </section>
 
         <section>
-            <h3>상태</h3>
+            <h3>상태 전환</h3>
             <select id="adminState">
                 <option value="normal">정상</option>
                 <option value="missing">실종</option>
             </select>
-            <button class="btn danger" id="changeStateBtn">변경</button>
+            <button id="changeStateBtn">변경</button>
+        </section>
+
+        <hr>
+
+        <section>
+            <h3>아이템 DB 관리</h3>
+            <input id="newItemName" placeholder="아이템 이름">
+            <input id="newItemDesc" placeholder="설명">
+            <button id="addItemDbBtn">아이템 추가</button>
+            <select id="deleteItemSelect"></select>
+            <button class="danger" id="deleteItemDbBtn">아이템 삭제</button>
         </section>
     `;
 
     await loadAdminItems(card);
     fillInjuryParts(card);
+    fillStatKeys(card, sheetData.stats);
     bindAdminControlEvents(card, sheetId);
 
     return card;
+}
+
+function fillStatKeys(root, stats) {
+    const sel = root.querySelector('#adminStatKey');
+    sel.innerHTML = '';
+
+    Object.keys(stats).forEach(key => {
+        const opt = document.createElement('option');
+        opt.value = key;
+        opt.textContent = mapStatKeyToLabel(key);
+        sel.appendChild(opt);
+    });
 }
 
 function fillInjuryParts(root) {
@@ -3288,66 +3335,160 @@ function fillInjuryParts(root) {
 
     injuryParts.forEach(key => {
         const opt = document.createElement('option');
-        opt.value = key; // 🔴 DB에 쓰일 실제 키
-        opt.textContent = mapKeyToLabel[key] || key; // 🔵 화면 표시
+        opt.value = key;
+        opt.textContent = mapKeyToLabel[key];
         sel.appendChild(opt);
     });
 }
 
 async function loadAdminItems(root) {
     const sel = root.querySelector('#adminItemSelect');
+    const delSel = root.querySelector('#deleteItemSelect');
+
+    sel.innerHTML = '';
+    delSel.innerHTML = '';
+
     const snap = await getDocs(collection(db, 'items'));
 
     snap.forEach(d => {
-        const opt = document.createElement('option');
-        opt.value = d.id;
-        opt.textContent = d.data().name;
-        sel.appendChild(opt);
+        const name = d.data().name;
+
+        const opt1 = document.createElement('option');
+        opt1.value = d.id;
+        opt1.textContent = name;
+        sel.appendChild(opt1);
+
+        const opt2 = opt1.cloneNode(true);
+        delSel.appendChild(opt2);
     });
 }
 
 function bindAdminControlEvents(root, sheetId) {
+    const $ = sel => root.querySelector(sel);
 
-    root.querySelector('#giveItemBtn').onclick = async () => {
+    const clamp = (val, min) => Math.max(min, val);
+
+    $('#giveItemBtn').onclick = async () => {
+        const itemId = $('#adminItemSelect').value;
+        const delta = Number($('#adminItemCount').value);
+        if (!itemId || !delta) return;
+
         await updateDoc(doc(db, 'sheets', sheetId), {
-            [`inventory.items.${adminItemSelect.value}`]:
-                increment(Number(adminItemCount.value))
+            [`inventory.items.${itemId}`]: increment(delta)
         });
+
+        await writeAdminLog(sheetId, 'item_modify', { itemId, delta });
     };
 
-    root.querySelector('#giveSilverBtn').onclick = async () => {
-        await updateDoc(doc(db, 'sheets', sheetId), {
-            'inventory.silver': increment(Number(adminSilverValue.value))
+    $('#giveSilverBtn').onclick = async () => {
+        const delta = Number($('#adminSilverValue').value);
+        if (!delta) return;
+
+        const ref = doc(db, 'sheets', sheetId);
+        const snap = await getDoc(ref);
+        const cur = snap.data().inventory?.silver || 0;
+
+        await updateDoc(ref, {
+            'inventory.silver': clamp(cur + delta, 0)
         });
+
+        await writeAdminLog(sheetId, 'silver_modify', { delta });
     };
 
-    root.querySelector('#changeSpiritBtn').onclick = async () => {
-        await updateDoc(doc(db, 'sheets', sheetId), {
-            'stats.spirit': increment(Number(adminSpiritDelta.value))
+    $('#changeStatBtn').onclick = async () => {
+        const key = $('#adminStatKey').value;
+        const delta = Number($('#adminStatDelta').value);
+        if (!key || !delta) return;
+
+        const ref = doc(db, 'sheets', sheetId);
+        const snap = await getDoc(ref);
+        const cur = snap.data().stats[key] || 1;
+
+        await updateDoc(ref, {
+            [`stats.${key}`]: clamp(cur + delta, 1)
         });
+
+        await writeAdminLog(sheetId, 'stat_modify', { key, delta });
     };
 
-    root.querySelector('#addInjuryBtn').onclick = async () => {
-        await updateDoc(doc(db, 'sheets', sheetId), {
-            [`status.injuries.${adminInjuryPart.value}`]:
-                increment(Number(adminInjuryValue.value))
+    $('#changeSpiritBtn').onclick = async () => {
+        const delta = Number($('#adminSpiritDelta').value);
+
+        const ref = doc(db, 'sheets', sheetId);
+        const snap = await getDoc(ref);
+        const cur = snap.data().stats.spirit || 0;
+
+        await updateDoc(ref, {
+            'stats.spirit': clamp(cur + delta, 0)
         });
+
+        await writeAdminLog(sheetId, 'spirit_modify', { delta });
     };
 
-    root.querySelector('#addContaminationBtn').onclick = async () => {
-        await updateDoc(doc(db, 'sheets', sheetId), {
-            'status.contamination': increment(Number(adminContaminationValue.value))
+    $('#addInjuryBtn').onclick = async () => {
+        const part = $('#adminInjuryPart').value;
+        const delta = Number($('#adminInjuryValue').value);
+
+        const ref = doc(db, 'sheets', sheetId);
+        const snap = await getDoc(ref);
+        const cur = snap.data().status?.injuries?.[part] || 0;
+
+        await updateDoc(ref, {
+            [`status.injuries.${part}`]: clamp(cur + delta, 0)
         });
+
+        await writeAdminLog(sheetId, 'injury_modify', { part, delta });
     };
 
-    root.querySelector('#changeStateBtn').onclick = async () => {
-        const state = adminState.value;
+    $('#addContaminationBtn').onclick = async () => {
+        const delta = Number($('#adminContaminationValue').value);
+
+        const ref = doc(db, 'sheets', sheetId);
+        const snap = await getDoc(ref);
+        const cur = snap.data().status?.contamination || 0;
+
+        await updateDoc(ref, {
+            'status.contamination': clamp(cur + delta, 0)
+        });
+
+        await writeAdminLog(sheetId, 'contamination_modify', { delta });
+    };
+
+    $('#changeStateBtn').onclick = async () => {
+        const state = $('#adminState').value;
+
         await updateDoc(doc(db, 'sheets', sheetId), {
             'status.state': state,
             ...(state === 'missing'
                 ? { disappearedAt: serverTimestamp() }
-                : {})
+                : { disappearedAt: deleteField() })
         });
+
+        await writeAdminLog(sheetId, 'state_change', { state });
+    };
+
+    /* 아이템 DB 추가 */
+    $('#addItemDbBtn').onclick = async () => {
+        const name = $('#newItemName').value.trim();
+        const desc = $('#newItemDesc').value.trim();
+        if (!name) return;
+
+        await addDoc(collection(db, 'items'), {
+            name,
+            desc,
+            createdAt: serverTimestamp()
+        });
+
+        await loadAdminItems(root);
+    };
+
+    /* 아이템 DB 삭제 */
+    $('#deleteItemDbBtn').onclick = async () => {
+        const id = $('#deleteItemSelect').value;
+        if (!id) return;
+
+        await deleteDoc(doc(db, 'items', id));
+        await loadAdminItems(root);
     };
 }
 
