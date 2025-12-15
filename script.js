@@ -1775,7 +1775,25 @@ async function renderMapCard(mapDoc) {
     `;
 
     // 클릭하면 팝업 열기
-    el.addEventListener('click', () => openMapPopup(mapId));
+    el.addEventListener('click', async () => {
+        // 기존 내용 초기화
+        contentEl.innerHTML = '';
+
+        // 뒤로가기 버튼 생성
+        const backBtn = document.createElement('button');
+        backBtn.textContent = '← 뒤로가기';
+        backBtn.className = 'btn';
+        backBtn.style.marginBottom = '20px';
+        backBtn.addEventListener('click', () => renderMap()); // 다시 그리드 화면
+
+        contentEl.appendChild(backBtn);
+
+        // 상세 카드 렌더
+        const detailCard = await renderMapCard(mapDoc); 
+        // 클릭 이벤트 제거해서 무한 재귀 방지
+        detailCard.removeEventListener('click', () => openMapPopup(mapId));
+        contentEl.appendChild(detailCard);
+    });
 
     const teamsContainer = el.querySelector('.map-right-teams');
     const commentsArea = el.querySelector('.map-comments-section');
@@ -1817,6 +1835,14 @@ async function openMapPopup(mapId, containerId = 'mapMainContainer') {
 
     container.innerHTML = '';
 
+    // 뒤로가기 버튼
+    const backBtn = document.createElement('button');
+    backBtn.textContent = '← 뒤로가기';
+    backBtn.className = 'btn';
+    backBtn.style.marginBottom = '20px';
+    backBtn.addEventListener('click', () => renderMap()); // 맵 그리드로 복귀
+    container.appendChild(backBtn);
+
     const wrap = document.createElement('div');
     wrap.className = 'map-detail-wrap';
     wrap.style.display = 'grid';
@@ -1837,7 +1863,6 @@ async function openMapPopup(mapId, containerId = 'mapMainContainer') {
     if (await isAdminUser()) {
         const editBtn = document.createElement('button');
         editBtn.textContent = '편집';
-        // 기존 popup 대신 inline edit 호출
         editBtn.addEventListener('click', () => openMapInlineEdit(mapId, data));
         infoSection.appendChild(editBtn);
     }
