@@ -3181,7 +3181,7 @@ async function renderMe() {
         if (isAdmin) {
             contentEl.innerHTML = '';
             contentEl.appendChild(
-                await renderAdminControlPanel(null)
+                await renderAdminControlPanel()
             );
             return;
         }
@@ -3252,14 +3252,75 @@ async function writeAdminLog(sheetId, action, detail = {}) {
     });
 }
 
-async function renderAdminControlPanel(sheetData, sheetId) {    
+async function renderAdminControlPanel() {
     const card = document.createElement('div');
     card.className = 'card admin-control-panel';
+
+    card.innerHTML = `
+        <h2>관리자 조작 패널</h2>
+
+        <section>
+            <h3>대상 선택</h3>
+            <select id="adminTargetSheet">
+                <option value="">선택 안 함</option>
+            </select>
+        </section>
+
+        <hr>
+
+        <div id="adminActionArea" class="muted">
+            대상 시트를 선택해야 조작할 수 있음
+        </div>
+    `;
+
+    await loadAdminTargetSheets(card);
+    bindAdminTargetChange(card);
+
+    return card;
+}
+
+async function loadAdminTargetSheets(root) {
+    const sel = root.querySelector('#adminTargetSheet');
+    const snap = await getDocs(collection(db, 'sheets'));
+
+    snap.forEach(d => {
+        const name = d.data().personnel?.name || d.id;
+        const opt = document.createElement('option');
+        opt.value = d.id;
+        opt.textContent = `${name} (${d.id})`;
+        sel.appendChild(opt);
+    });
+}
+
+function bindAdminTargetChange(root) {
+    const sel = root.querySelector('#adminTargetSheet');
+    const area = root.querySelector('#adminActionArea');
+
+    sel.onchange = async () => {
+        const sheetId = sel.value;
+
+        if (!sheetId) {
+            area.className = 'muted';
+            area.innerHTML = '대상 시트를 선택해야 조작할 수 있음';
+            return;
+        }
+
+        const sheetData = await fetchSheetData(sheetId);
+
+        area.className = '';
+        area.innerHTML = '';
+        area.appendChild(
+            await renderAdminActionPanel(sheetData, sheetId)
+        );
+    };
+}
+
+async function renderAdminActionPanel(sheetData, sheetId) {
+    const card = document.createElement('div');
 
     const name = sheetData.personnel?.name || sheetId;
 
     card.innerHTML = `
-        <h2>관리자 조작 패널</h2>
         <p class="muted">대상: <strong>${name}</strong> (${sheetId})</p>
 
         <section>
@@ -3329,6 +3390,7 @@ async function renderAdminControlPanel(sheetData, sheetId) {
 
     return card;
 }
+
 
 function fillStatKeys(root, stats) {
     const sel = root.querySelector('#adminStatKey');
