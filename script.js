@@ -3601,14 +3601,17 @@ function renderPersonnelSection(p, nickname, sheetId, isAdmin) {
             </div>
         </div>
     `;
-
-    if (isAdmin) {
-        const editBtn = document.createElement('button');
-        editBtn.className = 'btn link admin-edit-btn';
-        editBtn.textContent = '인적사항 편집';
-        editBtn.addEventListener('click', () => openPersonnelEdit(sheetId, p));
-        section.appendChild(editBtn);
-    }
+    
+    (async () => {
+        const mySheetId = await getCurrentUserSheetId();
+        if (mySheetId === sheetId) {
+            const editBtn = document.createElement('button');
+            editBtn.className = 'btn link admin-edit-btn';
+            editBtn.textContent = '인적사항 편집';
+            editBtn.addEventListener('click', () => openPersonnelEdit(sheetId, p));
+            section.appendChild(editBtn);
+        }
+    })();
 
     return section;
 }
@@ -3739,13 +3742,16 @@ function renderMeStatsSection(s, isAdmin, sheetId) {
         </div>
     `;
 
-    if (isAdmin) {
-        const editBtn = document.createElement('button');
-        editBtn.className = 'btn link admin-edit-btn';
-        editBtn.textContent = '스테이터스 편집';
-        editBtn.addEventListener('click', () => openStatsEdit(sheetId, s));
-        section.appendChild(editBtn);
-    }
+    (async () => {
+        const mySheetId = await getCurrentUserSheetId();
+        if (mySheetId === sheetId) {
+            const editBtn = document.createElement('button');
+            editBtn.className = 'btn link admin-edit-btn';
+            editBtn.textContent = '스테이터스 편집';
+            editBtn.addEventListener('click', () => openStatsEdit(sheetId, s));
+            section.appendChild(editBtn);
+        }
+    })();
 
     // DOM에 삽입 후 차트 초기화
     setTimeout(() => initStatsRadarCharts(s), 0);
