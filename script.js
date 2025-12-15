@@ -133,28 +133,65 @@ const DANGER_TYPES = {
 
 const SHAPE_TYPES = ['P', 'F', 'O', 'C'];
 
-const BASE_HP = 100;
-const BASE_MP = 50;
-const HP_PER_STR = 15;
-const HP_PER_HEALTH = 20;
-const MP_PER_AGI = 5;
-const MP_PER_MIND = 10;
-const ATTACK_PER_STR = 8;
-const ATTACK_PER_AGI = 5;
-const M_ATTACK_PER_MIND = 10;
+// 랜덤 주사위
+function rollDice(count, sides) {
+    let total = 0;
+    for (let i = 0; i < count; i++) {
+        total += Math.floor(Math.random() * sides) + 1;
+    }
+    return total;
+}
 
-function calculateAbyssStats(stats) {
+// 스텟 기반 배율: 스텟 3 기준 1.0, +0.2씩 증가, -0.2씩 감소
+function getStatMultiplier(stat) {
+    if (!stat || typeof stat !== 'number') return 1.0;
+    return 1.0 + (stat - 3) * 0.2;
+}
+
+/**
+ * 아비스 스탯 계산 (체력, 정신력, 공격, 방어, 침식)
+ * @param {object} stats - strength, agility, health, mind 등 스탯
+ * @param {number} currentSpirit - 현재 정신력
+ * @param {number} targetSpirit - 상대 정신력
+ */
+function calculateAbyssStats(stats, currentSpirit = null, targetSpirit = null) {
     const str = stats.strength || 0;
-    const health = stats.health || 0;
     const agi = stats.agility || 0;
+    const health = stats.health || 0;
     const mind = stats.mind || 0;
 
-    const maxHp = BASE_HP + (str * HP_PER_STR) + (health * HP_PER_HEALTH);
-    const maxMp = BASE_MP + (agi * MP_PER_AGI) + (mind * MP_PER_MIND);
-    const physicalAttack = ATTACK_PER_STR * str + ATTACK_PER_AGI * agi;
-    const mentalAttack = M_ATTACK_PER_MIND * mind;
+    // 최대 체력/정신력
+    const maxHp = (health * 10) + 50;
+    const maxMp = (mind * 10) + 50;
 
-    return { maxHp, maxMp, physicalAttack, mentalAttack };
+    // 배율 계산
+    const strMultiplier = getStatMultiplier(str);
+    const agiMultiplier = getStatMultiplier(agi);
+
+    // 공격: (1d12+12) × 근력 배율
+    const physicalAttack = (rollDice(1, 12) + 12) * strMultiplier;
+
+    // 방어 배율: 받은 데미지 × 민첩 배율
+    const defenseMultiplier = agiMultiplier;
+
+    // 침식 저항: (정신력×10)+15
+    const erosionResistance = (mind * 10) + 15;
+
+    // 침식 데미지: (4d6+5) × (1 + (100 - 현재 정신력) * 0.002) × (1 + 상대 정신력 * 0.02)
+    let erosionDamage = null;
+    if (currentSpirit !== null && targetSpirit !== null) {
+        const baseErosion = rollDice(4, 6) + 5;
+        erosionDamage = baseErosion * (1 + (100 - currentSpirit) * 0.002) * (1 + targetSpirit * 0.02);
+    }
+
+    return {
+        maxHp,
+        maxMp,
+        physicalAttack,
+        defenseMultiplier,
+        erosionResistance,
+        mentalAttack
+    };
 }
 
 /* =========================================================
@@ -1442,7 +1479,7 @@ async function renderStaff() {
         item.addEventListener("click", () => {
             // 클릭 시 기존 내용 초기화 후 상세 화면만 렌더
             contentEl.innerHTML = '';
-            renderProfileCard(docSnap.id, sheet);
+            renderProfileCard(docSnap.id, sheet, contentEl);
         });
 
         item.innerHTML = `
@@ -1464,17 +1501,6 @@ async function renderStaff() {
 async function renderProfileCard(docId, data, container) {
     const p = data.personnel || {};
     const s = data.stats || {};
-
-    if (!container) {
-        container = document.createElement('div');
-        container.id = 'profileCardContainer';
-        container.style.display = 'flex';
-        container.style.flexDirection = 'column';
-        container.style.alignItems = 'center';
-        container.style.padding = '20px';
-        container.style.gap = '20px';
-        document.body.appendChild(container);
-    }
 
     // 기존 카드 제거
     const existingCard = container.querySelector('.profile-card');
@@ -3501,14 +3527,61 @@ function renderStatusSection(s, spiritStat, isAdmin, sheetId) {
         torso: '상체', rightArm: '오른팔', rightHand: '오른손', rightLeg: '오른다리', rightFoot: '오른발'
     };
 
-    const spiritPercent = (s.currentSpirit / s.maxSpirit) * 100;
+    // --- 체력 상태 계산 ---
+    const maxHP = [60,70,80,90,100][s.level-1] || 100;
 
-    const totalInjury = injuryParts.reduce((sum, key) => sum + s.injuries[key], 0);
-    const totalContamination = injuryParts.reduce((sum, key) => sum + s.contaminations[key], 0);
-    let physicalStatusText = '양호';
-    if (totalInjury > 50) physicalStatusText = '불안정';
-    if (totalInjury > 100) physicalStatusText = '심각';
-    if (totalInjury === 0 && totalContamination === 0) physicalStatusText = '여유로움';
+    const critHP = s.injuries.head + s.injuries.rightEye; // 치명 부위
+    const minorHP = Math.round(
+        s.injuries.neck*0.4 + s.injuries.leftEye*0.1 + s.injuries.leftArm*0.1 +
+        s.injuries.leftHand*0.1 + s.injuries.leftLeg*0.1 + s.injuries.leftFoot*0.1 +
+        s.injuries.torso*0.1 + s.injuries.rightArm*0.15 + s.injuries.rightHand*0.15 +
+        s.injuries.rightLeg*0.15 + s.injuries.rightFoot*0.15
+    );
+
+    const totalHP = critHP + minorHP;
+
+    let physicalStatusText = "문제 없음";
+    if (totalHP >= maxHP) physicalStatusText = "사망";
+    else if (totalHP >= maxHP*0.9) physicalStatusText = "사망 직전";
+    else if (totalHP >= maxHP*0.7) physicalStatusText = "심각한 중상";
+    else if (totalHP >= maxHP*0.5) physicalStatusText = "중상";
+    else if (totalHP >= maxHP*0.3) physicalStatusText = "부상";
+    else if (totalHP > 0) physicalStatusText = "사소한 부상";
+
+    // --- 오염 상태 계산 ---
+    const contaminationValue = Math.round(
+        s.contaminations.head +
+        s.contaminations.neck*0.8 +
+        s.contaminations.leftEye*0.1 +
+        s.contaminations.rightEye*0.1 +
+        s.contaminations.rightEye + 
+        s.contaminations.leftArm*0.2 +
+        s.contaminations.leftHand*0.1 +
+        s.contaminations.leftLeg*0.2 +
+        s.contaminations.leftFoot*0.1 +
+        s.contaminations.torso*0.2 +
+        s.contaminations.rightArm*0.1 +
+        s.contaminations.rightHand*0.2 +
+        s.contaminations.rightLeg*0.1 +
+        s.contaminations.rightFoot*0.1
+    );
+
+    let contaminationText = "문제 없음";
+    if (contaminationValue >= maxHP) contaminationText = "완전한 오염";
+    else if (contaminationValue >= maxHP*0.9) contaminationText = "심각한 오염";
+    else if (contaminationValue >= maxHP*0.7) contaminationText = "심화된 오염";
+    else if (contaminationValue >= maxHP*0.5) contaminationText = "오염";
+    else if (contaminationValue > 0) contaminationText = "사소한 오염";
+
+    // --- 정신력 구간 ---
+    const spiritPercent = (s.currentSpirit / s.maxSpirit) * 100;
+    let spiritStatusText = "";
+    if (spiritPercent >= 90) spiritStatusText = "극한의 집중";
+    else if (spiritPercent >= 75) spiritStatusText = "매우 안정";
+    else if (spiritPercent >= 60) spiritStatusText = "안정";
+    else if (spiritPercent >= 45) spiritStatusText = "불안정";
+    else if (spiritPercent >= 20) spiritStatusText = "위태로움";
+    else spiritStatusText = "붕괴 직전";
 
     const humanIconHtml = renderHumanIcon(s.injuries, s.contaminations);
 
@@ -3531,17 +3604,17 @@ function renderStatusSection(s, spiritStat, isAdmin, sheetId) {
         <div style="display:flex; align-items:center; gap:20px; margin-bottom:20px;">
             <div style="flex-grow:1;">
                 <div style="font-weight:bold; margin-bottom:5px;">
-                    현재 정신력: ${s.currentSpirit} / ${s.maxSpirit} (정신력 스탯: ${spiritStat})
+                    정신력: ${s.currentSpirit} / ${s.maxSpirit} (${spiritStatusText})
                 </div>
                 <div style="background: rgba(255,255,255,0.1); height:15px; border-radius:4px; overflow:hidden;">
                     <div style="width:${spiritPercent}%; background:${spiritPercent>30?'green':'red'}; height:100%; transition:width 0.3s;"></div>
                 </div>
             </div>
             <div style="min-width:200px; text-align:right;">
-                <div style="color:${physicalStatusText==='여유로움'?'lime':'yellow'}; font-weight:bold;">
-                    현재 신체 상태는 '${physicalStatusText}'입니다.
+                <div style="color:${physicalStatusText==='문제 없음'?'lime':'yellow'}; font-weight:bold;">
+                    현재 신체 상태: '${physicalStatusText}'
                 </div>
-                <div>현재 오염도: ${s.currentContamination}%</div>
+                <div>현재 오염도: ${contaminationText}</div>
                 <div>현재 침식도: ${s.currentErosion}%</div>
             </div>
         </div>
@@ -3572,8 +3645,6 @@ function renderStatusSection(s, spiritStat, isAdmin, sheetId) {
             { label:'소지하고 있는 소지품 수', value: s.stats.itemsCarried },
             { label:'심연체를 제압한 횟수', value: s.stats.abyssDefeated },
             { label:'소지 은화', value: s.stats.silverCarried },
-            { label:'현재 체력', value: s.currentHP },
-            { label:'현재 정신력', value: s.currentSpirit },
         ], isAdmin, true)}
     `;
 
@@ -3587,6 +3658,7 @@ function renderStatusSection(s, spiritStat, isAdmin, sheetId) {
 
     return section;
 }
+
 
 function openStatusEdit(sheetId, s) {
     const container = document.getElementById(`status-section-${sheetId}`);
@@ -3751,6 +3823,92 @@ async function fetchItemDescription(itemName) {
     return "설명 없음 (DB 로드 실패)";
 }
 
+// 전체 체력 상태 계산 (부위별 부상도 기반)
+function calculatePhysicalStatus(injuries, healthStat) {
+    // healthStat은 1~5 같은 값
+    const maxHPArr = [60, 70, 80, 90, 100];
+    const maxHP = maxHPArr[healthStat - 1] || 100;
+
+    // 치명적 부위: 머리, 목
+    const crit = injuries.head + injuries.neck;
+
+    // 나머지 부위 가중치
+    const minor = Math.round(
+        injuries.leftEye*0.4 + injuries.rightEye*0.1 +
+        injuries.leftArm*0.1 + injuries.leftHand*0.1 +
+        injuries.rightArm*0.1 + injuries.rightHand*0.15 +
+        injuries.torso*0.15 + injuries.leftLeg*0.15 + injuries.leftFoot*0.15 +
+        injuries.rightLeg*0.15 + injuries.rightFoot*0.15
+    );
+
+    const v = crit + minor;
+
+    const thrDeath = maxHP;
+    const thrCritical = maxHP * 0.9;
+    const thrMoreSerious = maxHP * 0.7;
+    const thrSerious = maxHP * 0.5;
+    const thrInjury = maxHP * 0.3;
+
+    let status = '';
+    if (v >= thrDeath) status = '사망';
+    else if (v >= thrCritical) status = '사망 직전';
+    else if (v >= thrMoreSerious) status = '심각한 중상';
+    else if (v >= thrSerious) status = '중상';
+    else if (v >= thrInjury) status = '부상';
+    else if (v > 0) status = '사소한 부상';
+    else status = '문제 없음';
+
+    return status;
+}
+
+// 전체 오염 상태 계산 (부위별 오염도 기반)
+function calculateContaminationStatus(contaminations, healthStat) {
+    const maxHPArr = [60, 70, 80, 90, 100];
+    const maxHP = maxHPArr[healthStat - 1] || 100;
+
+    const v = Math.round(
+        contaminations.head +
+        contaminations.leftEye*0.8 +
+        contaminations.rightEye*0.1 +
+        contaminations.leftArm*0.1 +
+        contaminations.neck +
+        contaminations.rightArm*0.2 +
+        contaminations.rightHand*0.1 +
+        contaminations.leftHand*0.2 +
+        contaminations.torso*0.1 +
+        contaminations.leftLeg*0.2 +
+        contaminations.leftFoot*0.1 +
+        contaminations.rightLeg*0.2 +
+        contaminations.rightFoot*0.1
+    );
+
+    const thrFull = maxHP;
+    const thrSevere = maxHP * 0.9;
+    const thrDeep = maxHP * 0.7;
+    const thrPolluted = maxHP * 0.5;
+
+    let status = '';
+    if (v >= thrFull) status = '완전한 오염';
+    else if (v >= thrSevere) status = '심각한 오염';
+    else if (v >= thrDeep) status = '심화된 오염';
+    else if (v >= thrPolluted) status = '오염';
+    else if (v > 0) status = '사소한 오염';
+    else status = '문제 없음';
+
+    return status;
+}
+
+// 정신력 상태 (6개 구간)
+function calculateSpiritStatus(spirit) {
+    if (spirit >= 90) return '완전한 정신력';
+    if (spirit >= 75) return '양호한 정신력';
+    if (spirit >= 60) return '보통 수준';
+    if (spirit >= 40) return '주의 필요';
+    if (spirit >= 20) return '위험';
+    return '정신 붕괴 직전';
+}
+
+
 /* =========================================================
     새 시트 만들기
 ========================================================= */
@@ -3792,9 +3950,9 @@ function createDefaultSheet(uid, nickname) {
             items: []
         },
         status: {
-            currentSpirit: 60,
+            currentSpirit: maxSpirit,
             maxSpirit: (10 * (baseStats.spirit || 1)) + 50,
-            currentHP: 60,
+            currentHP: maxSpirit,
             maxHP: (10 * (baseStats.spirit || 1)) + 50,
             injuries: { ...initialInjuryState },
             contaminations: { ...initialInjuryState },
