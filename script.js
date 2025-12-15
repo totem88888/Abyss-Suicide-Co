@@ -3643,37 +3643,45 @@ function openPersonnelEdit(sheetId, p) {
     `;
 
     container.querySelector('#cancel-personnel').onclick = () => {
-        renderPersonnelSection(p, p.name, sheetId, true); // 원래 렌더링
+        container.replaceWith(
+            renderPersonnelSection(p, p.name, sheetId, false)
+        );
     };
 
     container.querySelector('#save-personnel').onclick = async () => {
         const updated = {
             ...p,
-            name: document.getElementById('edit-name').value,
-            gender: document.getElementById('edit-gender').value,
-            age: parseInt(document.getElementById('edit-age').value),
-            height: parseInt(document.getElementById('edit-height').value),
-            weight: parseInt(document.getElementById('edit-weight').value),
-            nationality: document.getElementById('edit-nationality').value,
-            education: document.getElementById('edit-education').value,
-            career: document.getElementById('edit-career').value,
-            family: document.getElementById('edit-family').value,
-            contact: document.getElementById('edit-contact').value,
-            marriage: document.getElementById('edit-marriage').value,
-            medical: document.getElementById('edit-medical').value,
-            criminal: document.getElementById('edit-criminal').value,
-            etc: document.getElementById('edit-etc').value
+            name: editValue('edit-name'),
+            gender: editValue('edit-gender'),
+            age: Number(editValue('edit-age')),
+            height: Number(editValue('edit-height')),
+            weight: Number(editValue('edit-weight')),
+            nationality: editValue('edit-nationality'),
+            education: editValue('edit-education'),
+            career: editValue('edit-career'),
+            family: editValue('edit-family'),
+            contact: editValue('edit-contact'),
+            marriage: editValue('edit-marriage'),
+            medical: editValue('edit-medical'),
+            criminal: editValue('edit-criminal'),
+            etc: editValue('edit-etc')
         };
 
         try {
             await saveSheetData(sheetId, { personnel: updated });
-            renderPersonnelSection(updated, updated.name, sheetId, true);
+            container.replaceWith(
+                renderPersonnelSection(updated, updated.name, sheetId, false)
+            );
             showMessage('인적사항이 저장되었습니다.', 'success');
-        } catch(e) {
+        } catch (e) {
             console.error(e);
             showMessage('저장 실패', 'error');
         }
     };
+}
+
+function editValue(id) {
+    return document.getElementById(id)?.value ?? '';
 }
 
 // 스텟
@@ -3789,6 +3797,16 @@ function openStatsEdit(sheetId, s) {
             showMessage('저장 실패', 'error');
         }
     };
+}
+
+async function saveSheetData(sheetId, updateData) {
+    if (!sheetId) {
+        throw new Error('sheetId is required');
+    }
+
+    const ref = doc(db, 'sheets', sheetId);
+
+    await updateDoc(ref, updateData);
 }
 
 async function renderInventorySection(inv, isAdmin, sheetId) {
