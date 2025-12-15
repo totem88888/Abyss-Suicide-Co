@@ -862,7 +862,6 @@ signupBth.addEventListener('click', async ()=> {
             nickname: nick,
             colorHex: randomHex(),
             decorations: [],
-            silver: 0,
             createdAt: serverTimestamp()
         });
         await setDoc(doc(db, 'staff', uid), {
@@ -3905,6 +3904,9 @@ function createDefaultSheet(uid, nickname) {
         .filter(k => k !== 'head')
         .reduce((acc, key) => ({ ...acc, [key]: false }), {});
 
+    const maxSpirit = (10 * (baseStats.spirit || 1)) + 50;
+    const maxHP = (10 * (baseStats.spirit || 1)) + 50;
+
     return {
         personnel: {
             name: nickname || '인턴 사원',
@@ -3930,9 +3932,9 @@ function createDefaultSheet(uid, nickname) {
         },
         status: {
             currentSpirit: maxSpirit,
-            maxSpirit: (10 * (baseStats.spirit || 1)) + 50,
-            currentHP: maxSpirit,
-            maxHP: (10 * (baseStats.spirit || 1)) + 50,
+            maxSpirit: maxSpirit,
+            currentHP: maxHP,
+            maxHP: maxHP,
             injuries: { ...initialInjuryState },
             contaminations: { ...initialInjuryState },
             prosthetics: { ...prostheticsState },
