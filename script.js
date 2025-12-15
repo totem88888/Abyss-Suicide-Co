@@ -1826,7 +1826,6 @@ async function openMapPopup(mapId, containerOrId = 'mapMainContainer') {
     const data = snap.data();
 
     let container;
-
     if (typeof containerOrId === 'string') {
         container = document.getElementById(containerOrId);
         if (!container) {
@@ -1835,49 +1834,51 @@ async function openMapPopup(mapId, containerOrId = 'mapMainContainer') {
             document.body.appendChild(container);
         }
     } else {
-        container = containerOrId; // ← contentEl 그대로 사용
+        container = containerOrId;
     }
 
     container.innerHTML = '';
 
-    // 뒤로가기 버튼
+    // 뒤로가기
     const backBtn = document.createElement('button');
     backBtn.textContent = '← 뒤로가기';
     backBtn.className = 'btn';
     backBtn.style.marginBottom = '20px';
-    backBtn.addEventListener('click', () => renderMap()); // 맵 그리드로 복귀
+    backBtn.addEventListener('click', () => renderMap());
     container.appendChild(backBtn);
 
     const wrap = document.createElement('div');
-    wrap.className = 'map-detail-wrap';
-    wrap.style.display = 'grid';
-    wrap.style.gridTemplateColumns = '1fr 1fr';
-    wrap.style.gridTemplateRows = 'auto auto';
+    wrap.style.display = 'flex';
+    wrap.style.flexDirection = 'column';
     wrap.style.gap = '20px';
 
-    const infoSection = document.createElement('div');
-    infoSection.className = 'map-info';
-    infoSection.innerHTML = `
+    /* ================= 카드 1 : 맵 소개 ================= */
+    const infoCard = document.createElement('div');
+    infoCard.className = 'card map-info-card';
+    infoCard.innerHTML = `
         <img src="${data.image || DEFAULT_MAP_IMAGE}" style="width:100%; border-radius:6px;">
         <h3>${data.name || '이름 없음'}</h3>
         <p>${data.description || ''}</p>
         <div>위험도: ${renderDangerStars(data.danger || 1)}</div>
-        <div>출현: ${Array.isArray(data.types)?data.types.join(', '):data.types||''}</div>
+        <div>출현: ${Array.isArray(data.types) ? data.types.join(', ') : data.types || ''}</div>
     `;
 
     if (await isAdminUser()) {
         const editBtn = document.createElement('button');
         editBtn.textContent = '편집';
+        editBtn.className = 'btn';
         editBtn.addEventListener('click', () => openMapInlineEdit(mapId, data));
-        infoSection.appendChild(editBtn);
+        infoCard.appendChild(editBtn);
     }
 
-    const gridTeamsSection = document.createElement('div');
-    gridTeamsSection.style.display = 'flex';
-    gridTeamsSection.style.gap = '20px';
+    /* ================= 카드 2 : 격자 + 탐사팀 ================= */
+    const exploreCard = document.createElement('div');
+    exploreCard.className = 'card map-explore-card';
+    exploreCard.style.display = 'flex';
+    exploreCard.style.gap = '20px';
 
+    // 격자
     const gridContainer = document.createElement('div');
-    gridContainer.style.flex = '1';
     const rows = data.grid?.rows || 8;
     const cols = data.grid?.cols || 8;
     gridContainer.style.display = 'grid';
@@ -1893,8 +1894,10 @@ async function openMapPopup(mapId, containerOrId = 'mapMainContainer') {
         }
     }
 
+    // 탐사팀
     const teamsContainer = document.createElement('div');
-    teamsContainer.style.flex = '1';
+    teamsContainer.style.minWidth = '200px';
+
     for (const v of data.visits || []) {
         const teamEl = document.createElement('div');
         teamEl.textContent = v.teamName;
@@ -1903,15 +1906,18 @@ async function openMapPopup(mapId, containerOrId = 'mapMainContainer') {
         teamsContainer.appendChild(teamEl);
     }
 
-    gridTeamsSection.appendChild(gridContainer);
-    gridTeamsSection.appendChild(teamsContainer);
+    exploreCard.appendChild(gridContainer);
+    exploreCard.appendChild(teamsContainer);
 
-    const commentsSection = document.createElement('div');
-    commentsSection.appendChild(renderCommentCard({ id: mapId, dbCollection: 'maps' }));
+    /* ================= 카드 3 : 댓글 ================= */
+    const commentCard = document.createElement('div');
+    commentCard.className = 'card map-comment-card';
+    commentCard.appendChild(renderCommentCard({ id: mapId, dbCollection: 'maps' }));
 
-    wrap.appendChild(infoSection);
-    wrap.appendChild(gridTeamsSection);
-    wrap.appendChild(commentsSection);
+    /* ================= 조립 ================= */
+    wrap.appendChild(infoCard);
+    wrap.appendChild(exploreCard);
+    wrap.appendChild(commentCard);
 
     container.appendChild(wrap);
 }
