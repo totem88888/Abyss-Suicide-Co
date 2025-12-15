@@ -1768,7 +1768,6 @@ async function renderMapCard(mapDoc) {
     const danger = data.danger || 1;
     const types = Array.isArray(data.types) ? data.types.join(', ') : (data.types || '');
 
-    // 카드 생성
     const el = document.createElement('div');
     el.className = 'map-card card';
     el.style.transition = 'transform 0.2s';
@@ -1777,12 +1776,9 @@ async function renderMapCard(mapDoc) {
 
     el.innerHTML = `
         <div class="map-card-inner" data-id="${mapId}" style="display:flex; gap:20px; align-items:flex-start;">
-            <!-- 왼쪽: 이미지 -->
             <div class="map-media" style="flex:1;">
                 <img class="map-img" src="${img}" alt="${name}" style="width:100%; border-radius:8px; object-fit:cover;">
             </div>
-
-            <!-- 오른쪽: 정보 -->
             <div class="map-info-section" style="flex:2; display:flex; flex-direction:column; gap:10px;">
                 <h3 class="map-name">${name}</h3>
                 <p class="map-description">${data.description || ''}</p>
@@ -1790,36 +1786,14 @@ async function renderMapCard(mapDoc) {
                     <div class="map-danger">${renderDangerStars(danger)}</div>
                     <div class="map-types">출현: ${types}</div>
                 </div>
-
-                <!-- 탐사팀 목록 -->
                 <div class="map-right-teams" style="margin-top:10px;"></div>
-
-                <!-- 댓글 영역 -->
                 <div class="map-comments-section" style="margin-top:10px;"></div>
             </div>
         </div>
     `;
 
-    // 클릭하면 팝업 열기
-    el.addEventListener('click', async () => {
-        // 기존 내용 초기화
-        contentEl.innerHTML = '';
-
-        // 뒤로가기 버튼 생성
-        const backBtn = document.createElement('button');
-        backBtn.textContent = '← 뒤로가기';
-        backBtn.className = 'btn';
-        backBtn.style.marginBottom = '20px';
-        backBtn.addEventListener('click', () => renderMap()); // 다시 그리드 화면
-
-        contentEl.appendChild(backBtn);
-
-        // 상세 카드 렌더
-        const detailCard = await renderMapCard(mapDoc); 
-        // 클릭 이벤트 제거해서 무한 재귀 방지
-        detailCard.removeEventListener('click', () => openMapPopup(mapId));
-        contentEl.appendChild(detailCard);
-    });
+    // 클릭하면 바로 openMapPopup 호출
+    el.addEventListener('click', () => openMapPopup(mapId, contentEl));
 
     const teamsContainer = el.querySelector('.map-right-teams');
     const commentsArea = el.querySelector('.map-comments-section');
@@ -1831,7 +1805,10 @@ async function renderMapCard(mapDoc) {
         teamEl.textContent = v.teamName;
         teamEl.style.color = v.colorHex || '#fff';
         teamEl.className = 'explore-team';
-        teamEl.addEventListener('click', () => showTeamVisit(v, null)); // 격자 제거했으므로 null 전달
+        teamEl.addEventListener('click', e => {
+            e.stopPropagation(); // 클릭 전파 막기
+            showTeamVisit(v, null);
+        });
         teamsContainer.appendChild(teamEl);
     }
 
@@ -1841,6 +1818,7 @@ async function renderMapCard(mapDoc) {
 
     return el;
 }
+
 
 // 팝업 렌더링
 async function openMapPopup(mapId, containerId = 'mapMainContainer') {
