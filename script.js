@@ -3382,8 +3382,25 @@ async function renderAdminActionPanel(sheetData, sheetId) {
         </section>
 
         <section>
-            <h3>오염도</h3>
-            <input type="number" id="adminContaminationValue" value="5">
+            <h3>오염도 (랜덤 분배)</h3>
+
+            <label>
+                <input type="checkbox" id="contamSelectAll" checked>
+                전체 부위 포함
+            </label>
+
+            <div id="adminContamParts" class="injury-checkboxes"></div>
+
+            <label>
+                선택 부위 수
+                <input type="number" id="adminContamPickCount" value="1" min="1">
+            </label>
+
+            <label>
+                총 오염도
+                <input type="number" id="adminContaminationValue" value="5">
+            </label>
+
             <button id="addContaminationBtn">적용</button>
         </section>
 
@@ -3444,10 +3461,10 @@ function distributeRandomInjury(parts, pickCount, totalValue) {
 function renderAdminTargetStatus(data) {
     const inv = data.inventory || {};
     const status = data.status || {};
-    const stats = data.stats || {};
 
     const items = inv.items || {};
     const injuries = status.injuries || {};
+    const contaminationParts = status.contaminationParts || {};
 
     const itemList = Object.keys(items).length
         ? Object.entries(items)
@@ -3461,11 +3478,18 @@ function renderAdminTargetStatus(data) {
             .join('')
         : '<li class="muted">부상 없음</li>';
 
+    const contaminationList = Object.keys(contaminationParts).length
+        ? Object.entries(contaminationParts)
+            .map(([part, val]) => `<li>${mapKeyToLabel[part] || part}: ${val}</li>`)
+            .join('')
+        : '<li class="muted">오염 없음</li>';
+
     return `
         <div class="admin-target-status">
             <p><strong>은화:</strong> ${inv.silver || 0}</p>
-            <p><strong>정신력:</strong> ${stats.spirit ?? 0}</p>
-            <p><strong>오염도:</strong> ${status.contamination || 0}</p>
+            <p><strong>정신력:</strong> ${status.currentSpirit ?? 0}</p>
+            <p><strong>오염도:</strong></p>
+            <ul>${contaminationList}</ul>
 
             <hr>
 
@@ -3477,6 +3501,7 @@ function renderAdminTargetStatus(data) {
         </div>
     `;
 }
+
 
 async function refreshAdminInventory(root, sheetId) {
     const snap = await getDoc(doc(db, 'sheets', sheetId));
@@ -3668,20 +3693,36 @@ function bindAdminControlEvents(root, sheetId) {
 
     /* 오염도 */
     $('#addContaminationBtn').onclick = async () => {
+        const parts = [...root.querySelectorAll('#adminContamParts input:checked')]
+            .map(cb => cb.value);
+
+        const pickCount = parseInt($('#adminContamPickCount').value);
+        const total = parseInt($('#adminContaminationValue').value);
+
+        if (!parts.length || pickCount <= 0 || total <= 0) {
+            showMessage('오염 설정이 올바르지 않다.', 'error');
+            return;
+        }
+
+        const distributed = distributeRandomInjury(parts, pickCount, total); // 재사용
+
         try {
-            const delta = Number($('#adminContaminationValue').value);
-
             const ref = doc(db, 'sheets', sheetId);
-            const snap = await getDoc(ref);
-            const cur = snap.data().status?.contamination || 0;
+            await runTransaction(db, async tx => {
+                const snap = await tx.get(ref);
+                const cur = snap.data().status?.contaminationParts || {};
+                const next = { ...cur };
 
-            await updateDoc(ref, {
-                'status.contamination': clamp(cur + delta, 0)
+                Object.entries(distributed).forEach(([p, v]) => {
+                    next[p] = (next[p] || 0) + v;
+                });
+
+                tx.update(ref, { 'status.contaminationParts': next });
             });
 
-            await writeAdminLog(sheetId, 'contamination_modify', { delta });
+            await writeAdminLog(sheetId, 'contamination_random', distributed);
             await refreshAdminInventory(root, sheetId);
-            adminResult(true, '오염도 적용 완료');
+            adminResult(true, '오염도 분배 완료');
         } catch (e) {
             console.error(e);
             adminResult(false, '오염도 적용 실패');
