@@ -3170,40 +3170,31 @@ function renderInlineField(f, currentValue, isEditMode, section, index = null, s
 
 
 // 진짜 내 정보 보여줌
-async function renderMe(targetSheetId = null) {
+async function renderMe() {
     const isAdmin = await isAdminUser();
-    const currentSheetId = targetSheetId || await getCurrentUserSheetId();
-
-    if (!currentSheetId) {
-        contentEl.innerHTML =
-            '<div class="card muted">로그인 후 본인의 시트를 확인하세요.</div>';
-        return;
-    }
-
-    if (targetSheetId && !isAdmin) {
-        contentEl.innerHTML =
-            '<div class="card error">권한이 없습니다.</div>';
-        return;
-    }
 
     contentEl.innerHTML =
-        '<div class="card muted">시트 로딩중...</div>';
+        '<div class="card muted">로딩중...</div>';
 
     try {
-
-        // 🔴 어드민 + 타겟 지정 → 관리자 전용
-        if (isAdmin && targetSheetId) {
-            const sheetData = await fetchSheetDataAsAdmin(currentSheetId);
-
+        // 🔴 관리자 전용 화면 (대상 없음)
+        if (isAdmin) {
             contentEl.innerHTML = '';
             contentEl.appendChild(
-                await renderAdminControlPanel(sheetData, currentSheetId)
+                await renderAdminControlPanel()
             );
             return;
         }
 
-        // 🔵 일반 사용자 시트
-        const sheetData = await fetchSheetData(currentSheetId);
+        // 🔵 일반 사용자
+        const sheetId = await getCurrentUserSheetId();
+        if (!sheetId) {
+            contentEl.innerHTML =
+                '<div class="card muted">로그인 후 본인의 시트를 확인하세요.</div>';
+            return;
+        }
+
+        const sheetData = await fetchSheetData(sheetId);
 
         contentEl.innerHTML = '';
 
@@ -3211,39 +3202,31 @@ async function renderMe(targetSheetId = null) {
         sheetContainer.className = 'char-sheet-container';
 
         const nickname =
-            sheetData.personnel?.name || currentSheetId;
+            sheetData.personnel?.name || sheetId;
 
         sheetContainer.appendChild(
             renderPersonnelSection(
                 sheetData.personnel,
                 nickname,
-                currentSheetId,
-                isAdmin
+                sheetId,
+                false
             )
         );
 
         sheetContainer.appendChild(
-            renderMeStatsSection(
-                sheetData.stats,
-                isAdmin,
-                currentSheetId
-            )
+            renderMeStatsSection(sheetData.stats, false, sheetId)
         );
 
         sheetContainer.appendChild(
-            await renderInventorySection(
-                sheetData.inventory,
-                isAdmin,
-                currentSheetId
-            )
+            await renderInventorySection(sheetData.inventory, false, sheetId)
         );
 
         sheetContainer.appendChild(
             renderStatusSection(
                 sheetData.status,
                 sheetData.stats.spirit,
-                isAdmin,
-                currentSheetId
+                false,
+                sheetId
             )
         );
 
@@ -3254,17 +3237,6 @@ async function renderMe(targetSheetId = null) {
         contentEl.innerHTML =
             '<div class="card error">시트 로드 실패</div>';
     }
-}
-
-async function fetchSheetDataAsAdmin(sheetId) {
-    const ref = doc(db, 'sheets', sheetId);
-    const snap = await getDoc(ref);
-
-    if (!snap.exists()) {
-        throw new Error('sheet not found');
-    }
-
-    return snap.data();
 }
 
 async function writeAdminLog(sheetId, action, detail = {}) {
@@ -3280,7 +3252,7 @@ async function writeAdminLog(sheetId, action, detail = {}) {
     });
 }
 
-async function renderAdminControlPanel(sheetData, sheetId) {
+async function renderAdminControlPanel(sheetData, sheetId) {    
     const card = document.createElement('div');
     card.className = 'card admin-control-panel';
 
