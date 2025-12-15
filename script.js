@@ -599,6 +599,9 @@ async function getCurrentUserSheetId() {
 }
 
 async function checkAndCreateSheet(uid, nickname) {
+    const isAdmin = await isAdminUser();
+    if (isAdmin) return; // 어드민이면 시트 생성 안 함
+
     const sheetDocRef = doc(db, 'sheets', uid);
     const sheetDoc = await getDoc(sheetDocRef);
 
@@ -610,7 +613,6 @@ async function checkAndCreateSheet(uid, nickname) {
         openNewUserCustomization(uid, nickname);
     }
 }
-
 
 /* =========================================================
     댓글
