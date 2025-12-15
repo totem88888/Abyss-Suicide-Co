@@ -1440,6 +1440,8 @@ async function renderStaff() {
         item.style.cursor = "pointer";
 
         item.addEventListener("click", () => {
+            // 클릭 시 기존 내용 초기화 후 상세 화면만 렌더
+            contentEl.innerHTML = '';
             renderProfileCard(docSnap.id, sheet);
         });
 
@@ -1683,12 +1685,13 @@ async function openInlineEdit(docId, data, cardEl) {
 // 일단 맵을 열 게 한 다
 async function renderMap() {
     contentEl.innerHTML = '<div class="card muted">맵 로딩중...</div>';
+    const isManager = await isAdminUser();
 
     try {
         const snap = await getDocs(collection(db, 'maps'));
         contentEl.innerHTML = '';
 
-        if (await isAdminUser()) {
+        if (isManager) {
             const addBtn = document.createElement('button');
             addBtn.id = 'addMapBtn';
             addBtn.className = 'btn';
@@ -1714,7 +1717,11 @@ async function renderMap() {
 
         for (const d of snap.docs) {
             const cardNode = await renderMapCard(d); // await 필요
-            gridWrap.appendChild(cardNode);
+            if (cardNode) {
+                // 클릭 시 상세 열기
+                cardNode.addEventListener('click', () => renderMapDetail(d.id));
+                gridWrap.appendChild(cardNode);
+            }
         }
 
         contentEl.appendChild(gridWrap);
