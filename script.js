@@ -3324,6 +3324,15 @@ async function renderAdminActionPanel(sheetData, sheetId) {
         <p class="muted">대상: <strong>${name}</strong> (${sheetId})</p>
 
         <section>
+            <h3>대상 인벤토리</h3>
+            <div id="adminTargetInventory" class="muted">
+                불러오는 중...
+            </div>
+        </section>
+
+        <hr>
+
+        <section>
             <h3>아이템 지급 / 제거</h3>
             <select id="adminItemSelect"></select>
             <input type="number" id="adminItemCount" value="1">
@@ -3350,9 +3359,25 @@ async function renderAdminActionPanel(sheetData, sheetId) {
         </section>
 
         <section>
-            <h3>부상도</h3>
-            <select id="adminInjuryPart"></select>
-            <input type="number" id="adminInjuryValue" value="10">
+            <h3>부상도 (랜덤 분배)</h3>
+
+            <label>
+                <input type="checkbox" id="injurySelectAll" checked>
+                전체 부위 포함
+            </label>
+
+            <div id="adminInjuryParts" class="injury-checkboxes"></div>
+
+            <label>
+                선택 부위 수
+                <input type="number" id="adminInjuryPickCount" value="1" min="1">
+            </label>
+
+            <label>
+                총 부상도
+                <input type="number" id="adminInjuryValue" value="10">
+            </label>
+
             <button id="addInjuryBtn">적용</button>
         </section>
 
@@ -3383,12 +3408,95 @@ async function renderAdminActionPanel(sheetData, sheetId) {
         </section>
     `;
 
+    const invBox = card.querySelector('#adminTargetInventory');
+    invBox.innerHTML = renderAdminTargetStatus(sheetData);
+
     await loadAdminItems(card);
-    fillInjuryParts(card);
     fillStatKeys(card, sheetData.stats);
     bindAdminControlEvents(card, sheetId);
+    fillInjuryCheckboxes(card);
+
+    card.querySelector('#injurySelectAll').onchange = e => {
+        const checked = e.target.checked;
+        card.querySelectorAll('#adminInjuryParts input[type=checkbox]')
+            .forEach(cb => cb.checked = checked);
+    };
 
     return card;
+}
+
+function distributeRandomInjury(parts, pickCount, totalValue) {
+    const shuffled = [...parts].sort(() => Math.random() - 0.5);
+    const picked = shuffled.slice(0, Math.min(pickCount, parts.length));
+
+    const base = Math.floor(totalValue / picked.length);
+    let remainder = totalValue % picked.length;
+
+    const result = {};
+    picked.forEach(p => {
+        result[p] = base + (remainder > 0 ? 1 : 0);
+        remainder--;
+    });
+
+    return result;
+}
+
+function renderAdminTargetStatus(data) {
+    const inv = data.inventory || {};
+    const status = data.status || {};
+    const stats = data.stats || {};
+
+    const items = inv.items || {};
+    const injuries = status.injuries || {};
+
+    const itemList = Object.keys(items).length
+        ? Object.entries(items)
+            .map(([id, cnt]) => `<li>${id} × ${cnt}</li>`)
+            .join('')
+        : '<li class="muted">아이템 없음</li>';
+
+    const injuryList = Object.keys(injuries).length
+        ? Object.entries(injuries)
+            .map(([part, val]) => `<li>${mapKeyToLabel[part] || part}: ${val}</li>`)
+            .join('')
+        : '<li class="muted">부상 없음</li>';
+
+    return `
+        <div class="admin-target-status">
+            <p><strong>은화:</strong> ${inv.silver || 0}</p>
+            <p><strong>정신력:</strong> ${stats.spirit ?? 0}</p>
+            <p><strong>오염도:</strong> ${status.contamination || 0}</p>
+
+            <hr>
+
+            <p><strong>소지 아이템</strong></p>
+            <ul>${itemList}</ul>
+
+            <p><strong>부위별 부상</strong></p>
+            <ul>${injuryList}</ul>
+        </div>
+    `;
+}
+
+async function refreshAdminInventory(root, sheetId) {
+    const snap = await getDoc(doc(db, 'sheets', sheetId));
+    const box = root.querySelector('#adminTargetInventory');
+    if (!box) return;
+    box.innerHTML = renderAdminTargetStatus(snap.data());
+}
+
+function adminResult(ok, msg) {
+    showMessage(ok ? `✔ ${msg}` : `✖ ${msg}`, ok ? 'success' : 'error');
+}
+
+function fillInjuryCheckboxes(card) {
+    const box = card.querySelector('#adminInjuryParts');
+    box.innerHTML = Object.entries(mapKeyToLabel).map(([key, label]) => `
+        <label>
+            <input type="checkbox" value="${key}" checked>
+            ${label}
+        </label>
+    `).join('');
 }
 
 
@@ -3400,18 +3508,6 @@ function fillStatKeys(root, stats) {
         const opt = document.createElement('option');
         opt.value = key;
         opt.textContent = mapStatKeyToLabel(key);
-        sel.appendChild(opt);
-    });
-}
-
-function fillInjuryParts(root) {
-    const sel = root.querySelector('#adminInjuryPart');
-    sel.innerHTML = '';
-
-    injuryParts.forEach(key => {
-        const opt = document.createElement('option');
-        opt.value = key;
-        opt.textContent = mapKeyToLabel[key];
         sel.appendChild(opt);
     });
 }
@@ -3440,132 +3536,180 @@ async function loadAdminItems(root) {
 
 function bindAdminControlEvents(root, sheetId) {
     const $ = sel => root.querySelector(sel);
-
     const clamp = (val, min) => Math.max(min, val);
 
+    /* 아이템 지급 / 제거 */
     $('#giveItemBtn').onclick = async () => {
-        const itemId = $('#adminItemSelect').value;
-        const delta = Number($('#adminItemCount').value);
-        if (!itemId || !delta) return;
+        try {
+            const itemId = $('#adminItemSelect').value;
+            const delta = Number($('#adminItemCount').value);
+            if (!itemId || !delta) return;
 
-        await updateDoc(doc(db, 'sheets', sheetId), {
-            [`inventory.items.${itemId}`]: increment(delta)
-        });
+            await updateDoc(doc(db, 'sheets', sheetId), {
+                [`inventory.items.${itemId}`]: increment(delta)
+            });
 
-        await writeAdminLog(sheetId, 'item_modify', { itemId, delta });
+            await writeAdminLog(sheetId, 'item_modify', { itemId, delta });
+            await refreshAdminInventory(root, sheetId);
+            adminResult(true, '아이템 적용 완료');
+        } catch (e) {
+            console.error(e);
+            adminResult(false, '아이템 적용 실패');
+        }
     };
 
+    /* 은화 */
     $('#giveSilverBtn').onclick = async () => {
-        const delta = Number($('#adminSilverValue').value);
-        if (!delta) return;
+        try {
+            const delta = Number($('#adminSilverValue').value);
+            if (!delta) return;
 
-        const ref = doc(db, 'sheets', sheetId);
-        const snap = await getDoc(ref);
-        const cur = snap.data().inventory?.silver || 0;
+            const ref = doc(db, 'sheets', sheetId);
+            const snap = await getDoc(ref);
+            const cur = snap.data().inventory?.silver || 0;
 
-        await updateDoc(ref, {
-            'inventory.silver': clamp(cur + delta, 0)
-        });
+            await updateDoc(ref, {
+                'inventory.silver': clamp(cur + delta, 0)
+            });
 
-        await writeAdminLog(sheetId, 'silver_modify', { delta });
+            await writeAdminLog(sheetId, 'silver_modify', { delta });
+            await refreshAdminInventory(root, sheetId);
+            adminResult(true, '은화 적용 완료');
+        } catch (e) {
+            console.error(e);
+            adminResult(false, '은화 적용 실패');
+        }
     };
 
+    /* 스탯 */
     $('#changeStatBtn').onclick = async () => {
-        const key = $('#adminStatKey').value;
-        const delta = Number($('#adminStatDelta').value);
-        if (!key || !delta) return;
+        try {
+            const key = $('#adminStatKey').value;
+            const delta = Number($('#adminStatDelta').value);
+            if (!key || !delta) return;
 
-        const ref = doc(db, 'sheets', sheetId);
-        const snap = await getDoc(ref);
-        const cur = snap.data().stats[key] || 1;
+            const ref = doc(db, 'sheets', sheetId);
+            const snap = await getDoc(ref);
+            const cur = snap.data().stats[key] || 1;
 
-        await updateDoc(ref, {
-            [`stats.${key}`]: clamp(cur + delta, 1)
-        });
+            await updateDoc(ref, {
+                [`stats.${key}`]: clamp(cur + delta, 1)
+            });
 
-        await writeAdminLog(sheetId, 'stat_modify', { key, delta });
+            await writeAdminLog(sheetId, 'stat_modify', { key, delta });
+            await refreshAdminInventory(root, sheetId);
+            adminResult(true, '스탯 적용 완료');
+        } catch (e) {
+            console.error(e);
+            adminResult(false, '스탯 적용 실패');
+        }
     };
 
+    /* 정신력 */
     $('#changeSpiritBtn').onclick = async () => {
-        const delta = Number($('#adminSpiritDelta').value);
+        try {
+            const delta = Number($('#adminSpiritDelta').value);
 
-        const ref = doc(db, 'sheets', sheetId);
-        const snap = await getDoc(ref);
-        const cur = snap.data().stats.spirit || 0;
+            const ref = doc(db, 'sheets', sheetId);
+            const snap = await getDoc(ref);
+            const cur = snap.data().stats.spirit || 0;
 
-        await updateDoc(ref, {
-            'stats.spirit': clamp(cur + delta, 0)
-        });
+            await updateDoc(ref, {
+                'stats.spirit': clamp(cur + delta, 0)
+            });
 
-        await writeAdminLog(sheetId, 'spirit_modify', { delta });
+            await writeAdminLog(sheetId, 'spirit_modify', { delta });
+            await refreshAdminInventory(root, sheetId);
+            adminResult(true, '정신력 적용 완료');
+        } catch (e) {
+            console.error(e);
+            adminResult(false, '정신력 적용 실패');
+        }
     };
 
+    /* 부상 랜덤 분배 */
     $('#addInjuryBtn').onclick = async () => {
-        const part = $('#adminInjuryPart').value;
-        const delta = Number($('#adminInjuryValue').value);
+        const parts = [...root.querySelectorAll('#adminInjuryParts input:checked')]
+            .map(cb => cb.value);
 
-        const ref = doc(db, 'sheets', sheetId);
-        const snap = await getDoc(ref);
-        const cur = snap.data().status?.injuries?.[part] || 0;
+        const pickCount = parseInt($('#adminInjuryPickCount').value);
+        const total = parseInt($('#adminInjuryValue').value);
 
-        await updateDoc(ref, {
-            [`status.injuries.${part}`]: clamp(cur + delta, 0)
-        });
+        if (!parts.length || pickCount <= 0 || total <= 0) {
+            showMessage('부상 설정이 올바르지 않다.', 'error');
+            return;
+        }
 
-        await writeAdminLog(sheetId, 'injury_modify', { part, delta });
+        const distributed = distributeRandomInjury(parts, pickCount, total);
+        if (!Object.keys(distributed).length) return;
+
+        try {
+            const ref = doc(db, 'sheets', sheetId);
+            await runTransaction(db, async tx => {
+                const snap = await tx.get(ref);
+                const cur = snap.data().status?.injuries || {};
+                const next = { ...cur };
+
+                Object.entries(distributed).forEach(([p, v]) => {
+                    next[p] = (next[p] || 0) + v;
+                });
+
+                tx.update(ref, { 'status.injuries': next });
+            });
+
+            await writeAdminLog(sheetId, 'injury_random', distributed);
+            await refreshAdminInventory(root, sheetId);
+            adminResult(true, '부상 분배 완료');
+        } catch (e) {
+            console.error(e);
+            adminResult(false, '부상 적용 실패');
+        }
     };
 
+    /* 오염도 */
     $('#addContaminationBtn').onclick = async () => {
-        const delta = Number($('#adminContaminationValue').value);
+        try {
+            const delta = Number($('#adminContaminationValue').value);
 
-        const ref = doc(db, 'sheets', sheetId);
-        const snap = await getDoc(ref);
-        const cur = snap.data().status?.contamination || 0;
+            const ref = doc(db, 'sheets', sheetId);
+            const snap = await getDoc(ref);
+            const cur = snap.data().status?.contamination || 0;
 
-        await updateDoc(ref, {
-            'status.contamination': clamp(cur + delta, 0)
-        });
+            await updateDoc(ref, {
+                'status.contamination': clamp(cur + delta, 0)
+            });
 
-        await writeAdminLog(sheetId, 'contamination_modify', { delta });
+            await writeAdminLog(sheetId, 'contamination_modify', { delta });
+            await refreshAdminInventory(root, sheetId);
+            adminResult(true, '오염도 적용 완료');
+        } catch (e) {
+            console.error(e);
+            adminResult(false, '오염도 적용 실패');
+        }
     };
 
+    /* 상태 */
     $('#changeStateBtn').onclick = async () => {
-        const state = $('#adminState').value;
+        try {
+            const state = $('#adminState').value;
 
-        await updateDoc(doc(db, 'sheets', sheetId), {
-            'status.state': state,
-            ...(state === 'missing'
-                ? { disappearedAt: serverTimestamp() }
-                : { disappearedAt: deleteField() })
-        });
+            await updateDoc(doc(db, 'sheets', sheetId), {
+                'status.state': state,
+                ...(state === 'missing'
+                    ? { disappearedAt: serverTimestamp() }
+                    : { disappearedAt: deleteField() })
+            });
 
-        await writeAdminLog(sheetId, 'state_change', { state });
-    };
-
-    /* 아이템 DB 추가 */
-    $('#addItemDbBtn').onclick = async () => {
-        const name = $('#newItemName').value.trim();
-        const desc = $('#newItemDesc').value.trim();
-        if (!name) return;
-
-        await addDoc(collection(db, 'items'), {
-            name,
-            desc,
-            createdAt: serverTimestamp()
-        });
-
-        await loadAdminItems(root);
-    };
-
-    /* 아이템 DB 삭제 */
-    $('#deleteItemDbBtn').onclick = async () => {
-        const id = $('#deleteItemSelect').value;
-        if (!id) return;
-
-        await deleteDoc(doc(db, 'items', id));
-        await loadAdminItems(root);
+            await writeAdminLog(sheetId, 'state_change', { state });
+            await refreshAdminInventory(root, sheetId);
+            adminResult(true, '상태 변경 완료');
+        } catch (e) {
+            console.error(e);
+            adminResult(false, '상태 변경 실패');
+        }
     };
 }
+
 
 // 인적사항
 function renderPersonnelSection(p, nickname, sheetId, isAdmin) {
