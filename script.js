@@ -3177,11 +3177,11 @@ async function renderMe() {
         '<div class="card muted">로딩중...</div>';
 
     try {
-        // 🔴 관리자 전용 화면 (대상 없음)
+        // 🔴 관리자 전용 화면 (시트 없음)
         if (isAdmin) {
             contentEl.innerHTML = '';
             contentEl.appendChild(
-                await renderAdminControlPanel()
+                await renderAdminControlPanel(null)
             );
             return;
         }
@@ -4235,13 +4235,17 @@ function createDefaultSheet(uid, nickname) {
     시트 관련
 ========================================================= */
 
-async function fetchSheetData(sheetId) {
+async function fetchSheetData(sheetId, isAdmin = false) {
     const docRef = doc(db, 'sheets', sheetId);
-    const sheetDoc = await getDoc(docRef);
+    const snap = await getDoc(docRef);
 
-    if (!sheetDoc.exists()) {
+    if (!snap.exists()) {
+        if (isAdmin) {
+            return null; // ← 핵심
+        }
         throw new Error(`Sheet data not found for ID: ${sheetId}`);
     }
 
-    return sheetDoc.data();
+    return snap.data();
 }
+
