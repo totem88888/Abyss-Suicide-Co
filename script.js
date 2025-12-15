@@ -1742,10 +1742,13 @@ async function renderMap() {
         gridWrap.style.gap = '20px';
 
         for (const d of snap.docs) {
-            const cardNode = await renderMapCard(d); // await 필요
+            const cardNode = await renderMapCard(d); // 카드 생성만
             if (cardNode) {
-                // 클릭 시 상세 열기
-                cardNode.addEventListener('click', () => renderMapDetail(d.id));
+                cardNode.addEventListener('click', () => {
+                    // 맵 목록 날리고 상세 보여주기
+                    contentEl.innerHTML = '';
+                    openMapPopup(d.id, contentEl);
+                });
                 gridWrap.appendChild(cardNode);
             }
         }
@@ -1791,7 +1794,7 @@ async function renderMapCard(mapDoc) {
             </div>
         </div>
     `;
-
+    
     // 클릭하면 바로 openMapPopup 호출
     el.addEventListener('click', () => openMapPopup(mapId, contentEl));
 
@@ -1818,7 +1821,6 @@ async function renderMapCard(mapDoc) {
 
     return el;
 }
-
 
 // 팝업 렌더링
 async function openMapPopup(mapId, containerId = 'mapMainContainer') {
