@@ -133,6 +133,28 @@ const DANGER_TYPES = {
 
 const SHAPE_TYPES = ['P', 'F', 'O', 'C'];
 
+const injuryParts = [
+    'head', 'neck', 'leftEye', 'rightEye', 
+    'leftArm','leftHand','leftLeg','leftFoot',
+    'torso','rightArm','rightHand','rightLeg','rightFoot'
+];
+
+const mapKeyToLabel = {
+    head: '머리',
+    neck: '목',
+    leftEye: '왼쪽 안구',
+    rightEye: '오른쪽 안구',
+    leftArm: '왼팔',
+    leftHand: '왼손',
+    leftLeg: '왼다리',
+    leftFoot: '왼발',
+    torso: '상체',
+    rightArm: '오른팔',
+    rightHand: '오른손',
+    rightLeg: '오른다리',
+    rightFoot: '오른발'
+};
+
 // 랜덤 주사위
 function rollDice(count, sides) {
     let total = 0;
@@ -595,7 +617,7 @@ async function getCurrentUserSheetId() {
             unsubscribe();
             resolve(user ? user.uid : null);
         });
-    });
+    });          
 }
 
 async function checkAndCreateSheet(uid, nickname) {
@@ -997,20 +1019,28 @@ function renderAuthArea(user){
 
 // 커스터마이징 팝업
 function openNewUserCustomization(uid, nickname) {
+    if (!window.baseStats) {
+        console.error('baseStats is not defined');
+        return;
+    }
+
+    if (document.getElementById('custModal')) return;
+
     const defaultData = createDefaultSheet(uid, nickname);
     const p = defaultData.personnel;
+    const statsKeys = Object.keys(baseStats);
 
-    const statsKeys = Object.keys(baseStats || {});
     let statsForm = `
-        <h3 style="border-bottom: 1px solid #333; padding: 10px 0;">
+        <h3 style="border-bottom:1px solid #333; padding:10px 0;">
             기본 스테이터스 설정 (총 포인트 제한: 55)
         </h3>
-        <p style="color: yellow;">
+        <p style="color:yellow;">
             현재 사용 포인트: <span id="currentPoints">0</span> / 55
         </p>
     `;
 
     statsKeys.forEach(key => {
+        const val = baseStats[key] || 1;
         statsForm += `
             <div class="form-row stat-row">
                 <label style="width:150px;">${mapStatKeyToLabel(key)}</label>
@@ -1018,9 +1048,9 @@ function openNewUserCustomization(uid, nickname) {
                        id="stat-${key}"
                        min="1"
                        max="5"
-                       value="${baseStats[key] || 1}"
+                       value="${val}"
                        class="stat-slider">
-                <span id="value-${key}">${baseStats[key] || 1}</span>
+                <span id="value-${key}">${val}</span>
             </div>
         `;
     });
@@ -1031,32 +1061,38 @@ function openNewUserCustomization(uid, nickname) {
             <div class="card" style="width:700px; max-height:80vh; overflow-y:auto;">
                 <h2>캐릭터 생성</h2>
 
-                <div class="form-row"><label>이름</label>
+                <div class="form-row">
+                    <label>이름</label>
                     <input type="text" value="${p.name}" disabled>
                 </div>
 
-                <div class="form-row"><label>성별</label>
+                <div class="form-row">
+                    <label>성별</label>
                     <select id="custGender">
-                        <option value="남성">남성</option>
-                        <option value="여성">여성</option>
+                        <option value="남성" ${p.gender === '남성' ? 'selected' : ''}>남성</option>
+                        <option value="여성" ${p.gender === '여성' ? 'selected' : ''}>여성</option>
                     </select>
                 </div>
 
-                <div class="form-row"><label>나이</label>
+                <div class="form-row">
+                    <label>나이</label>
                     <input type="number" id="custAge" value="${p.age || 20}">
                 </div>
 
-                <div class="form-row"><label>키</label>
+                <div class="form-row">
+                    <label>키</label>
                     <input type="number" id="custHeight" value="${p.height || 170}">
                 </div>
 
-                <div class="form-row"><label>체중</label>
+                <div class="form-row">
+                    <label>체중</label>
                     <input type="number" id="custWeight" value="${p.weight || 60}">
                 </div>
 
                 ${statsForm}
 
-                <button id="saveCustomSheetBtn" class="btn primary" style="width:100%; margin-top:20px;">
+                <button id="saveCustomSheetBtn" class="btn primary"
+                        style="width:100%; margin-top:20px;">
                     설정 저장
                 </button>
             </div>
@@ -1066,6 +1102,7 @@ function openNewUserCustomization(uid, nickname) {
     document.querySelectorAll('.stat-slider').forEach(slider => {
         slider.addEventListener('input', updateStatPoints);
     });
+
     updateStatPoints();
 
     document.getElementById('saveCustomSheetBtn').addEventListener('click', async () => {
@@ -1082,15 +1119,7 @@ function openNewUserCustomization(uid, nickname) {
 }
 
 function collectCustomizationData() {
-    const stats = {};
-    let totalPoints = 0;
-
-    document.querySelectorAll('.stat-slider').forEach(slider => {
-        const key = slider.id.replace('stat-', '');
-        const val = Number(slider.value) || 1;
-        stats[key] = val;
-        totalPoints += val;
-    });
+    const { stats, totalPoints } = calculateStats();
 
     return {
         personnel: {
@@ -1104,19 +1133,26 @@ function collectCustomizationData() {
     };
 }
 
-// 포인트 계산
-function updateStatPoints() {
+function calculateStats() {
+    const stats = {};
     let totalPoints = 0;
 
     document.querySelectorAll('.stat-slider').forEach(slider => {
-        const value = parseInt(slider.value, 10) || 0;
+        const key = slider.id.replace('stat-', '');
+        const value = Number(slider.value) || 1;
+        stats[key] = value;
         totalPoints += value;
 
-        const valueEl = document.getElementById(
-            `value-${slider.id.replace('stat-', '')}`
-        );
+        const valueEl = document.getElementById(`value-${key}`);
         if (valueEl) valueEl.textContent = value;
     });
+
+    return { stats, totalPoints };
+}
+
+// 포인트 계산
+function updateStatPoints() {
+    const { totalPoints } = calculateStats();
 
     const currentPointsEl = document.getElementById('currentPoints');
     const saveBtn = document.getElementById('saveCustomSheetBtn');
@@ -1126,10 +1162,9 @@ function updateStatPoints() {
     currentPointsEl.textContent = totalPoints;
     currentPointsEl.style.color = totalPoints > 55 ? 'red' : 'lime';
 
-    if (saveBtn) {
-        saveBtn.disabled = totalPoints > 55;
-    }
+    if (saveBtn) saveBtn.disabled = totalPoints > 55;
 }
+
 
 // 시트값 저장
 async function saveCustomizedSheet(uid, nickname, data) {
@@ -1151,7 +1186,7 @@ async function saveCustomizedSheet(uid, nickname, data) {
     };
 
     try {
-        await setDoc(doc(db, 'sheets', uid), finalSheetData);
+        await setDoc(doc(db, 'sheets', uid), finalSheetData, { merge: true });
         showMessage('캐릭터 시트 저장 완료', 'success');
         renderMe();
     } catch (e) {
@@ -1513,9 +1548,9 @@ async function renderProfileCard(docId, data, container) {
     wrap.style.display = 'grid';
     wrap.style.gridTemplateColumns = '1fr 1fr';
     wrap.style.gridTemplateRows = 'auto auto';
-    wrap.style.gap = '20px';
     wrap.style.width = '100%';
-    wrap.style.maxWidth = '800px';
+    wrap.style.maxWidth = '1200px';   // ← 최소 이 정도는 돼야 사람용
+    wrap.style.margin = '0 auto';     // 중앙 정렬
 
     const card = document.createElement('div');
     card.className = 'profile-card';
@@ -1523,6 +1558,7 @@ async function renderProfileCard(docId, data, container) {
     card.style.padding = '20px';
     card.style.borderRadius = '8px';
     card.style.width = '100%';
+    card.style.minHeight = '400px'; // 선택
     card.style.position = 'relative';
     card.style.boxShadow = '0 4px 12px rgba(0,0,0,0.5)';
     card.style.display = 'flex';
@@ -1564,7 +1600,7 @@ async function renderProfileCard(docId, data, container) {
 
     const statsRow = document.createElement('div');
     statsRow.style.display = 'grid';
-    statsRow.style.gridTemplateColumns = '1fr 1fr';
+    statsRow.style.gridTemplateColumns = '1.2fr 1fr';
     statsRow.style.gap = '20px';
 
     statsRow.innerHTML = `
@@ -1592,7 +1628,7 @@ async function renderProfileCard(docId, data, container) {
 
     const chartRow = document.createElement('div');
     chartRow.style.display = 'flex';
-    chartRow.style.gap = '20px';
+    chartRow.style.gap = '40px';
     chartRow.innerHTML = `
         <div id="radarChart-physical" style="width:100%;height:300px;"></div>
         <div id="radarChart-mental" style="width:100%;height:300px;"></div>
@@ -1612,97 +1648,89 @@ async function renderProfileCard(docId, data, container) {
     wrap.appendChild(card);
     container.appendChild(wrap);
 
-    setTimeout(() => {
+    requestAnimationFrame(() => {
         initStatsRadarCharts(s, 'radarChart-physical', 'radarChart-mental');
-    }, 100);
+    });
 }
 
 // 수정 버튼 눌렀을 때
 async function openInlineEdit(docId, data, cardEl) {
-    const editArea = cardEl.querySelector(".edit-area") || (() => {
-        const div = document.createElement("div");
-        div.className = "edit-area";
-        cardEl.appendChild(div);
-        return div;
-    })();
-
     const p = data.personnel || {};
     const s = data.stats || {};
 
-    // 카드 스타일과 통일
-    editArea.innerHTML = `
-        <div class="edit-card" style="
-            display:flex; 
-            flex-direction:column; 
-            gap:15px; 
-            margin-top:15px; 
-            padding:15px; 
-            background:#222; 
-            border-radius:8px;
-            box-shadow:0 2px 6px rgba(0,0,0,0.5);
-        ">
-            <!-- 상단 단락: 기본 정보 -->
-            <div class="edit-top" style="display:flex; flex-direction:column; gap:8px;">
-                <button id="closeEditInline" style="align-self:flex-end; background:#ff4c4c; color:#fff; border:none; padding:4px 8px; cursor:pointer; border-radius:4px;">X</button>
-                <label>이름</label><input id="editName" value="${p.name || ''}">
-                <label>성별</label><input id="editGender" value="${p.gender || ''}">
-                <label>나이</label><input id="editAge" value="${p.age || ''}">
-                <label>키</label><input id="editHeight" value="${p.height || ''}">
-                <label>체중</label><input id="editWeight" value="${p.weight || ''}">
-                <label>국적</label><input id="editNationality" value="${p.nationality || ''}">
-                <label>이미지 파일</label><input id="editImageFile" type="file">
-                <label>이미지 URL</label><input id="editImage" value="${p.image || ''}">
+    // 프로필 영역 교체
+    const topSection = cardEl.querySelector('.profile-top') || cardEl.children[1];
+    topSection.innerHTML = `
+        <div style="display:flex; gap:20px;">
+            <img src="${p.image || ''}"
+                 style="width:120px;height:120px;object-fit:cover;border-radius:8px;">
+            <div style="display:flex; flex-direction:column; gap:6px;">
+                <label>이름 <input id="editName" value="${p.name || ''}"></label>
+                <label>성별 <input id="editGender" value="${p.gender || ''}"></label>
+                <label>나이 <input id="editAge" type="number" value="${p.age || ''}"></label>
+                <label>키 <input id="editHeight" type="number" value="${p.height || ''}"></label>
+                <label>체중 <input id="editWeight" type="number" value="${p.weight || ''}"></label>
+                <label>국적 <input id="editNationality" value="${p.nationality || ''}"></label>
+                <label>이미지 URL <input id="editImage" value="${p.image || ''}"></label>
+                <input id="editImageFile" type="file">
             </div>
-
-            <!-- 하단 단락: 스탯 편집 -->
-            <div class="edit-stats-inline" style="display:flex; flex-direction:column; gap:6px; margin-top:10px;">
-                ${Object.keys(s).map(key => `
-                    <label>${key}</label>
-                    <input id="edit-${key}" value="${s[key] || 0}">
-                `).join('')}
-            </div>
-
-            <button id="saveStaffInline" style="margin-top:10px; background:#4caf50; color:#fff; border:none; padding:6px 12px; cursor:pointer; border-radius:4px;">저장</button>
         </div>
     `;
 
-    // 닫기 버튼
-    editArea.querySelector("#closeEditInline").addEventListener("click", () => {
-        editArea.innerHTML = '';
+    // 스탯 테이블 영역 치환
+    const statArea = cardEl.querySelector('.stats-area') || cardEl;
+    statArea.innerHTML = `
+        <div style="display:grid; grid-template-columns:120px 1fr 40px; gap:8px;">
+            ${Object.keys(s).map(k => `
+                <label>${k}</label>
+                <input type="range" min="0" max="10"
+                       id="edit-${k}" value="${s[k] || 0}">
+                <span id="val-${k}">${s[k] || 0}</span>
+            `).join('')}
+        </div>
+
+        <button id="saveInline"
+            style="margin-top:15px; background:#4caf50; color:#fff;
+                   border:none; padding:6px 12px; border-radius:4px;">
+            저장
+        </button>
+    `;
+
+    // 슬라이더 값 표시
+    Object.keys(s).forEach(k => {
+        const slider = document.getElementById(`edit-${k}`);
+        slider.addEventListener('input', () => {
+            document.getElementById(`val-${k}`).textContent = slider.value;
+        });
     });
 
-    // 저장 버튼
-    editArea.querySelector("#saveStaffInline").addEventListener("click", async () => {
+    // 저장
+    document.getElementById('saveInline').addEventListener('click', async () => {
         let finalImg = document.getElementById("editImage").value;
         const file = document.getElementById("editImageFile").files[0];
         if (file) finalImg = await uploadStaffImage(file, docId);
 
-        const newPersonnel = {
-            ...p,
-            name: editName.value,
-            gender: editGender.value,
-            age: Number(editAge.value),
-            height: Number(editHeight.value),
-            weight: Number(editWeight.value),
-            nationality: editNationality.value,
-            image: finalImg
-        };
-
         const newStats = {};
-        Object.keys(s).forEach(key => {
-            newStats[key] = Number(document.getElementById(`edit-${key}`).value);
+        Object.keys(s).forEach(k => {
+            newStats[k] = Number(document.getElementById(`edit-${k}`).value);
         });
 
-        const newData = {
-            personnel: newPersonnel,
+        await updateDoc(doc(db, "sheets", docId), {
+            personnel: {
+                ...p,
+                name: editName.value,
+                gender: editGender.value,
+                age: Number(editAge.value),
+                height: Number(editHeight.value),
+                weight: Number(editWeight.value),
+                nationality: editNationality.value,
+                image: finalImg
+            },
             stats: newStats,
             updatedAt: serverTimestamp()
-        };
+        });
 
-        await updateDoc(doc(db, "sheets", docId), newData);
-
-        renderStaff(); 
-        editArea.innerHTML = ''; // 편집 영역 닫기
+        renderStaff();
     });
 }
 
@@ -3144,12 +3172,13 @@ function renderInlineField(f, currentValue, isEditMode, section, index = null, s
 // 진짜 내 정보 보여줌
 async function renderMe(targetSheetId = null) {
     const isAdmin = await isAdminUser();
-    let currentSheetId = targetSheetId || await getCurrentUserSheetId();
+    const currentSheetId = targetSheetId || await getCurrentUserSheetId();
 
     if (!currentSheetId) {
         contentEl.innerHTML = '<div class="card muted">로그인 후 본인의 시트를 확인하세요.</div>';
         return;
     }
+
     if (targetSheetId && !isAdmin) {
         contentEl.innerHTML = '<div class="card error">권한이 없습니다.</div>';
         return;
@@ -3159,22 +3188,167 @@ async function renderMe(targetSheetId = null) {
 
     try {
         const sheetData = await fetchSheetData(currentSheetId);
+
+        contentEl.innerHTML = '';
+
+        // 🔴 어드민 + 타겟 지정 → 관리자 전용 화면
+        if (isAdmin && targetSheetId) {
+            contentEl.appendChild(
+                await renderAdminControlPanel(sheetData, currentSheetId)
+            );
+            return;
+        }
+
+        // 🔵 일반 시트
         const sheetContainer = document.createElement('div');
         sheetContainer.className = 'char-sheet-container';
 
         const nickname = sheetData.personnel?.name || currentSheetId;
 
-        sheetContainer.appendChild(renderPersonnelSection(sheetData.personnel, nickname, currentSheetId, isAdmin));
-        sheetContainer.appendChild(renderMeStatsSection(sheetData.stats, isAdmin, currentSheetId));
-        sheetContainer.appendChild(await renderInventorySection(sheetData.inventory, isAdmin, currentSheetId));
-        sheetContainer.appendChild(renderStatusSection(sheetData.status, sheetData.stats.spirit, isAdmin, currentSheetId));
+        sheetContainer.appendChild(
+            renderPersonnelSection(sheetData.personnel, nickname, currentSheetId, isAdmin)
+        );
+        sheetContainer.appendChild(
+            renderMeStatsSection(sheetData.stats, isAdmin, currentSheetId)
+        );
+        sheetContainer.appendChild(
+            await renderInventorySection(sheetData.inventory, isAdmin, currentSheetId)
+        );
+        sheetContainer.appendChild(
+            renderStatusSection(sheetData.status, sheetData.stats.spirit, isAdmin, currentSheetId)
+        );
 
-        contentEl.innerHTML = '';
         contentEl.appendChild(sheetContainer);
-    } catch(e) {
-        console.error("Sheet load failed:", e);
-        contentEl.innerHTML = `<div class="card error">시트 로드 실패: ${e.message}</div>`;
+
+    } catch (e) {
+        console.error(e);
+        contentEl.innerHTML = `<div class="card error">시트 로드 실패</div>`;
     }
+}
+
+async function renderAdminControlPanel(sheetData, sheetId) {
+    const card = document.createElement('div');
+    card.className = 'card admin-control-panel';
+
+    card.innerHTML = `
+        <h2>관리자 조작 패널</h2>
+
+        <section>
+            <h3>아이템 지급</h3>
+            <select id="adminItemSelect"></select>
+            <input type="number" id="adminItemCount" value="1" min="1">
+            <button class="btn" id="giveItemBtn">지급</button>
+        </section>
+
+        <section>
+            <h3>은화</h3>
+            <input type="number" id="adminSilverValue" value="0">
+            <button class="btn" id="giveSilverBtn">지급</button>
+        </section>
+
+        <section>
+            <h3>정신력</h3>
+            <input type="number" id="adminSpiritDelta" value="-10">
+            <button class="btn" id="changeSpiritBtn">차감</button>
+        </section>
+
+        <section>
+            <h3>부상도</h3>
+            <select id="adminInjuryPart"></select>
+            <input type="number" id="adminInjuryValue" value="10">
+            <button class="btn" id="addInjuryBtn">증가</button>
+        </section>
+
+        <section>
+            <h3>오염도</h3>
+            <input type="number" id="adminContaminationValue" value="5">
+            <button class="btn" id="addContaminationBtn">증가</button>
+        </section>
+
+        <section>
+            <h3>상태</h3>
+            <select id="adminState">
+                <option value="normal">정상</option>
+                <option value="missing">실종</option>
+            </select>
+            <button class="btn danger" id="changeStateBtn">변경</button>
+        </section>
+    `;
+
+    await loadAdminItems(card);
+    fillInjuryParts(card);
+    bindAdminControlEvents(card, sheetId);
+
+    return card;
+}
+
+function fillInjuryParts(root) {
+    const sel = root.querySelector('#adminInjuryPart');
+    sel.innerHTML = '';
+
+    injuryParts.forEach(key => {
+        const opt = document.createElement('option');
+        opt.value = key; // 🔴 DB에 쓰일 실제 키
+        opt.textContent = mapKeyToLabel[key] || key; // 🔵 화면 표시
+        sel.appendChild(opt);
+    });
+}
+
+async function loadAdminItems(root) {
+    const sel = root.querySelector('#adminItemSelect');
+    const snap = await getDocs(collection(db, 'items'));
+
+    snap.forEach(d => {
+        const opt = document.createElement('option');
+        opt.value = d.id;
+        opt.textContent = d.data().name;
+        sel.appendChild(opt);
+    });
+}
+
+function bindAdminControlEvents(root, sheetId) {
+
+    root.querySelector('#giveItemBtn').onclick = async () => {
+        await updateDoc(doc(db, 'sheets', sheetId), {
+            [`inventory.items.${adminItemSelect.value}`]:
+                increment(Number(adminItemCount.value))
+        });
+    };
+
+    root.querySelector('#giveSilverBtn').onclick = async () => {
+        await updateDoc(doc(db, 'sheets', sheetId), {
+            'inventory.silver': increment(Number(adminSilverValue.value))
+        });
+    };
+
+    root.querySelector('#changeSpiritBtn').onclick = async () => {
+        await updateDoc(doc(db, 'sheets', sheetId), {
+            'stats.spirit': increment(Number(adminSpiritDelta.value))
+        });
+    };
+
+    root.querySelector('#addInjuryBtn').onclick = async () => {
+        await updateDoc(doc(db, 'sheets', sheetId), {
+            [`status.injuries.${adminInjuryPart.value}`]:
+                increment(Number(adminInjuryValue.value))
+        });
+    };
+
+    root.querySelector('#addContaminationBtn').onclick = async () => {
+        await updateDoc(doc(db, 'sheets', sheetId), {
+            'status.contamination': increment(Number(adminContaminationValue.value))
+        });
+    };
+
+    root.querySelector('#changeStateBtn').onclick = async () => {
+        const state = adminState.value;
+        await updateDoc(doc(db, 'sheets', sheetId), {
+            'status.state': state,
+            ...(state === 'missing'
+                ? { disappearedAt: serverTimestamp() }
+                : {})
+        });
+    };
 }
 
 // 인적사항
@@ -3502,73 +3676,21 @@ function renderStatusSection(s, spiritStat, isAdmin, sheetId) {
     section.className = 'card map-card';
     section.id = `status-section-${sheetId}`;
 
-    const injuryParts = [
-        'head', 'neck', 'leftEye', 'rightEye', 
-        'leftArm','leftHand','leftLeg','leftFoot',
-        'torso','rightArm','rightHand','rightLeg','rightFoot'
-    ];
-
-    const mapKeyToLabel = {
-        head: '머리', neck: '목', leftEye: '왼쪽 안구', rightEye: '오른쪽 안구',
-        leftArm: '왼팔', leftHand: '왼손', leftLeg: '왼다리', leftFoot: '왼발',
-        torso: '상체', rightArm: '오른팔', rightHand: '오른손', rightLeg: '오른다리', rightFoot: '오른발'
-    };
-
     // --- 체력 상태 계산 ---
-    const maxHP = [60,70,80,90,100][s.level-1] || 100;
-
-    const critHP = s.injuries.head + s.injuries.rightEye; // 치명 부위
-    const minorHP = Math.round(
-        s.injuries.neck*0.4 + s.injuries.leftEye*0.1 + s.injuries.leftArm*0.1 +
-        s.injuries.leftHand*0.1 + s.injuries.leftLeg*0.1 + s.injuries.leftFoot*0.1 +
-        s.injuries.torso*0.1 + s.injuries.rightArm*0.15 + s.injuries.rightHand*0.15 +
-        s.injuries.rightLeg*0.15 + s.injuries.rightFoot*0.15
+    const physicalStatusText = calculatePhysicalStatus(
+        s.injuries,
+        s.level
     );
-
-    const totalHP = critHP + minorHP;
-
-    let physicalStatusText = "문제 없음";
-    if (totalHP >= maxHP) physicalStatusText = "사망";
-    else if (totalHP >= maxHP*0.9) physicalStatusText = "사망 직전";
-    else if (totalHP >= maxHP*0.7) physicalStatusText = "심각한 중상";
-    else if (totalHP >= maxHP*0.5) physicalStatusText = "중상";
-    else if (totalHP >= maxHP*0.3) physicalStatusText = "부상";
-    else if (totalHP > 0) physicalStatusText = "사소한 부상";
 
     // --- 오염 상태 계산 ---
-    const contaminationValue = Math.round(
-        s.contaminations.head +
-        s.contaminations.neck*0.8 +
-        s.contaminations.leftEye*0.1 +
-        s.contaminations.rightEye*0.1 +
-        s.contaminations.rightEye + 
-        s.contaminations.leftArm*0.2 +
-        s.contaminations.leftHand*0.1 +
-        s.contaminations.leftLeg*0.2 +
-        s.contaminations.leftFoot*0.1 +
-        s.contaminations.torso*0.2 +
-        s.contaminations.rightArm*0.1 +
-        s.contaminations.rightHand*0.2 +
-        s.contaminations.rightLeg*0.1 +
-        s.contaminations.rightFoot*0.1
+    const contaminationText = calculateContaminationStatus(
+        s.contaminations,
+        s.level
     );
-
-    let contaminationText = "문제 없음";
-    if (contaminationValue >= maxHP) contaminationText = "완전한 오염";
-    else if (contaminationValue >= maxHP*0.9) contaminationText = "심각한 오염";
-    else if (contaminationValue >= maxHP*0.7) contaminationText = "심화된 오염";
-    else if (contaminationValue >= maxHP*0.5) contaminationText = "오염";
-    else if (contaminationValue > 0) contaminationText = "사소한 오염";
 
     // --- 정신력 구간 ---
     const spiritPercent = (s.currentSpirit / s.maxSpirit) * 100;
-    let spiritStatusText = "";
-    if (spiritPercent >= 90) spiritStatusText = "극한의 집중";
-    else if (spiritPercent >= 75) spiritStatusText = "매우 안정";
-    else if (spiritPercent >= 60) spiritStatusText = "안정";
-    else if (spiritPercent >= 45) spiritStatusText = "불안정";
-    else if (spiritPercent >= 20) spiritStatusText = "위태로움";
-    else spiritStatusText = "붕괴 직전";
+    const spiritStatusText = calculateSpiritStatus(spiritPercent);
 
     const humanIconHtml = renderHumanIcon(s.injuries, s.contaminations);
 
@@ -3645,7 +3767,6 @@ function renderStatusSection(s, spiritStat, isAdmin, sheetId) {
 
     return section;
 }
-
 
 function openStatusEdit(sheetId, s) {
     const container = document.getElementById(`status-section-${sheetId}`);
