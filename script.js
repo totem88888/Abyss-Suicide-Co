@@ -1534,7 +1534,8 @@ async function renderProfileCard(docId, data, container) {
     closeBtn.style.top = '10px';
     closeBtn.style.right = '10px';
     closeBtn.addEventListener('click', () => {
-        if (container.contains(wrap)) container.removeChild(wrap);
+    if (container.contains(wrap)) container.removeChild(wrap);
+        renderStaff(); // 카드 닫으면 직원 목록 다시 렌더
     });
     card.appendChild(closeBtn);
 
