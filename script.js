@@ -1794,9 +1794,6 @@ async function renderMapCard(mapDoc) {
             </div>
         </div>
     `;
-    
-    // 클릭하면 바로 openMapPopup 호출
-    el.addEventListener('click', () => openMapPopup(mapId, contentEl));
 
     const teamsContainer = el.querySelector('.map-right-teams');
     const commentsArea = el.querySelector('.map-comments-section');
