@@ -1820,20 +1820,22 @@ async function renderMapCard(mapDoc) {
 }
 
 // 팝업 렌더링
-async function openMapPopup(mapId, containerId = 'mapMainContainer') {
+async function openMapPopup(mapId, containerOrId = 'mapMainContainer') {
     const snap = await getDoc(doc(db, 'maps', mapId));
     if (!snap.exists()) return;
     const data = snap.data();
 
-    let container = document.getElementById(containerId);
-    if (!container) {
-        container = document.createElement('div');
-        container.id = containerId;
-        container.style.display = 'flex';
-        container.style.flexDirection = 'column';
-        container.style.padding = '20px';
-        container.style.gap = '20px';
-        document.body.appendChild(container);
+    let container;
+
+    if (typeof containerOrId === 'string') {
+        container = document.getElementById(containerOrId);
+        if (!container) {
+            container = document.createElement('div');
+            container.id = containerOrId;
+            document.body.appendChild(container);
+        }
+    } else {
+        container = containerOrId; // ← contentEl 그대로 사용
     }
 
     container.innerHTML = '';
