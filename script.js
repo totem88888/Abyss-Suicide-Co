@@ -3464,7 +3464,8 @@ function renderAdminTargetStatus(data) {
 
     const items = inv.items || {};
     const injuries = status.injuries || {};
-    const contaminationParts = status.contaminationParts || {};
+    const contaminations = status.contaminations || {};
+    const prosthetics = status.prosthetics || {};
 
     const itemList = Object.keys(items).length
         ? Object.entries(items)
@@ -3474,12 +3475,15 @@ function renderAdminTargetStatus(data) {
 
     const injuryList = Object.keys(injuries).length
         ? Object.entries(injuries)
-            .map(([part, val]) => `<li>${mapKeyToLabel[part] || part}: ${val}</li>`)
+            .map(([part, val]) => {
+                const prosthetic = prosthetics[part] ? ' (의수)' : '';
+                return `<li>${mapKeyToLabel[part] || part}: ${val}${prosthetic}</li>`;
+            })
             .join('')
         : '<li class="muted">부상 없음</li>';
 
-    const contaminationList = Object.keys(contaminationParts).length
-        ? Object.entries(contaminationParts)
+    const contaminationList = Object.keys(contaminations).length
+        ? Object.entries(contaminations)
             .map(([part, val]) => `<li>${mapKeyToLabel[part] || part}: ${val}</li>`)
             .join('')
         : '<li class="muted">오염 없음</li>';
@@ -3488,20 +3492,38 @@ function renderAdminTargetStatus(data) {
         <div class="admin-target-status">
             <p><strong>은화:</strong> ${inv.silver || 0}</p>
             <p><strong>정신력:</strong> ${status.currentSpirit ?? 0}</p>
-            <p><strong>오염도:</strong></p>
-            <ul>${contaminationList}</ul>
+            <p><strong>HP:</strong> ${status.currentHP ?? 0} / ${status.maxHP ?? 0}</p>
+            <p><strong>총 오염도:</strong> ${status.currentContamination ?? 0}</p>
+            <p><strong>침식 수준:</strong> ${status.currentErosion ?? 0}</p>
 
             <hr>
 
             <p><strong>소지 아이템</strong></p>
             <ul>${itemList}</ul>
 
-            <p><strong>부위별 부상</strong></p>
+            <p><strong>부위별 부상/의수</strong></p>
             <ul>${injuryList}</ul>
+
+            <p><strong>부위별 오염</strong></p>
+            <ul>${contaminationList}</ul>
         </div>
     `;
 }
 
+function fillInjuryCheckboxes(card) {
+    const box = card.querySelector('#adminInjuryParts');
+    box.innerHTML = Object.entries(mapKeyToLabel)
+        .map(([key, label]) => `
+            <label>
+                <input type="checkbox" value="${key}" checked>
+                ${label}
+            </label>
+            <label>
+                <input type="checkbox" value="${key}" class="prosthetic-checkbox">
+                의수 적용
+            </label>
+        `).join('');
+}
 
 async function refreshAdminInventory(root, sheetId) {
     const snap = await getDoc(doc(db, 'sheets', sheetId));
@@ -3654,7 +3676,7 @@ function bindAdminControlEvents(root, sheetId) {
 
     /* 부상 랜덤 분배 */
     $('#addInjuryBtn').onclick = async () => {
-        const parts = [...root.querySelectorAll('#adminInjuryParts input:checked')]
+        const parts = [...root.querySelectorAll('#adminInjuryParts input[type=checkbox]:not(.prosthetic-checkbox):checked')]
             .map(cb => cb.value);
 
         const pickCount = parseInt($('#adminInjuryPickCount').value);
@@ -3668,26 +3690,39 @@ function bindAdminControlEvents(root, sheetId) {
         const distributed = distributeRandomInjury(parts, pickCount, total);
         if (!Object.keys(distributed).length) return;
 
+        // 의수 체크박스
+        const prostheticParts = [...root.querySelectorAll('#adminInjuryParts input.prosthetic-checkbox:checked')]
+            .map(cb => cb.value);
+
         try {
             const ref = doc(db, 'sheets', sheetId);
             await runTransaction(db, async tx => {
                 const snap = await tx.get(ref);
-                const cur = snap.data().status?.injuries || {};
-                const next = { ...cur };
+                const curInjuries = snap.data().status?.injuries || {};
+                const curProsthetics = snap.data().status?.prosthetics || {};
 
+                // 부상 반영
+                const nextInjuries = { ...curInjuries };
                 Object.entries(distributed).forEach(([p, v]) => {
-                    next[p] = (next[p] || 0) + v;
+                    nextInjuries[p] = (nextInjuries[p] || 0) + v;
                 });
 
-                tx.update(ref, { 'status.injuries': next });
+                // 의수 반영
+                const nextProsthetics = { ...curProsthetics };
+                prostheticParts.forEach(p => { nextProsthetics[p] = true; });
+
+                tx.update(ref, {
+                    'status.injuries': nextInjuries,
+                    'status.prosthetics': nextProsthetics
+                });
             });
 
             await writeAdminLog(sheetId, 'injury_random', distributed);
             await refreshAdminInventory(root, sheetId);
-            adminResult(true, '부상 분배 완료');
+            adminResult(true, '부상/의수 적용 완료');
         } catch (e) {
             console.error(e);
-            adminResult(false, '부상 적용 실패');
+            adminResult(false, '부상/의수 적용 실패');
         }
     };
 
@@ -3704,25 +3739,25 @@ function bindAdminControlEvents(root, sheetId) {
             return;
         }
 
-        const distributed = distributeRandomInjury(parts, pickCount, total); // 재사용
+        const distributed = distributeRandomInjury(parts, pickCount, total);
 
         try {
             const ref = doc(db, 'sheets', sheetId);
             await runTransaction(db, async tx => {
                 const snap = await tx.get(ref);
-                const cur = snap.data().status?.contaminationParts || {};
-                const next = { ...cur };
+                const curContam = snap.data().status?.contaminations || {};
+                const nextContam = { ...curContam };
 
                 Object.entries(distributed).forEach(([p, v]) => {
-                    next[p] = (next[p] || 0) + v;
+                    nextContam[p] = (nextContam[p] || 0) + v;
                 });
 
-                tx.update(ref, { 'status.contaminationParts': next });
+                tx.update(ref, { 'status.contaminations': nextContam });
             });
 
             await writeAdminLog(sheetId, 'contamination_random', distributed);
             await refreshAdminInventory(root, sheetId);
-            adminResult(true, '오염도 분배 완료');
+            adminResult(true, '오염도 적용 완료');
         } catch (e) {
             console.error(e);
             adminResult(false, '오염도 적용 실패');
